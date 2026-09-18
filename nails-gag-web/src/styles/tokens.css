@@ -1,0 +1,35 @@
+:root {
+  --bg-start: #ebe3e5;
+  --bg-end: #e1d6da;
+  --ink: #2b2528;
+  --ink-muted: #6d6266;
+  --accent: #d3407e;
+  --accent-ink: #ffffff;
+  --surface: rgba(255, 255, 255, 0.55);
+  --surface-strong: rgba(255, 255, 255, 0.8);
+  --line: rgba(43, 37, 40, 0.12);
+  --shadow: 0 18px 50px rgba(43, 37, 40, 0.08);
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --font: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+  --space-6: 64px;
+  --space-7: 96px;
+
+  --container: 1200px;
+  --gutter: 16px;
+  --header-h: 72px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 32px;
+  }
+}
