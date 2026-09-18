@@ -5,8 +5,21 @@ export function useReveal() {
   useEffect(() => {
     const elements = Array.from(document.querySelectorAll<HTMLElement>('.reveal'))
     if (elements.length === 0) return
+
+    // Сначала помечаем видимое, и только потом включаем класс js: до этого момента
+    // CSS не прячет .reveal, поэтому пререндер не мигает скрытым контентом.
+    const pending: HTMLElement[] = []
+    for (const el of elements) {
+      if (el.getBoundingClientRect().top < window.innerHeight) {
+        el.classList.add('is-visible')
+      } else {
+        pending.push(el)
+      }
+    }
+    document.documentElement.classList.add('js')
+
     if (typeof IntersectionObserver === 'undefined') {
-      elements.forEach((el) => el.classList.add('is-visible'))
+      pending.forEach((el) => el.classList.add('is-visible'))
       return
     }
     const observer = new IntersectionObserver(
@@ -20,7 +33,7 @@ export function useReveal() {
       },
       { rootMargin: '0px 0px -10% 0px' },
     )
-    elements.forEach((el) => observer.observe(el))
+    pending.forEach((el) => observer.observe(el))
     return () => observer.disconnect()
   }, [])
 }
