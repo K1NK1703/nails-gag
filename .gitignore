@@ -1,0 +1,28 @@
+# raw media (photos, video), never committed
+media/
+
+# brainstorming companion sessions
+.superpowers/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# node
+node_modules/
+dist/
+*.log
+
+# gradle / java (for the future backend)
+.gradle/
+build/
+out/
+
+# env
+.env
+.env.local
+
+# local docs (specs, plans)
+docs/
