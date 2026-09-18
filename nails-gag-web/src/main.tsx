@@ -1,12 +1,28 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/inter'
 import './styles/tokens.css'
 import './styles/global.css'
-import App from './App'
+import { StrictMode } from 'react'
+import { createRoot, hydrateRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router'
+import { AppRoutes } from './App'
+import { track } from './lib/analytics'
 
-createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root')!
+const app = (
   <StrictMode>
-    <App />
-  </StrictMode>,
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
+  </StrictMode>
 )
+
+// В dev внутри #root лежит только комментарий <!--app-html-->, это не пререндер.
+const prerendered = root.firstElementChild !== null
+
+if (prerendered) {
+  hydrateRoot(root, app)
+} else {
+  createRoot(root).render(app)
+}
+
+track({ name: 'page_view', path: window.location.pathname })

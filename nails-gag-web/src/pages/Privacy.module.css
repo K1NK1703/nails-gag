@@ -1,0 +1,8 @@
+.section {
+  margin-top: var(--space-5);
+}
+
+.section h2 {
+  font-size: 1.3rem;
+  margin-bottom: var(--space-2);
+}
