@@ -1,0 +1,54 @@
+.lead {
+  color: var(--ink-muted);
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.primary {
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+
+.category {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.price {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--accent);
+}
+
+.description {
+  color: var(--ink-muted);
+  flex: 1;
+  margin-bottom: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+  }
+  .primary {
+    margin-top: -8px;
+  }
+}
