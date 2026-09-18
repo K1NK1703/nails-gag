@@ -39,7 +39,11 @@ export function Header() {
               {l.label}
             </a>
           ))}
-          {cabinet && <a href="/cabinet">Личный кабинет</a>}
+          {cabinet && (
+            <a href="/cabinet" onClick={() => setOpen(false)}>
+              Личный кабинет
+            </a>
+          )}
         </nav>
 
         <a

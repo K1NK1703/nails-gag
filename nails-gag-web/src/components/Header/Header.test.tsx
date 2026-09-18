@@ -33,4 +33,13 @@ describe('Header', () => {
     fireEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'true')
   })
+
+  it('closes mobile menu when a nav link is clicked', () => {
+    render(<Header />)
+    const button = screen.getByRole('button', { name: /меню/i })
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(screen.getByText('Галерея'))
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
 })
