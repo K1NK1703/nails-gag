@@ -13,6 +13,7 @@ media/
 # node
 node_modules/
 dist/
+dist-ssr/
 *.log
 
 # gradle / java (for the future backend)

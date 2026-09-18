@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "react-hooks", "jsx-a11y", "typescript", "import"],
+  "categories": { "correctness": "error", "suspicious": "warn" },
+  "env": { "browser": true, "es2024": true },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "import/no-unassigned-import": "off",
+    "no-underscore-dangle": "off"
+  },
+  "ignorePatterns": ["dist", "dist-ssr", "node_modules", "public"]
+}
