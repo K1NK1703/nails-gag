@@ -1,0 +1,85 @@
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding-block: var(--space-5) 0;
+}
+
+.inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  min-height: calc(100vh - var(--header-h));
+  align-items: end;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+  z-index: 1;
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.subtitle {
+  font-size: 1.15rem;
+  color: var(--ink-muted);
+  max-width: 28ch;
+}
+
+.pill {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.photo {
+  justify-self: end;
+  align-self: end;
+  line-height: 0;
+}
+
+.photo img {
+  height: min(62vh, 640px);
+  width: auto;
+  max-width: 45vw;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 24px 40px rgba(43, 37, 40, 0.18));
+}
+
+.signature {
+  position: absolute;
+  right: 0;
+  top: var(--space-4);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: var(--ink-muted);
+  writing-mode: vertical-rl;
+}
+
+@media (min-width: 768px) {
+  .inner {
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: center;
+  }
+  .text {
+    padding-bottom: 0;
+  }
+  .photo {
+    align-self: end;
+  }
+  .photo img {
+    height: min(82vh, 820px);
+    max-width: none;
+  }
+}
