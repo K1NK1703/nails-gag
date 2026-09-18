@@ -1,11 +1,17 @@
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { loadEnv } from 'vite'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const DIST = path.join(ROOT, 'dist')
 const DIST_SSR = path.join(ROOT, 'dist-ssr')
-const SITE_URL = (process.env.VITE_SITE_URL ?? 'https://nails-gag.ru').replace(/\/$/, '')
+// tsx не читает .env сам, поэтому берём переменную через loadEnv, как это делает vite.
+const SITE_URL = (
+  process.env.VITE_SITE_URL ??
+  loadEnv('production', ROOT, 'VITE_').VITE_SITE_URL ??
+  'https://nails-gag.ru'
+).replace(/\/$/, '')
 const ROUTES = ['/', '/privacy']
 
 type Render = (url: string, siteUrl: string) => { html: string; head: string }
@@ -14,8 +20,12 @@ async function loadRender(): Promise<Render> {
   const files = await readdir(DIST_SSR)
   const entry = files.find((f) => f.startsWith('entry-server') && f.endsWith('.js'))
   if (!entry) throw new Error(`entry-server.js not found in ${DIST_SSR}`)
-  const mod = (await import(pathToFileURL(path.join(DIST_SSR, entry)).href)) as { render: Render }
-  return mod.render
+  const mod: unknown = await import(pathToFileURL(path.join(DIST_SSR, entry)).href)
+  const render = (mod as { render?: unknown }).render
+  if (typeof render !== 'function') {
+    throw new Error(`${entry} does not export render()`)
+  }
+  return render as Render
 }
 
 async function main() {
@@ -31,10 +41,18 @@ async function main() {
     const page = template
       .replace('<!--app-head-->', () => head)
       .replace('<!--app-html-->', () => html)
-    const file = route === '/' ? 'index.html' : path.join(route.slice(1), 'index.html')
-    await mkdir(path.dirname(path.join(DIST, file)), { recursive: true })
-    await writeFile(path.join(DIST, file), page, 'utf8')
-    console.log('prerendered', route, '->', file)
+    // Для не-корневых маршрутов пишем оба варианта, чтобы работали и try_files {path}.html,
+    // и {path}/index.html.
+    const files =
+      route === '/'
+        ? ['index.html']
+        : [path.join(route.slice(1), 'index.html'), `${route.slice(1)}.html`]
+    for (const file of files) {
+      const target = path.join(DIST, file)
+      await mkdir(path.dirname(target), { recursive: true })
+      await writeFile(target, page, 'utf8')
+      console.log('prerendered', route, '->', file)
+    }
   }
 
   const today = new Date().toISOString().slice(0, 10)
@@ -48,10 +66,16 @@ async function main() {
   await writeFile(path.join(DIST, 'sitemap.xml'), sitemap, 'utf8')
   console.log('sitemap.xml written')
 
-  await rm(DIST_SSR, { recursive: true, force: true })
+  const robots = `User-agent: *\nAllow: /\nSitemap: ${SITE_URL}/sitemap.xml\n`
+  await writeFile(path.join(DIST, 'robots.txt'), robots, 'utf8')
+  console.log('robots.txt written')
 }
 
-main().catch((e: unknown) => {
+try {
+  await main()
+} catch (e: unknown) {
   console.error(e)
-  process.exit(1)
-})
+  process.exitCode = 1
+} finally {
+  await rm(DIST_SSR, { recursive: true, force: true })
+}
