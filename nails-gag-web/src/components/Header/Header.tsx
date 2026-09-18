@@ -1,0 +1,57 @@
+import { useState } from 'react'
+import { site } from '../../content/site'
+import { track } from '../../lib/analytics'
+import { isCabinetEnabled } from '../../lib/features'
+import styles from './Header.module.css'
+
+const links = [
+  { href: '/#gallery', label: 'Галерея' },
+  { href: '/#price', label: 'Прайс' },
+  { href: '/#contacts', label: 'Контакты' },
+]
+
+export function Header() {
+  const [open, setOpen] = useState(false)
+  const cabinet = isCabinetEnabled()
+
+  return (
+    <header className={styles.header}>
+      <div className={`container ${styles.inner}`}>
+        <a href="/" className={styles.logo} aria-label="nails.gag, на главную">
+          <span className={styles.dot} aria-hidden="true" />
+          nails.gag
+        </a>
+
+        <button
+          type="button"
+          className={styles.burger}
+          aria-label="Меню"
+          aria-expanded={open}
+          aria-controls="site-nav"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span aria-hidden="true" />
+        </button>
+
+        <nav id="site-nav" className={`${styles.nav} ${open ? styles.navOpen : ''}`}>
+          {links.map((l) => (
+            <a key={l.href} href={l.href} onClick={() => setOpen(false)}>
+              {l.label}
+            </a>
+          ))}
+          {cabinet && <a href="/cabinet">Личный кабинет</a>}
+        </nav>
+
+        <a
+          href={site.bookingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`button ${styles.cta}`}
+          onClick={() => track({ name: 'cta_click', place: 'header' })}
+        >
+          Записаться <span aria-hidden="true">→</span>
+        </a>
+      </div>
+    </header>
+  )
+}
