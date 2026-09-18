@@ -54,6 +54,7 @@ async function main() {
   const hero = await findSource('hero-cutout')
   for (const w of [720, 1440]) {
     await sharp(hero)
+      .trim()
       .resize({ width: w, withoutEnlargement: true })
       .webp({ quality: 85, alphaQuality: 90 })
       .toFile(path.join(OUT, `hero-${w}.webp`))
