@@ -5,7 +5,6 @@ import { StrictMode } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { AppRoutes } from './App'
-import { track } from './lib/analytics'
 
 const root = document.getElementById('root')!
 const app = (
@@ -24,5 +23,3 @@ if (prerendered) {
 } else {
   createRoot(root).render(app)
 }
-
-track({ name: 'page_view', path: window.location.pathname })

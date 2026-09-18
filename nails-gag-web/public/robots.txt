@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://nails-gag.ru/sitemap.xml

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import { isCabinetEnabled } from '../../lib/features'
@@ -13,6 +13,15 @@ const links = [
 export function Header() {
   const [open, setOpen] = useState(false)
   const cabinet = isCabinetEnabled()
+
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open])
 
   return (
     <header className={styles.header}>
@@ -36,7 +45,7 @@ export function Header() {
         <nav
           id="site-nav"
           aria-label="Основное меню"
-          className={`${styles.nav} ${open ? styles.navOpen : ''}`}
+          className={[styles.nav, open && styles.navOpen].filter(Boolean).join(' ')}
         >
           {links.map((l) => (
             <a key={l.href} href={l.href} onClick={() => setOpen(false)}>

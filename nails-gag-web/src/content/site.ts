@@ -3,7 +3,7 @@ export const site = {
   masterName: 'Алина',
   city: 'Санкт-Петербург',
   foundedYear: 2023,
-  tagline: 'Чёткие квадраты.',
+  taglineLines: ['Чёткие', 'квадраты'] as const,
   subtitle: 'Идеальные формы без лишних слов.',
   kicker: 'Маникюр · Санкт-Петербург',
   heroPricePill: 'Любой дизайн · 2 500 ₽',

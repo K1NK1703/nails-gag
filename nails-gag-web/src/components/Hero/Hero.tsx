@@ -9,8 +9,9 @@ export function Hero() {
         <div className={styles.text}>
           <span className="kicker">{site.kicker}</span>
           <h1>
-            Чёткие <br />
-            квадраты<span className={styles.accent}>.</span>
+            {site.taglineLines[0]} <br />
+            {site.taglineLines[1]}
+            <span className={styles.accent}>.</span>
           </h1>
           <p className={styles.subtitle}>{site.subtitle}</p>
           <p className={styles.pill}>{site.heroPricePill}</p>

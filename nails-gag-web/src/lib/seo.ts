@@ -3,8 +3,22 @@ import { site } from '../content/site'
 
 type Meta = { title: string; description: string; jsonLd?: Record<string, unknown> }
 
+/** Заголовок вкладки для маршрута: общий источник правды для пререндера и клиента. */
+export function titleFor(path: string): string {
+  switch (path) {
+    case '/':
+      return `${site.name} — маникюр в Санкт-Петербурге, чёткие квадраты`
+    case '/privacy':
+      return `${privacy.title} — ${site.name}`
+    case '/cabinet':
+      return `Личный кабинет — ${site.name}`
+    default:
+      return `Страница не найдена — ${site.name}`
+  }
+}
+
 const HOME: Meta = {
-  title: `${site.name} — маникюр в Санкт-Петербурге, чёткие квадраты`,
+  title: titleFor('/'),
   description: site.description,
   jsonLd: {
     '@context': 'https://schema.org',
@@ -24,8 +38,8 @@ const HOME: Meta = {
 }
 
 const PRIVACY: Meta = {
-  title: `${privacy.title} — ${site.name}`,
-  description: 'Как сайт nails.gag обращается с данными посетителей.',
+  title: titleFor('/privacy'),
+  description: `Как сайт ${site.name} обращается с данными посетителей.`,
 }
 
 const META: Record<string, Meta> = {
@@ -35,7 +49,7 @@ const META: Record<string, Meta> = {
 
 function metaFor(path: string): Meta {
   // Неизвестный маршрут не должен выдавать себя за главную в schema.org.
-  return META[path] ?? { title: HOME.title, description: HOME.description }
+  return META[path] ?? { title: titleFor(path), description: HOME.description }
 }
 
 function escape(s: string): string {

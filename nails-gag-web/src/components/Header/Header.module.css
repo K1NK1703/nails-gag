@@ -46,7 +46,7 @@
 }
 
 .nav a:hover {
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .cta {

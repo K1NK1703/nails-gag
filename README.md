@@ -16,6 +16,8 @@ nvm use            # Node из .nvmrc
 npm install
 npm run dev        # http://localhost:5173
 npm test           # Vitest
+npm run lint       # oxlint
+npm run format     # prettier
 npm run build      # dist/: клиент + пререндер главной и /privacy
 npm run check-dist # smoke-проверка результата сборки
 npm run preview    # посмотреть dist/ на http://localhost:4173

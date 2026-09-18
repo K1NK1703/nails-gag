@@ -23,13 +23,6 @@
   box-shadow: var(--shadow);
 }
 
-.category {
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
 .price {
   font-size: 2.4rem;
   font-weight: 700;

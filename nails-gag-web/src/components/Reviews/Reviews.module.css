@@ -5,17 +5,12 @@
 .list {
   list-style: none;
   margin: 0;
-  padding: 0 0 var(--space-2);
-  display: flex;
+  padding: 0;
+  display: grid;
   gap: var(--space-3);
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
 }
 
 .card {
-  flex: 0 0 min(80vw, 340px);
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -65,12 +60,7 @@
 
 @media (min-width: 768px) {
   .list {
-    display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: var(--space-4);
-    overflow: visible;
-  }
-  .card {
-    flex: none;
   }
 }

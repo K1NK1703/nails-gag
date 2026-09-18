@@ -34,6 +34,15 @@ describe('Header', () => {
     expect(button).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('closes mobile menu on Escape', () => {
+    render(<Header />)
+    const button = screen.getByRole('button', { name: /меню/i })
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('closes mobile menu when a nav link is clicked', () => {
     render(<Header />)
     const button = screen.getByRole('button', { name: /меню/i })

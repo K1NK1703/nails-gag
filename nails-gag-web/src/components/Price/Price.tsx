@@ -14,9 +14,11 @@ export function Price() {
           {prices.map((p) => (
             <li
               key={p.id}
-              className={`card reveal ${styles.card} ${p.primary ? styles.primary : ''}`}
+              className={['card', 'reveal', styles.card, p.primary && styles.primary]
+                .filter(Boolean)
+                .join(' ')}
             >
-              <span className={styles.category}>{p.category}</span>
+              <span className="label">{p.category}</span>
               <h3>{p.title}</h3>
               <p className={styles.price}>{p.price}</p>
               <p className={styles.description}>{p.description}</p>
@@ -24,7 +26,7 @@ export function Price() {
                 href={site.bookingUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`button ${p.primary ? 'button--accent' : ''}`}
+                className={['button', p.primary && 'button--accent'].filter(Boolean).join(' ')}
                 onClick={() => track({ name: 'cta_click', place: 'price' })}
               >
                 Записаться <span aria-hidden="true">→</span>

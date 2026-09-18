@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { privacy } from '../content/privacy'
+import { titleFor } from '../lib/seo'
 import styles from './Page.module.css'
 import own from './Privacy.module.css'
 
 export function Privacy() {
   useEffect(() => {
-    document.title = `${privacy.title} — nails.gag`
+    document.title = titleFor('/privacy')
   }, [])
   return (
     <main className={`container ${styles.page}`}>

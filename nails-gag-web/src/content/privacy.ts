@@ -1,3 +1,5 @@
+import { site } from './site'
+
 export type PrivacySection = { title: string; paragraphs: string[] }
 
 /** Заполнить до публикации: имя и статус оператора. */
@@ -10,7 +12,7 @@ export const privacy: { title: string; updated: string; sections: PrivacySection
     {
       title: '1. Кто оператор',
       paragraphs: [
-        `Сайт nails.gag принадлежит ${OPERATOR} (далее — оператор). По вопросам, связанным с этой политикой, пишите в Telegram: @gagushichewa.`,
+        `Сайт nails.gag принадлежит ${OPERATOR} (далее — оператор). По вопросам, связанным с этой политикой, пишите в Telegram: ${site.bookingHandle}.`,
       ],
     },
     {

@@ -15,7 +15,7 @@ export function Contacts() {
         <p className={styles.lead}>Два способа дойти до маникюра. Самый быстрый — Telegram.</p>
         <ul className={styles.grid}>
           <li className="card reveal">
-            <span className={styles.label}>Telegram</span>
+            <span className="label">Telegram</span>
             <a
               href={site.bookingUrl}
               target="_blank"
@@ -28,7 +28,7 @@ export function Contacts() {
             <span className={styles.hint}>Запись и общение — здесь</span>
           </li>
           <li className="card reveal">
-            <span className={styles.label}>Канал</span>
+            <span className="label">Канал</span>
             <a
               href={site.channelUrl}
               target="_blank"
@@ -40,7 +40,7 @@ export function Contacts() {
             <span className={styles.hint}>Свежие работы и настроение</span>
           </li>
           <li className="card reveal">
-            <span className={styles.label}>Адрес</span>
+            <span className="label">Адрес</span>
             <span className={styles.value}>{site.address.street}</span>
             <span className={styles.hint}>{site.address.details}</span>
           </li>

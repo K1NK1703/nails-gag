@@ -22,13 +22,6 @@
   gap: 6px;
 }
 
-.label {
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
 .value {
   font-size: 1.5rem;
   font-weight: 700;

@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
+import { titleFor } from '../lib/seo'
 import styles from './Page.module.css'
 
 export function Cabinet() {
   useEffect(() => {
-    document.title = 'Личный кабинет — nails.gag'
+    document.title = titleFor('/cabinet')
   }, [])
   return (
     <main className={`container ${styles.page}`}>
