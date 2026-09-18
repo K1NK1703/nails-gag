@@ -33,7 +33,11 @@ export function Header() {
           <span aria-hidden="true" />
         </button>
 
-        <nav id="site-nav" className={`${styles.nav} ${open ? styles.navOpen : ''}`}>
+        <nav
+          id="site-nav"
+          aria-label="Основное меню"
+          className={`${styles.nav} ${open ? styles.navOpen : ''}`}
+        >
           {links.map((l) => (
             <a key={l.href} href={l.href} onClick={() => setOpen(false)}>
               {l.label}
