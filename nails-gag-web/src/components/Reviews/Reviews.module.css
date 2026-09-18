@@ -49,6 +49,10 @@
   color: var(--ink);
 }
 
+.date {
+  color: var(--ink-muted);
+}
+
 .example {
   margin-left: auto;
   font-size: 10px;
