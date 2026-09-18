@@ -15,8 +15,9 @@ body {
   font-size: 17px;
   line-height: 1.5;
   color: var(--ink);
-  background: linear-gradient(160deg, var(--bg-start) 0%, var(--bg-end) 100%) fixed;
+  background: linear-gradient(160deg, var(--bg-start) 0%, var(--bg-end) 100%);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 img {
@@ -92,6 +93,8 @@ h3 {
   font-weight: 600;
   text-decoration: none;
   border: 0;
+  appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
   transition:
     transform 0.15s ease,
