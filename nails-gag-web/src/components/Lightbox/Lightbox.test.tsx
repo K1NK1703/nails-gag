@@ -45,6 +45,27 @@ describe('Lightbox', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
+  it('closes on backdrop click but not on the image', () => {
+    const onClose = vi.fn()
+    render(<Lightbox photos={photos} index={0} onClose={onClose} onNavigate={() => {}} />)
+    fireEvent.click(screen.getByAltText('Первое'))
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('presentation'))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('traps Tab focus inside the dialog', () => {
+    render(<Lightbox photos={photos} index={0} onClose={() => {}} onNavigate={() => {}} />)
+    const close = screen.getByRole('button', { name: /закрыть/i })
+    const last = screen.getByRole('button', { name: /следующее фото/i })
+    last.focus()
+    expect(last).toHaveFocus()
+    fireEvent.keyDown(window, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true })
+    expect(last).toHaveFocus()
+  })
+
   it('locks body scroll while open', () => {
     const { unmount } = render(
       <Lightbox photos={photos} index={0} onClose={() => {}} onNavigate={() => {}} />,

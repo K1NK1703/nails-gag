@@ -18,4 +18,14 @@ describe('Gallery', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(track).toHaveBeenCalledWith({ name: 'gallery_open', index: 2 })
   })
+
+  it('returns focus to the tile after closing', () => {
+    render(<Gallery />)
+    const tile = screen.getAllByRole('button', { name: /открыть фото/i })[2]
+    fireEvent.click(tile)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(tile).toHaveFocus()
+  })
 })

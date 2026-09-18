@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { src, type Photo } from '../../content/gallery'
+import { src, srcSet, type Photo } from '../../content/gallery'
 import styles from './Lightbox.module.css'
 
 type Props = {
@@ -12,30 +12,52 @@ type Props = {
 
 export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const figureRef = useRef<HTMLElement>(null)
   const touchX = useRef<number | null>(null)
   const count = photos.length
   const isOpen = index !== null
 
   useEffect(() => {
-    if (index === null) return
-    const next = () => onNavigate((index + 1) % count)
-    const prev = () => onNavigate((index - 1 + count) % count)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      else if (e.key === 'ArrowRight') next()
-      else if (e.key === 'ArrowLeft') prev()
-    }
-    window.addEventListener('keydown', onKey)
+    if (!isOpen) return
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     closeRef.current?.focus()
     return () => {
-      window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (index === null) return
+    const next = () => onNavigate((index + 1) % count)
+    const prev = () => onNavigate((index - 1 + count) % count)
+    const trapTab = (e: KeyboardEvent) => {
+      const buttons = dialogRef.current?.querySelectorAll('button')
+      if (!buttons || buttons.length === 0) return
+      const first = buttons[0]
+      const last = buttons[buttons.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight') next()
+      else if (e.key === 'ArrowLeft') prev()
+      else if (e.key === 'Tab') trapTab(e)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
     }
   }, [index, count, onClose, onNavigate])
 
-  if (!isOpen) return null
+  if (!isOpen || typeof document === 'undefined') return null
   const photo = photos[index]
   const next = () => onNavigate((index + 1) % count)
   const prev = () => onNavigate((index - 1 + count) % count)
@@ -44,7 +66,9 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
     <div
       className={styles.backdrop}
       role="presentation"
-      onClick={onClose}
+      onClick={(e) => {
+        if (!figureRef.current?.contains(e.target as Node)) onClose()
+      }}
       onTouchStart={(e) => {
         touchX.current = e.touches[0].clientX
       }}
@@ -56,7 +80,13 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
         else if (dx < -40) next()
       }}
     >
-      <dialog open className={styles.dialog} aria-modal="true" aria-label={photo.alt}>
+      <dialog
+        ref={dialogRef}
+        open
+        className={styles.dialog}
+        aria-modal="true"
+        aria-label={photo.alt}
+      >
         <button
           ref={closeRef}
           type="button"
@@ -80,8 +110,13 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
         >
           ←
         </button>
-        <figure className={styles.figure} role="presentation" onClick={(e) => e.stopPropagation()}>
-          <img src={src(photo.slug, 1600)} alt={photo.alt} />
+        <figure ref={figureRef} className={styles.figure}>
+          <img
+            src={src(photo.slug, 1600)}
+            srcSet={srcSet(photo.slug)}
+            sizes="100vw"
+            alt={photo.alt}
+          />
           <figcaption>
             {index + 1} / {count}
             {photo.caption ? ` · ${photo.caption}` : ''}

@@ -36,7 +36,7 @@ export function Gallery() {
                 <img
                   src={src(photo.slug, 480)}
                   srcSet={srcSet(photo.slug)}
-                  sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
+                  sizes="(min-width: 1264px) 280px, (min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
                   alt={photo.alt}
                   loading={i < 2 ? 'eager' : 'lazy'}
                   width={480}

@@ -21,6 +21,10 @@
   place-items: center;
 }
 
+.dialog :focus-visible {
+  outline-color: #fff;
+}
+
 .figure {
   margin: 0;
   max-width: min(92vw, 1100px);
@@ -79,6 +83,18 @@
 
 @media (max-width: 767px) {
   .arrow {
-    display: none;
+    width: 40px;
+    height: 40px;
+    top: auto;
+    bottom: var(--space-3);
+    transform: none;
+  }
+
+  .arrowPrev {
+    left: var(--space-3);
+  }
+
+  .arrowNext {
+    right: var(--space-3);
   }
 }
