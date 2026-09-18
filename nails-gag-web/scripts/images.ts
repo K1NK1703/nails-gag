@@ -52,7 +52,7 @@ async function main() {
   console.log('gallery studio')
 
   const hero = await findSource('hero-cutout')
-  for (const w of [720, 1440]) {
+  for (const w of [360, 720, 1440]) {
     await sharp(hero)
       .trim()
       .resize({ width: w, withoutEnlargement: true })

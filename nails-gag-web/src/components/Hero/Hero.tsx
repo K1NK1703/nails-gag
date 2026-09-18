@@ -27,7 +27,7 @@ export function Hero() {
         <div className={styles.photo}>
           <img
             src="/hero-720.webp"
-            srcSet="/hero-720.webp 720w, /hero-1440.webp 879w"
+            srcSet="/hero-360.webp 360w, /hero-720.webp 720w, /hero-1440.webp 879w"
             sizes="(min-width: 768px) 240px, 180px"
             alt={`${site.masterName}, мастер маникюра`}
             width={879}
