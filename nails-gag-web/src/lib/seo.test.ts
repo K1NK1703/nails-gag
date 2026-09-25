@@ -16,6 +16,13 @@ describe('headFor', () => {
     expect(head).toContain('href="https://nails-gag.ru/privacy"')
     expect(head).not.toContain('NailSalon')
   })
+
+  it('builds head for terms without json-ld', () => {
+    const head = headFor('/terms', 'https://nails-gag.ru')
+    expect(head).toContain('<title>Пользовательское соглашение — nails.gag</title>')
+    expect(head).toContain('href="https://nails-gag.ru/terms"')
+    expect(head).not.toContain('application/ld+json')
+  })
 })
 
 describe('titleFor', () => {
@@ -25,6 +32,10 @@ describe('titleFor', () => {
 
   it('отдаёт заголовок политики', () => {
     expect(titleFor('/privacy')).toBe('Политика обработки персональных данных — nails.gag')
+  })
+
+  it('отдаёт заголовок соглашения', () => {
+    expect(titleFor('/terms')).toBe('Пользовательское соглашение — nails.gag')
   })
 
   it('отдаёт заголовок онлайн-записи', () => {

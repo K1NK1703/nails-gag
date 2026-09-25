@@ -32,6 +32,14 @@ describe('routes', () => {
     )
   })
 
+  it('renders terms page', () => {
+    renderAt('/terms')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Пользовательское соглашение',
+    )
+    expect(document.title).toBe('Пользовательское соглашение — nails.gag')
+  })
+
   it('renders booking stub page', () => {
     renderAt('/booking')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Онлайн-запись')

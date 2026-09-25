@@ -37,17 +37,26 @@ expect(
   privacyPage.includes('Политика обработки персональных данных'),
   'privacy: policy title text missing',
 )
+const termsPage = await readFile(path.join(DIST, 'terms/index.html'), 'utf8')
+expect(!termsPage.includes('<!--app-html-->'), 'terms: <!--app-html--> not replaced')
+expect(
+  /<title>[^<]*Пользовательское соглашение/.test(termsPage),
+  'terms: title does not contain «Пользовательское соглашение»',
+)
+
 // Реквизиты оператора и подрядчиков заполняет владелец перед публикацией, поэтому это предупреждение, не ошибка.
-const placeholders = [...new Set(privacyPage.match(/\{\{[A-Z_]+\}\}/g) ?? [])]
+const placeholders = [...new Set(`${privacyPage}${termsPage}`.match(/\{\{[A-Z_]+\}\}/g) ?? [])]
 if (placeholders.length) {
   warnings.push(
-    `check-dist WARN: placeholders not filled in src/content/privacy.ts: ${placeholders.join(', ')}`,
+    `check-dist WARN: placeholders not filled in src/content/placeholders.ts: ${placeholders.join(', ')}`,
   )
 }
 
 for (const f of [
   'privacy/index.html',
   'privacy.html',
+  'terms/index.html',
+  'terms.html',
   'booking/index.html',
   'sitemap.xml',
   'robots.txt',

@@ -24,7 +24,7 @@ describe('useScrollToTop', () => {
     renderAt('/')
     ;(window.scrollTo as ReturnType<typeof vi.fn>).mockClear()
 
-    fireEvent.click(screen.getByText('Политика конфиденциальности'))
+    fireEvent.click(screen.getByText('Политика обработки персональных данных'))
 
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
   })

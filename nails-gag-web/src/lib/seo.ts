@@ -1,5 +1,6 @@
 import { privacy } from '../content/privacy'
 import { site } from '../content/site'
+import { terms } from '../content/terms'
 
 type Meta = { title: string; description: string; jsonLd?: Record<string, unknown> }
 
@@ -10,6 +11,8 @@ export function titleFor(path: string): string {
       return `${site.name} — маникюр в Санкт-Петербурге, чёткие квадраты`
     case '/privacy':
       return `${privacy.title} — ${site.name}`
+    case '/terms':
+      return `${terms.title} — ${site.name}`
     case '/booking':
       return `Онлайн-запись — ${site.name}`
     case '/cabinet':
@@ -44,6 +47,11 @@ const PRIVACY: Meta = {
   description: `Как сайт ${site.name} обращается с данными посетителей.`,
 }
 
+const TERMS: Meta = {
+  title: titleFor('/terms'),
+  description: `Условия записи, отмены, оплаты и гарантии в ${site.name}.`,
+}
+
 const BOOKING: Meta = {
   title: titleFor('/booking'),
   description: `Онлайн-запись на маникюр в ${site.name}.`,
@@ -52,6 +60,7 @@ const BOOKING: Meta = {
 const META: Record<string, Meta> = {
   '/': HOME,
   '/privacy': PRIVACY,
+  '/terms': TERMS,
   '/booking': BOOKING,
 }
 

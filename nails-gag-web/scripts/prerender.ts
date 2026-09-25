@@ -12,7 +12,7 @@ const SITE_URL = (
   loadEnv('production', ROOT, 'VITE_').VITE_SITE_URL ??
   'https://nails-gag.ru'
 ).replace(/\/$/, '')
-const ROUTES = ['/', '/privacy', '/booking']
+const ROUTES = ['/', '/privacy', '/terms', '/booking']
 
 type Render = (url: string, siteUrl: string) => { html: string; head: string }
 

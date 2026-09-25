@@ -3,10 +3,22 @@ import { consents } from './consents'
 import { PLACEHOLDERS } from './privacy'
 
 describe('consents', () => {
-  it('has four unique ids', () => {
+  it('has five unique ids', () => {
     const ids = consents.map((c) => c.id)
-    expect(ids).toHaveLength(4)
-    expect(new Set(ids).size).toBe(4)
+    expect(ids).toEqual([
+      'registration',
+      'photoPublication',
+      'reviewPublication',
+      'reminders',
+      'newsletter',
+    ])
+    expect(new Set(ids).size).toBe(5)
+  })
+
+  it('registration refers to both legal documents', () => {
+    const reg = consents.find((c) => c.id === 'registration')
+    expect(reg?.text).toContain('Пользовательское соглашение')
+    expect(reg?.text).toContain('Политика обработки персональных данных')
   })
 
   it('every text refers to the policy', () => {

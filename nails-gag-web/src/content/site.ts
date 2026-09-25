@@ -1,3 +1,7 @@
+// Плейсхолдеры берутся из placeholders.ts (их же реэкспортирует privacy.ts): privacy.ts импортирует site,
+// поэтому прямой импорт из privacy.ts дал бы циклическую зависимость.
+import { OPERATOR_FIO, OPERATOR_INN } from './placeholders'
+
 export const site = {
   name: 'nails.gag',
   masterName: 'Алина',
@@ -29,4 +33,6 @@ export const site = {
   mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, улица Шевченко, 9')}`,
   description:
     'Маникюр в Санкт-Петербурге: чёткие квадраты, аппаратная техника, любой дизайн за 2 500 ₽. Онлайн-запись на сайте.',
+  /** Строка об исполнителе в подвале. */
+  performerLine: `Исполнитель: самозанятая ${OPERATOR_FIO}, ИНН ${OPERATOR_INN}`,
 } as const

@@ -11,6 +11,7 @@ import { Cabinet } from './pages/Cabinet'
 import { Home } from './pages/Home'
 import { NotFound } from './pages/NotFound'
 import { Privacy } from './pages/Privacy'
+import { Terms } from './pages/Terms'
 
 export function AppRoutes() {
   const { pathname } = useLocation()
@@ -27,6 +28,7 @@ export function AppRoutes() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="/booking" element={<Booking />} />
         {isCabinetEnabled() && <Route path="/cabinet" element={<Cabinet />} />}
         <Route path="*" element={<NotFound />} />
