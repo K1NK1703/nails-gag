@@ -24,17 +24,20 @@ export function Contacts() {
             >
               {site.telegramHandle}
             </a>
-            <span className={styles.hint}>
-              {site.telegramHint}
-              <a
-                href={site.channelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.hintLink}
-              >
-                {site.channelHandle}
-              </a>
-            </span>
+            <span className={styles.hint}>{site.telegramHint}</span>
+          </li>
+          <li className="card reveal">
+            <span className="label">Канал</span>
+            <a
+              href={site.channelUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.value}
+              onClick={() => track({ name: 'contact_click', channel: 'channel' })}
+            >
+              {site.channelHandle}
+            </a>
+            <span className={styles.hint}>{site.channelHint}</span>
           </li>
           <li className="card reveal">
             <span className="label">Адрес</span>

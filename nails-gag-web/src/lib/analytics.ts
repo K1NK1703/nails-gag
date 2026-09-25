@@ -1,6 +1,6 @@
 export type CtaPlace = 'header' | 'hero' | 'price'
 
-export type ContactChannel = 'telegram'
+export type ContactChannel = 'telegram' | 'channel'
 
 export type AnalyticsEvent =
   | { name: 'page_view'; path: string }

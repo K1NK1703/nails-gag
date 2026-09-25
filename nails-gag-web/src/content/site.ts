@@ -20,7 +20,8 @@ export const site = {
   },
   priceKicker: 'Одна цена на всё',
   priceNote: { linkText: 'Выберите время онлайн', rest: ' — запись занимает минуту.' },
-  telegramHint: 'Написать мне · свежие работы в канале ',
+  telegramHint: 'Написать мне',
+  channelHint: 'Свежие работы и настроение',
   contactsKicker: 'Онлайн-запись · метро Горный институт',
   mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, улица Шевченко, 9')}`,
   description:

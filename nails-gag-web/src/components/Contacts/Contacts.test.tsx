@@ -7,9 +7,9 @@ vi.mock('../../lib/analytics', () => ({ track: vi.fn() }))
 import { track } from '../../lib/analytics'
 
 describe('Contacts', () => {
-  it('renders one telegram card and the address card', () => {
+  it('renders telegram, channel and address cards', () => {
     const { container } = render(<Contacts />)
-    expect(container.querySelectorAll('li')).toHaveLength(2)
+    expect(container.querySelectorAll('li')).toHaveLength(3)
     expect(screen.getByRole('link', { name: site.telegramHandle })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: site.channelHandle })).toBeInTheDocument()
     expect(screen.getByText(site.address.street)).toBeInTheDocument()
@@ -27,15 +27,14 @@ describe('Contacts', () => {
     expect(track).toHaveBeenCalledWith({ name: 'contact_click', channel: 'telegram' })
   })
 
-  it('channel link sits in the telegram hint', () => {
+  it('channel card links to the telegram channel and tracks contact_click', () => {
     render(<Contacts />)
     const link = screen.getByRole('link', { name: site.channelHandle })
     expect(link).toHaveAttribute('href', site.channelUrl)
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
-    expect(link.parentElement).toHaveTextContent(
-      `Написать мне · свежие работы в канале ${site.channelHandle}`,
-    )
+    fireEvent.click(link)
+    expect(track).toHaveBeenCalledWith({ name: 'contact_click', channel: 'channel' })
   })
 
   it('address opens Yandex Maps and is tracked', () => {
