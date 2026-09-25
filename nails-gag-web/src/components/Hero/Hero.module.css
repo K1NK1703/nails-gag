@@ -64,8 +64,6 @@
   background-color: var(--glass-bg);
   background-image: var(--glass-specular);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   box-shadow: var(--glass-shadow);
   color: var(--ink);
   text-decoration: none;

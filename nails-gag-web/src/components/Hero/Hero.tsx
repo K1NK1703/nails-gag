@@ -3,6 +3,9 @@ import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import styles from './Hero.module.css'
 
+/** Прозрачный GIF 1×1: фолбэк <picture>, когда desktop-источник не подходит. */
+const BLANK_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+
 export function Hero() {
   return (
     <section id="hero" className={styles.hero}>
@@ -31,7 +34,8 @@ export function Hero() {
                 width={240}
                 height={276}
                 alt=""
-                loading="lazy"
+                loading="eager"
+                fetchPriority="high"
               />
             </span>
             <span className={styles.masterText}>
@@ -44,15 +48,22 @@ export function Hero() {
           </a>
         </div>
         <div className={styles.figure}>
-          <img
-            src="/hero-720.webp"
-            srcSet="/hero-480.webp 480w, /hero-720.webp 720w, /hero-960.webp 879w"
-            sizes="(min-width: 768px) 360px, 100px"
-            alt={`${site.masterName}, мастер маникюра`}
-            width={879}
-            height={2163}
-            fetchPriority="high"
-          />
+          {/* Фигура видна только с 768px: на телефонах срабатывает прозрачная заглушка
+              и фото не скачивается вовсе. */}
+          <picture>
+            <source
+              media="(min-width: 768px)"
+              srcSet="/hero-480.webp 480w, /hero-720.webp 720w, /hero-960.webp 879w"
+              sizes="360px"
+            />
+            <img
+              src={BLANK_PIXEL}
+              alt={`${site.masterName}, мастер маникюра`}
+              width={879}
+              height={2163}
+              fetchPriority="high"
+            />
+          </picture>
         </div>
         <span className={styles.signature}>{site.heroSignature}</span>
       </div>

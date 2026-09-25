@@ -26,7 +26,7 @@
   --radius-card: 16px;
   --radius-pill: 999px;
 
-  --font: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
   --space-1: 4px;
   --space-2: 8px;

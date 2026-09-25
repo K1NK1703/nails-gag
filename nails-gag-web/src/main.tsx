@@ -1,4 +1,4 @@
-import '@fontsource-variable/inter'
+import './styles/fonts.css'
 import './styles/tokens.css'
 import './styles/global.css'
 import { StrictMode } from 'react'

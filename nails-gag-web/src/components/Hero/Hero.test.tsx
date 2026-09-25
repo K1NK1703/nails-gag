@@ -39,4 +39,19 @@ describe('Hero', () => {
     expect(card).toHaveAttribute('href', '#about')
     expect(card).toHaveTextContent(site.masterName)
   })
+
+  it('desktop figure is downloaded only from 768px: phones get a blank data: fallback', () => {
+    const { container } = renderHero()
+    const source = container.querySelector('picture source')
+    expect(source).toHaveAttribute('media', '(min-width: 768px)')
+    const img = screen.getByAltText(`${site.masterName}, мастер маникюра`)
+    expect(img.getAttribute('src')).toMatch(/^data:image\/gif;base64,/)
+  })
+
+  it('mobile portrait loads eagerly with high priority (above the fold)', () => {
+    const { container } = renderHero()
+    const portrait = container.querySelector('img[src="/portrait-240.webp"]')
+    expect(portrait).toHaveAttribute('loading', 'eager')
+    expect(portrait).toHaveAttribute('fetchpriority', 'high')
+  })
 })

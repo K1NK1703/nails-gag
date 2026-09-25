@@ -12,7 +12,7 @@ export function About() {
           <img
             src={src(about.photo.slug, 960)}
             srcSet={srcSet(about.photo.slug)}
-            sizes="(min-width: 1264px) 480px, (min-width: 768px) 40vw, 100vw"
+            sizes="(min-width: 1264px) 480px, (min-width: 768px) 40vw, 92vw"
             alt={about.photo.alt}
             loading="lazy"
             width={960}

@@ -9,7 +9,6 @@
   overflow: hidden;
   border-radius: var(--radius-card);
   transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
-  transform-style: preserve-3d;
   box-shadow: var(--shadow);
 }
 
@@ -48,8 +47,14 @@
   aspect-ratio: 3 / 4;
   object-fit: cover;
   width: 100%;
-  animation: drift 14s ease-in-out infinite alternate;
-  will-change: transform;
+}
+
+/* Ken Burns только там, где есть наведение: на телефонах бесконечная анимация
+   большого слоя тратит батарею и мешает скроллу. */
+@media (hover: hover) {
+  .photo img {
+    animation: drift 14s ease-in-out infinite alternate;
+  }
 }
 
 @keyframes drift {

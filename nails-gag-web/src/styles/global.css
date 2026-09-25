@@ -129,13 +129,13 @@ h3 {
   box-shadow: var(--glass-shadow);
 }
 
-/* карточки — тоже стекло; без backdrop-filter остаётся полупрозрачный фон */
+/* карточки — стекло без размытия: полупрозрачный фон, рамка и блик. backdrop-filter
+   на десятках карточек дорог при скролле на телефонах, размытие оставлено только
+   у шапки, мобильного меню, плашки аккаунта и оглавления документов (.glass). */
 .card {
   background-color: var(--glass-bg);
   background-image: var(--glass-specular);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   box-shadow: var(--glass-shadow);
   border-radius: var(--radius-card);
   padding: var(--space-4);
