@@ -13,13 +13,13 @@
   opacity: 1;
 }
 
-/* Хотспот (кончик ногтя) в точке (4px, 2px) — сдвигаем руку так, чтобы он был в (0, 0),
+/* Хотспот (кончик ногтя) в точке (3.2px, 1.6px) — сдвигаем руку так, чтобы он был в (0, 0),
    и вращаем/масштабируем вокруг него же. */
 .hand {
-  width: 44px;
-  height: 52px;
-  margin: -2px 0 0 -4px;
-  transform-origin: 4px 2px;
+  width: 34px;
+  height: 40px;
+  margin: -1.6px 0 0 -3.2px;
+  transform-origin: 3.2px 1.6px;
   transition: transform var(--dur) var(--ease);
   filter: drop-shadow(0 4px 8px rgba(43, 37, 40, 0.25));
 }
