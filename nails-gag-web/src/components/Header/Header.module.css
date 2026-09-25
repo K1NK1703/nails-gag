@@ -1,0 +1,393 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--header-h);
+}
+
+/* При переходе между страницами шапка захватывается отдельно от
+   ::view-transition-old/new(root) (см. global.css), иначе мигала бы вместе со страницей.
+   Имя ставится только на время перехода (TransitionLink вешает data-nav-transition на <html>):
+   элемент с view-transition-name становится backdrop root и иначе ломал бы размытие
+   мобильного меню. */
+:global(html[data-nav-transition]) .header {
+  view-transition-name: header;
+}
+
+/* Liquid Glass шапки — на псевдоэлементе: элемент с backdrop-filter становится
+   backdrop root, и вложенное мобильное меню иначе не размывало бы страницу под собой */
+.header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--glass-bg-strong);
+  background-image: var(--glass-specular);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.5);
+  }
+}
+
+@media (hover: hover) {
+  .logo:hover .dot {
+    animation: pulse 600ms var(--ease);
+  }
+}
+
+.nav {
+  display: none;
+  gap: var(--space-4);
+  margin-inline: auto;
+}
+
+.nav a {
+  position: relative;
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.nav a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1.5px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease);
+}
+
+.nav a:focus-visible::after {
+  transform: scaleX(1);
+}
+
+@media (hover: hover) {
+  .nav a:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+.cta {
+  padding: 10px 18px;
+}
+
+/* Вход в кабинет: стеклянная пилюля «Войти» / аватар с именем */
+.account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background-color: var(--glass-bg);
+  background-image: var(--glass-specular);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  box-shadow: var(--glass-shadow);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur) var(--ease),
+    translate var(--dur) var(--ease);
+}
+
+.account[data-user='true'] {
+  padding-left: 6px;
+}
+
+.account:focus-visible {
+  background-color: var(--glass-bg-strong);
+}
+
+@media (hover: hover) {
+  .account:hover {
+    background-color: var(--glass-bg-strong);
+    translate: 0 -1px;
+  }
+}
+
+.icon {
+  flex: none;
+}
+
+.avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* разделитель и пункт кабинета нужны только в мобильном меню */
+.divider {
+  display: none;
+}
+
+.menuAccount {
+  display: none;
+}
+
+.burger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  order: 3;
+}
+
+.burger span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: var(--ink);
+  position: relative;
+  transition: background-color 200ms var(--ease);
+}
+
+.burger span::before,
+.burger span::after {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: var(--ink);
+  content: '';
+  position: absolute;
+}
+
+.burger span::before {
+  top: -5px;
+}
+
+.burger span::after {
+  top: 5px;
+}
+
+.burger span::before,
+.burger span::after {
+  transition:
+    translate 200ms var(--ease),
+    rotate 200ms var(--ease);
+}
+
+/* бургер → × */
+.burger[data-open='true'] span {
+  background-color: transparent;
+}
+
+.burger[data-open='true'] span::before {
+  translate: 0 5px;
+  rotate: 45deg;
+}
+
+.burger[data-open='true'] span::after {
+  translate: 0 -5px;
+  rotate: -45deg;
+}
+
+@media (max-width: 767px) {
+  .inner {
+    gap: var(--space-2);
+  }
+
+  .cta {
+    padding: 8px 14px;
+    font-size: 0.95rem;
+  }
+
+  /* на мобильном вход — круглая стеклянная кнопка только с иконкой/аватаром */
+  .account,
+  .account[data-user='true'] {
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    order: 1;
+  }
+
+  .cta {
+    order: 2;
+  }
+
+  .accountLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .divider {
+    display: block;
+    height: 1px;
+    margin: 6px 14px;
+    background: var(--line);
+  }
+
+  .nav .menuAccount {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+  }
+
+  /* мобильное меню: стеклянная панель, всегда в DOM, анимируется через data-open */
+  .nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: absolute;
+    top: calc(var(--header-h) + 8px);
+    left: var(--gutter);
+    right: var(--gutter);
+    padding: 8px;
+    border-radius: 22px;
+    background-color: var(--glass-bg-strong);
+    background-image: var(--glass-specular);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow:
+      0 18px 40px rgba(43, 37, 40, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    opacity: 0;
+    translate: 0 -8px;
+    visibility: hidden;
+    /* закрытие: visibility гаснет после окончания анимации */
+    transition:
+      opacity var(--dur) var(--ease),
+      translate var(--dur) var(--ease),
+      visibility 0s linear var(--dur);
+  }
+
+  .nav[data-open='true'] {
+    opacity: 1;
+    translate: 0 0;
+    visibility: visible;
+    transition:
+      opacity var(--dur) var(--ease),
+      translate var(--dur) var(--ease),
+      visibility 0s;
+  }
+
+  .nav a {
+    padding: 12px 14px;
+    border-radius: 14px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    opacity: 0;
+    translate: -6px 0;
+    transition:
+      opacity var(--dur) var(--ease),
+      translate var(--dur) var(--ease),
+      background-color 160ms var(--ease),
+      box-shadow 160ms var(--ease);
+  }
+
+  .nav[data-open='true'] a {
+    opacity: 1;
+    translate: 0 0;
+    transition-delay: calc(var(--i, 0) * 40ms), calc(var(--i, 0) * 40ms), 0s, 0s;
+  }
+
+  /* десктопное подчёркивание в пилюлях не нужно */
+  .nav a::after {
+    display: none;
+  }
+
+  .nav a:focus-visible,
+  .nav a:active {
+    background-color: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+}
+
+@media (max-width: 767px) and (hover: hover) {
+  .nav a:hover {
+    background-color: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+}
+
+@media (max-width: 400px) {
+  .logo {
+    font-size: 1.05rem;
+  }
+
+  .cta {
+    padding: 8px 12px;
+  }
+
+  /* на узких экранах стрелка не помещается в одну строку со входом и бургером */
+  .cta span {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .nav {
+    display: flex;
+  }
+  .burger {
+    display: none;
+  }
+  .account {
+    margin-left: 0;
+  }
+}

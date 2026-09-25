@@ -1,0 +1,85 @@
+.inner {
+  display: grid;
+  gap: var(--space-5);
+}
+
+/* «живое» фото: медленный Ken Burns + наклон к курсору (--rx/--ry из useTilt) */
+.photo {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  box-shadow: var(--shadow);
+}
+
+/* .reveal задаёт свой transition на opacity/translate — объединяем с transform */
+.photo,
+:global(.js) .photo:global(.reveal) {
+  transition:
+    opacity var(--dur) var(--ease),
+    translate 500ms var(--ease),
+    transform 200ms var(--ease);
+}
+
+/* блик, бегущий за курсором (--mx/--my) */
+.photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.28),
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+@media (hover: hover) {
+  .photo:hover::after {
+    opacity: 1;
+  }
+}
+
+.photo img {
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  width: 100%;
+}
+
+/* Ken Burns только там, где есть наведение: на телефонах бесконечная анимация
+   большого слоя тратит батарею и мешает скроллу. */
+@media (hover: hover) {
+  .photo img {
+    animation: drift 14s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(-2%, -1.5%);
+  }
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.text p {
+  color: var(--ink);
+  max-width: 55ch;
+}
+
+@media (min-width: 768px) {
+  .inner {
+    grid-template-columns: 0.8fr 1.2fr;
+    align-items: center;
+  }
+}

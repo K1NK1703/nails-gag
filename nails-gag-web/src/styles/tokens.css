@@ -1,0 +1,48 @@
+:root {
+  --bg-start: #ebe3e5;
+  --bg-end: #e1d6da;
+  --ink: #2b2528;
+  --ink-muted: #5c5256;
+  --accent: #cc3b78;
+  --accent-hover: #a82c60;
+  --accent-ink: #ffffff;
+  --surface: rgba(255, 255, 255, 0.55);
+  --surface-strong: rgba(255, 255, 255, 0.8);
+  --line: rgba(43, 37, 40, 0.12);
+  --shadow: 0 18px 50px rgba(43, 37, 40, 0.08);
+  --shadow-hover: 0 18px 40px rgba(43, 37, 40, 0.16);
+
+  /* Liquid Glass */
+  --glass-bg: rgba(255, 255, 255, 0.42);
+  --glass-bg-strong: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --glass-blur: 18px;
+  --glass-shadow: 0 10px 30px rgba(43, 37, 40, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --glass-specular: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 40%);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur: 260ms;
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --font: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+  --space-6: 64px;
+  --space-7: 96px;
+
+  --container: 1200px;
+  --gutter: 16px;
+  --header-h: 72px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 32px;
+  }
+}

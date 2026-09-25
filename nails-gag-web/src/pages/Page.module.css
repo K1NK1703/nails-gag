@@ -1,0 +1,18 @@
+.page {
+  padding-block: var(--space-6);
+  min-height: 60vh;
+}
+
+.page h1 {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  margin-bottom: var(--space-3);
+}
+
+.page p {
+  max-width: 65ch;
+  margin-bottom: var(--space-3);
+}
+
+.muted {
+  color: var(--ink-muted);
+}

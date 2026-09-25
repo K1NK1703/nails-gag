@@ -1,0 +1,38 @@
+// Плейсхолдеры берутся из placeholders.ts (их же реэкспортирует privacy.ts): privacy.ts импортирует site,
+// поэтому прямой импорт из privacy.ts дал бы циклическую зависимость.
+import { OPERATOR_FIO, OPERATOR_INN } from './placeholders'
+
+export const site = {
+  name: 'nails.gag',
+  masterName: 'Алина',
+  city: 'Санкт-Петербург',
+  foundedYear: 2023,
+  taglineLines: ['Чёткие', 'квадраты'] as const,
+  subtitle: 'Идеальные формы без лишних слов.',
+  kicker: 'Маникюр · Санкт-Петербург',
+  heroSignature: 'EST. 2023 — BY ALINA',
+  bookingPath: '/booking',
+  cabinetPath: '/cabinet',
+  loginLabel: 'Войти',
+  cabinetLabel: 'Личный кабинет',
+  telegramHandle: '@gagushichewa',
+  telegramUrl: 'https://t.me/gagushichewa',
+  channelHandle: '@nailsAaaa',
+  channelUrl: 'https://t.me/nailsAaaa',
+  address: {
+    street: 'Улица Шевченко, 9',
+    details: 'метро Горный институт',
+    locality: 'Санкт-Петербург',
+    country: 'RU',
+  },
+  priceKicker: 'Одна цена на всё',
+  priceNote: { linkText: 'Выберите время онлайн', rest: ' — запись занимает минуту.' },
+  telegramHint: 'Написать мне',
+  channelHint: 'Свежие работы и настроение',
+  contactsKicker: 'Онлайн-запись · метро Горный институт',
+  mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, улица Шевченко, 9')}`,
+  description:
+    'Маникюр в Санкт-Петербурге: чёткие квадраты, аппаратная техника, любой дизайн за 2 500 ₽. Онлайн-запись на сайте.',
+  /** Строка об исполнителе в подвале. */
+  performerLine: `Исполнитель: самозанятая ${OPERATOR_FIO}, ИНН ${OPERATOR_INN}`,
+} as const

@@ -1,0 +1,54 @@
+.cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  pointer-events: none;
+  will-change: transform;
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+
+.cursor[data-visible='true'] {
+  opacity: 1;
+}
+
+/* Хотспот (кончик ногтя) в точке (3px, 1.4px) — сдвигаем руку так, чтобы он был в (0, 0),
+   и вращаем/масштабируем вокруг него же. */
+.hand {
+  width: 28px;
+  height: 32px;
+  margin: -1.4px 0 0 -3px;
+  transform-origin: 3px 1.4px;
+  transition: transform var(--dur) var(--ease);
+  filter: drop-shadow(0 4px 8px rgba(43, 37, 40, 0.25));
+}
+
+.hand svg {
+  display: block;
+  overflow: visible;
+}
+
+.nails {
+  transition: filter var(--dur) var(--ease);
+}
+
+.cursor[data-state='link'] .hand {
+  transform: rotate(-8deg) scale(1.15);
+}
+
+.cursor[data-state='link'] .french {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
+}
+
+.cursor[data-state='link'] .catEye {
+  filter: drop-shadow(0 0 6px rgba(216, 79, 143, 0.6));
+}
+
+.cursor[data-state='photo'] .hand {
+  transform: rotate(-18deg) scale(1.25);
+}
+
+.cursor[data-state='press'] .hand {
+  transform: scale(0.92);
+}
