@@ -65,6 +65,7 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
   return createPortal(
     <div
       className={styles.backdrop}
+      data-cursor="photo"
       role="presentation"
       onClick={(e) => {
         if (!figureRef.current?.contains(e.target as Node)) onClose()

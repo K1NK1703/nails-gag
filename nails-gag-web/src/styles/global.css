@@ -276,3 +276,14 @@ h3 {
     animation: none;
   }
 }
+
+/* Кастомный курсор (components/Cursor): прячем системный, кроме полей ввода. */
+html.custom-cursor,
+html.custom-cursor * {
+  cursor: none !important;
+}
+
+html.custom-cursor :is(input, textarea, select, [contenteditable]:not([contenteditable='false'])),
+html.custom-cursor [contenteditable]:not([contenteditable='false']) * {
+  cursor: auto !important;
+}

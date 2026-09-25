@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router'
+import { Cursor } from './components/Cursor/Cursor'
 import { Footer } from './components/Footer/Footer'
 import { Header } from './components/Header/Header'
 import { track } from './lib/analytics'
@@ -31,6 +32,7 @@ export function AppRoutes() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
+      <Cursor />
     </>
   )
 }

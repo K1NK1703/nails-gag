@@ -30,6 +30,7 @@ export function Gallery() {
               <button
                 type="button"
                 className={styles.tile}
+                data-cursor="photo"
                 aria-label={`Открыть фото: ${photo.alt}`}
                 onClick={(e) => open(i, e.currentTarget)}
               >
