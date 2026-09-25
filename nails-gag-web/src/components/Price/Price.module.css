@@ -1,6 +1,5 @@
-.lead {
-  color: var(--ink-muted);
-  margin: var(--space-3) 0 var(--space-5);
+.title {
+  margin-bottom: var(--space-5);
 }
 
 .grid {
@@ -34,8 +33,42 @@
 
 .description {
   color: var(--ink-muted);
-  flex: 1;
-  margin-bottom: var(--space-2);
+}
+
+.note {
+  margin-top: var(--space-4);
+  color: var(--ink-muted);
+}
+
+.link {
+  position: relative;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease);
+}
+
+.link:focus-visible::after,
+.link:active::after {
+  transform: scaleX(1);
+}
+
+@media (hover: hover) {
+  .link:hover::after {
+    transform: scaleX(1);
+  }
 }
 
 @media (min-width: 768px) {

@@ -17,6 +17,9 @@ export const site = {
     locality: 'Санкт-Петербург',
     country: 'RU',
   },
+  priceKicker: 'Одна цена на всё',
+  priceNote: { linkText: 'Запись в Telegram', rest: ' — напишите, и я подберу время.' },
+  contactsKicker: 'Telegram · метро Приморская',
   mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, проспект КИМа, 6')}`,
   description:
     'Маникюр в Санкт-Петербурге: чёткие квадраты, аппаратная техника, любой дизайн за 2 500 ₽. Запись в Telegram.',

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { prices } from '../../content/prices'
+import { site } from '../../content/site'
 import { Price } from './Price'
 
 vi.mock('../../lib/analytics', () => ({ track: vi.fn() }))
@@ -15,9 +16,14 @@ describe('Price', () => {
     }
   })
 
-  it('tracks cta click with place=price', () => {
-    render(<Price />)
-    fireEvent.click(screen.getAllByRole('link', { name: /записаться/i })[0])
+  it('has a single booking link in the note, tracked with place=price', () => {
+    const { container } = render(<Price />)
+    const link = screen.getByRole('link', { name: site.priceNote.linkText })
+    expect(link).toHaveAttribute('href', site.bookingUrl)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    fireEvent.click(link)
     expect(track).toHaveBeenCalledWith({ name: 'cta_click', place: 'price' })
+    expect(container.querySelectorAll('.button').length).toBe(0)
   })
 })

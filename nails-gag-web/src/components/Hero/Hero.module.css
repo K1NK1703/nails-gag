@@ -67,6 +67,38 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   box-shadow: var(--glass-shadow);
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.masterCard:active {
+  transform: scale(0.98);
+}
+
+.chevron {
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 1.2rem;
+  color: var(--ink-muted);
+  transition:
+    transform var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.masterCard:active .chevron,
+.masterCard:focus-visible .chevron {
+  transform: translateX(4px);
+  color: var(--accent);
+}
+
+@media (hover: hover) {
+  .masterCard:hover .chevron {
+    transform: translateX(4px);
+    color: var(--accent);
+  }
 }
 
 .portrait {
@@ -101,11 +133,6 @@
 
 .masterMeta {
   color: var(--ink-muted);
-}
-
-.masterAddress {
-  color: var(--ink-muted);
-  font-size: 0.85rem;
 }
 
 .signature {

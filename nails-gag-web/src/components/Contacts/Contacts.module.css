@@ -2,10 +2,8 @@
   color: var(--accent);
 }
 
-.lead {
-  color: var(--ink-muted);
-  margin: var(--space-3) 0 var(--space-5);
-  max-width: 40ch;
+.title {
+  margin-bottom: var(--space-5);
 }
 
 .grid {

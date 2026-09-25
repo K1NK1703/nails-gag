@@ -23,7 +23,7 @@ export function Hero() {
           >
             Записаться <span aria-hidden="true">→</span>
           </a>
-          <aside className={styles.masterCard}>
+          <a href="#about" className={styles.masterCard} aria-label="Подробнее о мастере">
             <span className={styles.portrait}>
               <img
                 src="/portrait-240.webp"
@@ -31,16 +31,18 @@ export function Hero() {
                 sizes="88px"
                 width={240}
                 height={276}
-                alt={`${site.masterName}, мастер маникюра`}
+                alt=""
                 loading="lazy"
               />
             </span>
             <span className={styles.masterText}>
               <strong className={styles.masterName}>{site.masterName}</strong>
-              <span className={styles.masterMeta}>мастер · с {site.foundedYear}</span>
-              <span className={styles.masterAddress}>{site.address.street}</span>
+              <span className={styles.masterMeta}>мастер маникюра</span>
             </span>
-          </aside>
+            <span className={styles.chevron} aria-hidden="true">
+              →
+            </span>
+          </a>
         </div>
         <div className={styles.figure}>
           <img

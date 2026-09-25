@@ -18,8 +18,10 @@ describe('Hero', () => {
     expect(track).toHaveBeenCalledWith({ name: 'cta_click', place: 'hero' })
   })
 
-  it('renders master card with master name', () => {
+  it('master card links to the about section and shows the master name', () => {
     render(<Hero />)
-    expect(screen.getByRole('complementary')).toHaveTextContent(site.masterName)
+    const card = screen.getByRole('link', { name: 'Подробнее о мастере' })
+    expect(card).toHaveAttribute('href', '#about')
+    expect(card).toHaveTextContent(site.masterName)
   })
 })

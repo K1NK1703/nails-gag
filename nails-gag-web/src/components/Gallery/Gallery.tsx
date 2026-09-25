@@ -22,7 +22,7 @@ export function Gallery() {
   return (
     <section id="gallery" className="section">
       <div className="container">
-        <span className="kicker">Портфолио</span>
+        <span className="kicker">{`Портфолио · ${gallery.length} фото`}</span>
         <h2 className={styles.title}>Работы</h2>
         <ul className={styles.grid}>
           {gallery.map((photo, i) => (

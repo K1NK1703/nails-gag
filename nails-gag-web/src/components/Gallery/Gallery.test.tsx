@@ -10,6 +10,7 @@ describe('Gallery', () => {
   it('renders all photos from content', () => {
     render(<Gallery />)
     expect(screen.getAllByRole('button', { name: /открыть фото/i })).toHaveLength(gallery.length)
+    expect(screen.getByText(`Портфолио · ${gallery.length} фото`)).toBeInTheDocument()
   })
 
   it('opens lightbox on click and tracks the index', () => {

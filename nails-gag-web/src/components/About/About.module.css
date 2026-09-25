@@ -72,32 +72,6 @@
   max-width: 55ch;
 }
 
-.facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin: var(--space-3) 0 0;
-}
-
-.facts div {
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  display: flex;
-  gap: 6px;
-  font-size: 0.95rem;
-}
-
-.facts dt {
-  color: var(--ink-muted);
-}
-
-.facts dd {
-  margin: 0;
-  font-weight: 600;
-}
-
 @media (min-width: 768px) {
   .inner {
     grid-template-columns: 0.8fr 1.2fr;

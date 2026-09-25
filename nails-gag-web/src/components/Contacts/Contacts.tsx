@@ -6,13 +6,12 @@ export function Contacts() {
   return (
     <section id="contacts" className="section">
       <div className="container">
-        <span className="kicker">Контакты</span>
-        <h2>
+        <span className="kicker">{site.contactsKicker}</span>
+        <h2 className={styles.title}>
           Найти
           <br />
           <span className={styles.accent}>и записаться</span>
         </h2>
-        <p className={styles.lead}>Два способа дойти до маникюра. Самый быстрый — Telegram.</p>
         <ul className={styles.grid}>
           <li className="card reveal">
             <span className="label">Telegram</span>

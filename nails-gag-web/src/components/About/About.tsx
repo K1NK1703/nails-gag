@@ -25,14 +25,6 @@ export function About() {
           {about.paragraphs.map((p) => (
             <p key={p}>{p}</p>
           ))}
-          <dl className={styles.facts}>
-            {about.facts.map((f) => (
-              <div key={f.label}>
-                <dt>{f.label}</dt>
-                <dd>{f.value}</dd>
-              </div>
-            ))}
-          </dl>
         </div>
       </div>
     </section>
