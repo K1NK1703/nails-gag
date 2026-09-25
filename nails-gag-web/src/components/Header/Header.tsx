@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Link } from 'react-router'
+import { TransitionLink } from '../TransitionLink/TransitionLink'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import { isCabinetEnabled } from '../../lib/features'
@@ -54,15 +54,14 @@ export function Header() {
         >
           {navItems.map((l, i) =>
             l.href === '/cabinet' ? (
-              <Link
+              <TransitionLink
                 key={l.href}
                 to={l.href}
-                viewTransition
                 style={{ '--i': i } as CSSProperties}
                 onClick={() => setOpen(false)}
               >
                 {l.label}
-              </Link>
+              </TransitionLink>
             ) : (
               <a
                 key={l.href}
@@ -76,14 +75,13 @@ export function Header() {
           )}
         </nav>
 
-        <Link
+        <TransitionLink
           to={site.bookingPath}
-          viewTransition
           className={`button ${styles.cta}`}
           onClick={() => track({ name: 'cta_click', place: 'header' })}
         >
           Записаться <span aria-hidden="true">→</span>
-        </Link>
+        </TransitionLink>
       </div>
     </header>
   )

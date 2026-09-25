@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { TransitionLink } from '../TransitionLink/TransitionLink'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import styles from './Hero.module.css'
@@ -15,14 +15,13 @@ export function Hero() {
             <span className={styles.accent}>.</span>
           </h1>
           <p className={styles.subtitle}>{site.subtitle}</p>
-          <Link
+          <TransitionLink
             to={site.bookingPath}
-            viewTransition
             className="button button--accent"
             onClick={() => track({ name: 'cta_click', place: 'hero' })}
           >
             Записаться <span aria-hidden="true">→</span>
-          </Link>
+          </TransitionLink>
           <a href="#about" className={styles.masterCard} aria-label="Подробнее о мастере">
             <span className={styles.portrait}>
               <img

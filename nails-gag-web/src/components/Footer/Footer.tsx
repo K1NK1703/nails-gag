@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { TransitionLink } from '../TransitionLink/TransitionLink'
 import { site } from '../../content/site'
 import styles from './Footer.module.css'
 
@@ -10,9 +10,7 @@ export function Footer() {
           © {site.foundedYear}–{__BUILD_YEAR__} {site.name}
         </span>
         <nav className={styles.links} aria-label="Подвал">
-          <Link to="/privacy" viewTransition>
-            Политика конфиденциальности
-          </Link>
+          <TransitionLink to="/privacy">Политика конфиденциальности</TransitionLink>
         </nav>
       </div>
     </footer>

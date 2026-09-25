@@ -3,8 +3,14 @@
   top: 0;
   z-index: 50;
   height: var(--header-h);
-  /* Захватывается отдельно от ::view-transition-old/new(root), см. global.css —
-     иначе шапка мигала бы вместе со страницей при переходе. */
+}
+
+/* При переходе между страницами шапка захватывается отдельно от
+   ::view-transition-old/new(root) (см. global.css), иначе мигала бы вместе со страницей.
+   Имя ставится только на время перехода (TransitionLink вешает data-nav-transition на <html>):
+   элемент с view-transition-name становится backdrop root и иначе ломал бы размытие
+   мобильного меню. */
+:global(html[data-nav-transition]) .header {
   view-transition-name: header;
 }
 

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link } from 'react-router'
+import { TransitionLink } from '../components/TransitionLink/TransitionLink'
 import { titleFor } from '../lib/seo'
 import styles from './Page.module.css'
 
@@ -12,9 +12,9 @@ export function NotFound() {
     <main className={`container ${styles.page}`}>
       <h1>Страница не найдена</h1>
       <p className={styles.muted}>Такой страницы нет. Вернитесь на главную.</p>
-      <Link to="/" viewTransition className="button">
+      <TransitionLink to="/" className="button">
         На главную
-      </Link>
+      </TransitionLink>
     </main>
   )
 }

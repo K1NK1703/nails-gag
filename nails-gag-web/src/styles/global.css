@@ -238,13 +238,11 @@ h3 {
   outline-offset: 3px;
 }
 
-/* Плавные переходы между страницами SPA (View Transitions API).
+/* Плавные переходы между страницами SPA (View Transitions API): запускает их
+   TransitionLink через document.startViewTransition. @view-transition не нужен —
+   он действует только на межстраничные (cross-document) переходы.
    Хедер анимируется отдельно (view-transition-name: header в Header.module.css),
    чтобы не мигать вместе со страницей — он один на всё приложение и не прыгает. */
-@view-transition {
-  navigation: auto;
-}
-
 ::view-transition-old(root) {
   animation: 220ms var(--ease) both page-out;
 }

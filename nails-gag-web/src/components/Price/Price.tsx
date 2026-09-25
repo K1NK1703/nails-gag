@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { TransitionLink } from '../TransitionLink/TransitionLink'
 import { prices } from '../../content/prices'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
@@ -26,14 +26,13 @@ export function Price() {
           ))}
         </ul>
         <p className={styles.note}>
-          <Link
+          <TransitionLink
             to={site.bookingPath}
-            viewTransition
             className={styles.link}
             onClick={() => track({ name: 'cta_click', place: 'price' })}
           >
             {site.priceNote.linkText}
-          </Link>
+          </TransitionLink>
           {site.priceNote.rest}
         </p>
       </div>
