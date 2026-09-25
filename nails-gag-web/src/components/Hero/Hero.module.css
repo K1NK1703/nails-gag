@@ -38,21 +38,15 @@
   position: absolute;
   z-index: 1;
   top: auto;
-  right: -6%;
+  right: -10%;
   bottom: 0;
-  height: min(62vh, 560px);
+  height: min(72vh, 660px);
   max-height: 100%;
   line-height: 0;
   pointer-events: none;
   opacity: 0.96;
-  mask-image:
-    linear-gradient(to top, transparent 0%, #000 25%),
-    linear-gradient(to bottom, transparent 0%, #000 10%);
-  mask-composite: intersect;
-  -webkit-mask-image:
-    linear-gradient(to top, transparent 0%, #000 25%),
-    linear-gradient(to bottom, transparent 0%, #000 10%);
-  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to top, transparent 0%, #000 25%);
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 25%);
   animation: float 6s ease-in-out infinite alternate;
 }
 
@@ -92,12 +86,10 @@
     max-width: 58%;
   }
   .figure {
-    right: clamp(24px, 8vw, 140px);
-    height: min(92%, 880px);
+    right: clamp(16px, 6vw, 110px);
+    height: calc(100% - 12px);
     mask-image: linear-gradient(to top, transparent 0%, #000 22%);
     -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 22%);
-    mask-composite: add;
-    -webkit-mask-composite: source-over;
   }
   .figure img {
     mask-image: linear-gradient(to right, transparent 0%, #000 20%);
