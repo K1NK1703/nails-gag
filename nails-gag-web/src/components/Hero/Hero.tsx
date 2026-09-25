@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import styles from './Hero.module.css'
@@ -14,15 +15,13 @@ export function Hero() {
             <span className={styles.accent}>.</span>
           </h1>
           <p className={styles.subtitle}>{site.subtitle}</p>
-          <a
-            href={site.bookingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to={site.bookingPath}
             className="button button--accent"
             onClick={() => track({ name: 'cta_click', place: 'hero' })}
           >
             Записаться <span aria-hidden="true">→</span>
-          </a>
+          </Link>
           <a href="#about" className={styles.masterCard} aria-label="Подробнее о мастере">
             <span className={styles.portrait}>
               <img

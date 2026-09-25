@@ -1,33 +1,46 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Header } from './Header'
 
 vi.mock('../../lib/analytics', () => ({ track: vi.fn() }))
 import { track } from '../../lib/analytics'
 
+function renderHeader() {
+  return render(
+    <MemoryRouter>
+      <Header />
+    </MemoryRouter>,
+  )
+}
+
 describe('Header', () => {
   afterEach(() => vi.unstubAllEnvs())
 
   it('hides cabinet link when flag is off', () => {
     vi.stubEnv('VITE_FEATURE_CABINET', '')
-    render(<Header />)
+    renderHeader()
     expect(screen.queryByText('Личный кабинет')).not.toBeInTheDocument()
   })
 
   it('shows cabinet link when flag is on', () => {
     vi.stubEnv('VITE_FEATURE_CABINET', 'true')
-    render(<Header />)
+    renderHeader()
     expect(screen.getByText('Личный кабинет')).toHaveAttribute('href', '/cabinet')
   })
 
-  it('tracks cta click with place=header', () => {
-    render(<Header />)
-    fireEvent.click(screen.getByRole('link', { name: /записаться/i }))
+  it('cta leads to the booking page and is tracked with place=header', () => {
+    renderHeader()
+    const link = screen.getByRole('link', { name: /записаться/i })
+    expect(link).toHaveAttribute('href', '/booking')
+    expect(link).not.toHaveAttribute('target')
+    expect(link).not.toHaveAttribute('rel')
+    fireEvent.click(link)
     expect(track).toHaveBeenCalledWith({ name: 'cta_click', place: 'header' })
   })
 
   it('toggles mobile menu', () => {
-    render(<Header />)
+    renderHeader()
     const button = screen.getByRole('button', { name: /меню/i })
     expect(button).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(button)
@@ -35,7 +48,7 @@ describe('Header', () => {
   })
 
   it('keeps the menu mounted and toggles data-open for transitions', () => {
-    render(<Header />)
+    renderHeader()
     const button = screen.getByRole('button', { name: /меню/i })
     const nav = document.getElementById('site-nav')
     expect(nav).toHaveAttribute('data-open', 'false')
@@ -45,7 +58,7 @@ describe('Header', () => {
   })
 
   it('closes mobile menu on Escape', () => {
-    render(<Header />)
+    renderHeader()
     const button = screen.getByRole('button', { name: /меню/i })
     fireEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'true')
@@ -54,7 +67,7 @@ describe('Header', () => {
   })
 
   it('closes mobile menu when a nav link is clicked', () => {
-    render(<Header />)
+    renderHeader()
     const button = screen.getByRole('button', { name: /меню/i })
     fireEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'true')

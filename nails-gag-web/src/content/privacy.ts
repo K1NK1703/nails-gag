@@ -12,7 +12,7 @@ export const privacy: { title: string; updated: string; sections: PrivacySection
     {
       title: '1. Кто оператор',
       paragraphs: [
-        `Сайт nails.gag принадлежит ${OPERATOR} (далее — оператор). По вопросам, связанным с этой политикой, пишите в Telegram: ${site.bookingHandle}.`,
+        `Сайт nails.gag принадлежит ${OPERATOR} (далее — оператор). По вопросам, связанным с этой политикой, пишите в Telegram: ${site.telegramHandle}.`,
       ],
     },
     {

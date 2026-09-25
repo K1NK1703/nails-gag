@@ -16,27 +16,25 @@ export function Contacts() {
           <li className="card reveal">
             <span className="label">Telegram</span>
             <a
-              href={site.bookingUrl}
+              href={site.telegramUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={styles.value}
-              onClick={() => track({ name: 'cta_click', place: 'contacts' })}
+              onClick={() => track({ name: 'contact_click', channel: 'telegram' })}
             >
-              {site.bookingHandle}
+              {site.telegramHandle}
             </a>
-            <span className={styles.hint}>Запись и общение — здесь</span>
-          </li>
-          <li className="card reveal">
-            <span className="label">Канал</span>
-            <a
-              href={site.channelUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.value}
-            >
-              {site.channelHandle}
-            </a>
-            <span className={styles.hint}>Свежие работы и настроение</span>
+            <span className={styles.hint}>
+              {site.telegramHint}
+              <a
+                href={site.channelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.hintLink}
+              >
+                {site.channelHandle}
+              </a>
+            </span>
           </li>
           <li className="card reveal">
             <span className="label">Адрес</span>

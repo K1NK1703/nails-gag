@@ -7,18 +7,35 @@ vi.mock('../../lib/analytics', () => ({ track: vi.fn() }))
 import { track } from '../../lib/analytics'
 
 describe('Contacts', () => {
-  it('renders booking, channel and address', () => {
-    render(<Contacts />)
-    expect(screen.getByText(site.bookingHandle)).toBeInTheDocument()
-    expect(screen.getByText(site.channelHandle)).toBeInTheDocument()
+  it('renders one telegram card and the address card', () => {
+    const { container } = render(<Contacts />)
+    expect(container.querySelectorAll('li')).toHaveLength(2)
+    expect(screen.getByRole('link', { name: site.telegramHandle })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: site.channelHandle })).toBeInTheDocument()
     expect(screen.getByText(site.address.street)).toBeInTheDocument()
+    expect(screen.getAllByRole('link')).toHaveLength(3)
     expect(screen.queryByText(/instagram/i)).not.toBeInTheDocument()
   })
 
-  it('tracks booking click with place=contacts', () => {
+  it('telegram link opens in a new tab and tracks contact_click', () => {
     render(<Contacts />)
-    fireEvent.click(screen.getByRole('link', { name: new RegExp(site.bookingHandle) }))
-    expect(track).toHaveBeenCalledWith({ name: 'cta_click', place: 'contacts' })
+    const link = screen.getByRole('link', { name: site.telegramHandle })
+    expect(link).toHaveAttribute('href', site.telegramUrl)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    fireEvent.click(link)
+    expect(track).toHaveBeenCalledWith({ name: 'contact_click', channel: 'telegram' })
+  })
+
+  it('channel link sits in the telegram hint', () => {
+    render(<Contacts />)
+    const link = screen.getByRole('link', { name: site.channelHandle })
+    expect(link).toHaveAttribute('href', site.channelUrl)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(link.parentElement).toHaveTextContent(
+      `Написать мне · свежие работы в канале ${site.channelHandle}`,
+    )
   })
 
   it('address opens Yandex Maps and is tracked', () => {

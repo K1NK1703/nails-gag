@@ -42,6 +42,7 @@ if (privacyPage.includes('{{OPERATOR}}')) {
 for (const f of [
   'privacy/index.html',
   'privacy.html',
+  'booking/index.html',
   'sitemap.xml',
   'robots.txt',
   'og.jpg',

@@ -27,6 +27,10 @@ describe('titleFor', () => {
     expect(titleFor('/privacy')).toBe('Политика конфиденциальности — nails.gag')
   })
 
+  it('отдаёт заголовок онлайн-записи', () => {
+    expect(titleFor('/booking')).toBe('Онлайн-запись — nails.gag')
+  })
+
   it('отдаёт заголовок кабинета', () => {
     expect(titleFor('/cabinet')).toBe('Личный кабинет — nails.gag')
   })

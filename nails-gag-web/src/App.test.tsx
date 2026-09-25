@@ -31,6 +31,12 @@ describe('routes', () => {
     )
   })
 
+  it('renders booking stub page', () => {
+    renderAt('/booking')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Онлайн-запись')
+    expect(document.title).toBe('Онлайн-запись — nails.gag')
+  })
+
   it('sets document title per route', () => {
     renderAt('/privacy')
     expect(document.title).toContain('Политика конфиденциальности')

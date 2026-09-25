@@ -16,4 +16,14 @@ describe('Footer', () => {
     )
     expect(screen.getByText(/© 2023–\d{4} nails\.gag/)).toBeInTheDocument()
   })
+
+  it('has no telegram link', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Footer />
+      </MemoryRouter>,
+    )
+    expect(container.querySelector('a[href*="t.me"]')).toBeNull()
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+  })
 })

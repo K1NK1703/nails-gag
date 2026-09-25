@@ -7,8 +7,9 @@ export const site = {
   subtitle: 'Идеальные формы без лишних слов.',
   kicker: 'Маникюр · Санкт-Петербург',
   heroSignature: 'EST. 2023 — BY ALINA',
-  bookingHandle: '@gagushichewa',
-  bookingUrl: 'https://t.me/gagushichewa',
+  bookingPath: '/booking',
+  telegramHandle: '@gagushichewa',
+  telegramUrl: 'https://t.me/gagushichewa',
   channelHandle: '@nailsAaaa',
   channelUrl: 'https://t.me/nailsAaaa',
   address: {
@@ -18,9 +19,10 @@ export const site = {
     country: 'RU',
   },
   priceKicker: 'Одна цена на всё',
-  priceNote: { linkText: 'Запись в Telegram', rest: ' — напишите, и я подберу время.' },
-  contactsKicker: 'Telegram · метро Горный институт',
+  priceNote: { linkText: 'Выберите время онлайн', rest: ' — запись занимает минуту.' },
+  telegramHint: 'Написать мне · свежие работы в канале ',
+  contactsKicker: 'Онлайн-запись · метро Горный институт',
   mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, улица Шевченко, 9')}`,
   description:
-    'Маникюр в Санкт-Петербурге: чёткие квадраты, аппаратная техника, любой дизайн за 2 500 ₽. Запись в Telegram.',
+    'Маникюр в Санкт-Петербурге: чёткие квадраты, аппаратная техника, любой дизайн за 2 500 ₽. Онлайн-запись на сайте.',
 } as const

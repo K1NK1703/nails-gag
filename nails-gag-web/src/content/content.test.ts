@@ -24,7 +24,11 @@ describe('content', () => {
     expect(reviews.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('booking link points to telegram', () => {
-    expect(site.bookingUrl).toMatch(/^https:\/\/t\.me\//)
+  it('telegram link points to t.me', () => {
+    expect(site.telegramUrl).toMatch(/^https:\/\/t\.me\//)
+  })
+
+  it('booking path is internal', () => {
+    expect(site.bookingPath).toBe('/booking')
   })
 })

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { Link } from 'react-router'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import { isCabinetEnabled } from '../../lib/features'
@@ -63,15 +64,13 @@ export function Header() {
           ))}
         </nav>
 
-        <a
-          href={site.bookingUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          to={site.bookingPath}
           className={`button ${styles.cta}`}
           onClick={() => track({ name: 'cta_click', place: 'header' })}
         >
           Записаться <span aria-hidden="true">→</span>
-        </a>
+        </Link>
       </div>
     </header>
   )

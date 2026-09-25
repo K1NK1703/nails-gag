@@ -1,8 +1,11 @@
-export type CtaPlace = 'header' | 'hero' | 'price' | 'contacts' | 'footer'
+export type CtaPlace = 'header' | 'hero' | 'price'
+
+export type ContactChannel = 'telegram'
 
 export type AnalyticsEvent =
   | { name: 'page_view'; path: string }
   | { name: 'cta_click'; place: CtaPlace }
+  | { name: 'contact_click'; channel: ContactChannel }
   | { name: 'gallery_open'; index: number }
   | { name: 'faq_open'; id: string }
   | { name: 'map_open' }

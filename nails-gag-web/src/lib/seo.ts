@@ -10,6 +10,8 @@ export function titleFor(path: string): string {
       return `${site.name} — маникюр в Санкт-Петербурге, чёткие квадраты`
     case '/privacy':
       return `${privacy.title} — ${site.name}`
+    case '/booking':
+      return `Онлайн-запись — ${site.name}`
     case '/cabinet':
       return `Личный кабинет — ${site.name}`
     default:
@@ -42,9 +44,15 @@ const PRIVACY: Meta = {
   description: `Как сайт ${site.name} обращается с данными посетителей.`,
 }
 
+const BOOKING: Meta = {
+  title: titleFor('/booking'),
+  description: `Онлайн-запись на маникюр в ${site.name}.`,
+}
+
 const META: Record<string, Meta> = {
   '/': HOME,
   '/privacy': PRIVACY,
+  '/booking': BOOKING,
 }
 
 function metaFor(path: string): Meta {

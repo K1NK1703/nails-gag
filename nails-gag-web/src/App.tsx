@@ -4,6 +4,7 @@ import { Footer } from './components/Footer/Footer'
 import { Header } from './components/Header/Header'
 import { track } from './lib/analytics'
 import { isCabinetEnabled } from './lib/features'
+import { Booking } from './pages/Booking'
 import { Cabinet } from './pages/Cabinet'
 import { Home } from './pages/Home'
 import { NotFound } from './pages/NotFound'
@@ -22,6 +23,7 @@ export function AppRoutes() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/booking" element={<Booking />} />
         {isCabinetEnabled() && <Route path="/cabinet" element={<Cabinet />} />}
         <Route path="*" element={<NotFound />} />
       </Routes>
