@@ -6,6 +6,7 @@
 |---|---|
 | `nails-gag-web/` | лендинг: Vite + React + TypeScript, статическая сборка с пререндером |
 | `media/` | исходные фото (не в git) |
+| `legal/` | памятка по Роскомнадзору и шаблон договора поручения обработки |
 | `docs/` | спецификации и планы (не в git) |
 
 ## Лендинг
@@ -18,7 +19,7 @@ npm run dev        # http://localhost:5173
 npm test           # Vitest
 npm run lint       # oxlint
 npm run format     # prettier
-npm run build      # dist/: клиент + пререндер главной, /privacy, /terms и /booking
+npm run build      # dist/: клиент + пререндер /, /privacy, /terms, /booking, /cabinet
 npm run check-dist # smoke-проверка результата сборки
 npm run preview    # посмотреть dist/ на http://localhost:4173
 ```
@@ -27,9 +28,10 @@ npm run preview    # посмотреть dist/ на http://localhost:4173
 
 Скопируйте `.env.example` в `.env`:
 
-- `VITE_FEATURE_CABINET` — `true`, чтобы показать пункт «Личный кабинет» и маршрут `/cabinet`.
+- `VITE_FEATURE_CABINET` — кабинет включён по умолчанию (кнопка «Войти» в шапке и маршрут `/cabinet`); `false` прячет.
+- `VITE_PREVIEW_USER` — имя «вошедшего» пользователя, только чтобы посмотреть дизайн шапки для вошедшего (`useAuth` пока заглушка).
 - `VITE_ANALYTICS_ENDPOINT` — адрес для событий аналитики; пусто — события не отправляются.
-- `VITE_SITE_URL` — публичный адрес сайта для canonical, Open Graph, sitemap и robots.
+- `VITE_SITE_URL` — публичный адрес сайта для canonical, Open Graph, sitemap, robots и текстов документов (по умолчанию `https://nails-gag.ru`).
 
 ### Как поменять контент
 
@@ -47,6 +49,15 @@ npm run preview    # посмотреть dist/ на http://localhost:4173
 - **Плейсхолдеры реквизитов** объявлены в `placeholders.ts` (их же реэкспортирует `privacy.ts`): `OPERATOR_FIO`, `OPERATOR_INN`, `OPERATOR_EMAIL`, `OPERATOR_CITY`, `HOSTING_PROVIDER`, `DEVELOPER_FIO`, `SMS_PROVIDER`; домен берётся из `VITE_SITE_URL`. Они подставляются в политику, соглашение, согласия и строку исполнителя в подвале. **До публикации заполните их**: `npm run check-dist` перечисляет незаполненные `{{…}}` на `/privacy` и `/terms` предупреждением.
 - Тексты согласий для будущих форм записи и регистрации: `consents.ts` (основное, публикация фото, публикация отзыва, напоминания, рассылки — каждое отдельной галочкой).
 - Что сделать до запуска (уведомления в Роскомнадзор, договор поручения с разработчиком, сбор отзывов): [`legal/README.md`](legal/README.md).
+- Общие строки интерфейса (подписи «Версия», «Содержание», склонения «отзыв/отзыва/отзывов», тексты 404): `ui.ts`. Заглушки страниц: `booking.ts`, `cabinet.ts`.
+
+### Как устроен фронт
+
+- Страницы: `/` (лендинг), `/privacy`, `/terms`, `/booking` и `/cabinet` (заглушки, `noindex`, не в sitemap), 404. Пререндер пишет `x/index.html` и `x.html` и помечает `#root` атрибутом `data-route`; клиент гидрирует только совпадающий маршрут, иначе рендерит заново.
+- Переходы между страницами: `TransitionLink` (View Transitions API, в браузерах без поддержки мгновенная смена). Роутер декларативный `BrowserRouter` с `useTransitions={false}`, иначе переход не успевает захватить новую страницу.
+- Движение: reveal-появление секций (повторяется), hover-эффекты только под `@media (hover: hover)`, всё отключается при `prefers-reduced-motion`. Курсор-рука (`src/components/Cursor/`) только на устройствах с мышью; стиль ногтей — константа `NAIL_STYLE`.
+- Шрифт Inter: два своих файла в `public/fonts/` (latin и cyrillic) с preload; знак ₽ берётся из системного шрифта, это сознательно, чтобы не грузить лишние 80 КБ.
+- Стекло: токены `--glass-*` в `tokens.css`; размытие `backdrop-filter` только у шапки, меню, кнопки входа и оглавления документов.
 
 ### Как добавить фото
 
@@ -57,7 +68,7 @@ npm run preview    # посмотреть dist/ на http://localhost:4173
 
 ### Деплой
 
-`npm run build` даёт папку `dist/`, её раздаёт любой статический сервер. Для каждой пререндеренной страницы есть и `privacy/index.html`, и `privacy.html` (так же для `/terms` и `/booking`), поэтому подходят оба типа конфигураций. Для маршрутов без пререндера (`/cabinet`, 404) нужен fallback на `index.html`.
+`npm run build` даёт папку `dist/`, её раздаёт любой статический сервер. Для каждой пререндеренной страницы есть и `privacy/index.html`, и `privacy.html` (так же для `/terms`, `/booking`, `/cabinet`), поэтому подходят оба типа конфигураций. Fallback на `index.html` нужен только для несуществующих адресов (404).
 
 Пример для Caddy:
 
