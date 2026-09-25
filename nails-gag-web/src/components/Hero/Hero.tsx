@@ -23,15 +23,33 @@ export function Hero() {
           >
             Записаться <span aria-hidden="true">→</span>
           </a>
+          <aside className={styles.masterCard}>
+            <span className={styles.portrait}>
+              <img
+                src="/portrait-240.webp"
+                srcSet="/portrait-240.webp 240w, /portrait-480.webp 480w"
+                sizes="88px"
+                width={240}
+                height={276}
+                alt={`${site.masterName}, мастер маникюра`}
+                loading="lazy"
+              />
+            </span>
+            <span className={styles.masterText}>
+              <strong className={styles.masterName}>{site.masterName}</strong>
+              <span className={styles.masterMeta}>мастер · с {site.foundedYear}</span>
+              <span className={styles.masterAddress}>{site.address.street}</span>
+            </span>
+          </aside>
         </div>
         <div className={styles.figure}>
           <img
             src="/hero-720.webp"
-            srcSet="/hero-360.webp 360w, /hero-720.webp 720w, /hero-1440.webp 879w"
-            sizes="(min-width: 768px) 245px, 155px"
+            srcSet="/hero-480.webp 480w, /hero-720.webp 720w, /hero-960.webp 879w"
+            sizes="(min-width: 768px) 360px, 100px"
             alt={`${site.masterName}, мастер маникюра`}
             width={879}
-            height={3181}
+            height={2163}
             fetchPriority="high"
           />
         </div>

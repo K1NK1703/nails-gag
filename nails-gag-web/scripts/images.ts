@@ -51,15 +51,42 @@ async function main() {
   await webpSet(await findSource('studio'), GALLERY_OUT, 'studio', SIZES)
   console.log('gallery studio')
 
-  const hero = await findSource('hero-cutout')
-  for (const w of [360, 720, 1440]) {
-    await sharp(hero)
-      .trim()
+  const heroSrc = await findSource('hero-cutout')
+  const trimmed = await sharp(heroSrc).trim().png().toBuffer({ resolveWithObject: true })
+  const { width: tw, height: th } = trimmed.info
+
+  // Desktop: голова → чуть выше колен.
+  const kneeUp = await sharp(trimmed.data)
+    .extract({ left: 0, top: 0, width: tw, height: Math.round(th * 0.68) })
+    .png()
+    .toBuffer()
+  for (const w of [480, 720, 960]) {
+    const info = await sharp(kneeUp)
       .resize({ width: w, withoutEnlargement: true })
       .webp({ quality: 85, alphaQuality: 90 })
       .toFile(path.join(OUT, `hero-${w}.webp`))
+    console.log(`hero-${w}`, `${info.width}x${info.height}`)
   }
-  console.log('hero')
+
+  // Mobile: портрет (голова и плечи) для карточки мастера.
+  // Лицо по центру: берём центральные 70% ширины, чтобы в круге 88px оно было крупнее.
+  const pw = Math.round(tw * 0.7)
+  const portrait = await sharp(trimmed.data)
+    .extract({
+      left: Math.round((tw - pw) / 2),
+      top: 0,
+      width: pw,
+      height: Math.min(th, Math.round(pw * 1.15)),
+    })
+    .png()
+    .toBuffer()
+  for (const w of [240, 480]) {
+    const info = await sharp(portrait)
+      .resize({ width: w, withoutEnlargement: true })
+      .webp({ quality: 85, alphaQuality: 90 })
+      .toFile(path.join(OUT, `portrait-${w}.webp`))
+    console.log(`portrait-${w}`, `${info.width}x${info.height}`)
+  }
 
   await sharp(await findSource('IMG_4978'))
     .rotate()

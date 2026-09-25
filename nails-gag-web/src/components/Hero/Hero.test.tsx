@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { site } from '../../content/site'
 import { Hero } from './Hero'
 
 vi.mock('../../lib/analytics', () => ({ track: vi.fn() }))
@@ -15,5 +16,10 @@ describe('Hero', () => {
     render(<Hero />)
     fireEvent.click(screen.getByRole('link', { name: /записаться/i }))
     expect(track).toHaveBeenCalledWith({ name: 'cta_click', place: 'hero' })
+  })
+
+  it('renders master card with master name', () => {
+    render(<Hero />)
+    expect(screen.getByRole('complementary')).toHaveTextContent(site.masterName)
   })
 })
