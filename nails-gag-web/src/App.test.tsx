@@ -28,7 +28,7 @@ describe('routes', () => {
   it('renders privacy page', () => {
     renderAt('/privacy')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'Политика конфиденциальности',
+      'Политика обработки персональных данных',
     )
   })
 
@@ -40,7 +40,7 @@ describe('routes', () => {
 
   it('sets document title per route', () => {
     renderAt('/privacy')
-    expect(document.title).toContain('Политика конфиденциальности')
+    expect(document.title).toContain('Политика обработки персональных данных')
     cleanup()
     renderAt('/')
     expect(document.title).toContain('маникюр')

@@ -33,10 +33,16 @@ expect(!/instagram/i.test(home), 'home: instagram mention found')
 const privacyPage = await readFile(path.join(DIST, 'privacy/index.html'), 'utf8')
 expect(!privacyPage.includes('<!--app-html-->'), 'privacy: <!--app-html--> not replaced')
 expect(!privacyPage.includes('<!--app-head-->'), 'privacy: <!--app-head--> not replaced')
-expect(privacyPage.includes('Политика конфиденциальности'), 'privacy: policy title text missing')
-// Имя оператора заполняет владелец перед публикацией, поэтому это предупреждение, не ошибка.
-if (privacyPage.includes('{{OPERATOR}}')) {
-  warnings.push('check-dist WARN: {{OPERATOR}} is not filled in src/content/privacy.ts')
+expect(
+  privacyPage.includes('Политика обработки персональных данных'),
+  'privacy: policy title text missing',
+)
+// Реквизиты оператора и подрядчиков заполняет владелец перед публикацией, поэтому это предупреждение, не ошибка.
+const placeholders = [...new Set(privacyPage.match(/\{\{[A-Z_]+\}\}/g) ?? [])]
+if (placeholders.length) {
+  warnings.push(
+    `check-dist WARN: placeholders not filled in src/content/privacy.ts: ${placeholders.join(', ')}`,
+  )
 }
 
 for (const f of [

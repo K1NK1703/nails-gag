@@ -12,7 +12,7 @@ describe('headFor', () => {
 
   it('builds head for privacy without json-ld', () => {
     const head = headFor('/privacy', 'https://nails-gag.ru')
-    expect(head).toContain('Политика конфиденциальности')
+    expect(head).toContain('Политика обработки персональных данных')
     expect(head).toContain('href="https://nails-gag.ru/privacy"')
     expect(head).not.toContain('NailSalon')
   })
@@ -24,7 +24,7 @@ describe('titleFor', () => {
   })
 
   it('отдаёт заголовок политики', () => {
-    expect(titleFor('/privacy')).toBe('Политика конфиденциальности — nails.gag')
+    expect(titleFor('/privacy')).toBe('Политика обработки персональных данных — nails.gag')
   })
 
   it('отдаёт заголовок онлайн-записи', () => {
