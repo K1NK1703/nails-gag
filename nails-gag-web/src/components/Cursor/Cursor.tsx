@@ -4,7 +4,7 @@ import styles from './Cursor.module.css'
 /** Дизайн маникюра на курсоре: нюдовый френч или магнитный «кошачий глаз». */
 type NailStyle = 'french' | 'cat-eye'
 // `as` не даёт TS сузить тип до литерала — обе ветки остаются проверяемыми.
-const NAIL_STYLE = 'french' as NailStyle
+const NAIL_STYLE = 'cat-eye' as NailStyle
 
 const CAT_EYE_GRADIENT_ID = 'nails-gag-cursor-cat-eye'
 
