@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { TransitionLink } from '../TransitionLink/TransitionLink'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
+import { useAuth } from '../../lib/auth'
+import type { User } from '../../lib/auth'
 import { isCabinetEnabled } from '../../lib/features'
+import { TransitionLink } from '../TransitionLink/TransitionLink'
 import styles from './Header.module.css'
 
 const links = [
@@ -12,10 +14,45 @@ const links = [
   { href: '/#contacts', label: 'Контакты' },
 ]
 
+function UserIcon() {
+  return (
+    <svg
+      className={styles.icon}
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="8" cy="5.5" r="2.75" />
+      <path d="M2.75 14c.6-2.6 2.7-4.1 5.25-4.1s4.65 1.5 5.25 4.1" />
+    </svg>
+  )
+}
+
+function Avatar({ user }: { user: User }) {
+  if (user.avatarUrl) {
+    return <img className={styles.avatar} src={user.avatarUrl} alt="" width={24} height={24} />
+  }
+  return (
+    <span className={styles.avatar} aria-hidden="true">
+      {user.name.trim().charAt(0).toUpperCase()}
+    </span>
+  )
+}
+
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? name
+}
+
 export function Header() {
   const [open, setOpen] = useState(false)
   const cabinet = isCabinetEnabled()
-  const navItems = cabinet ? [...links, { href: '/cabinet', label: 'Личный кабинет' }] : links
+  const { user } = useAuth()
 
   useEffect(() => {
     if (!open) return
@@ -52,28 +89,45 @@ export function Header() {
           className={styles.nav}
           data-open={open ? 'true' : 'false'}
         >
-          {navItems.map((l, i) =>
-            l.href === '/cabinet' ? (
+          {links.map((l, i) => (
+            <a
+              key={l.href}
+              href={l.href}
+              style={{ '--i': i } as CSSProperties}
+              onClick={() => setOpen(false)}
+            >
+              {l.label}
+            </a>
+          ))}
+          {cabinet && (
+            <>
+              <span className={styles.divider} aria-hidden="true" />
               <TransitionLink
-                key={l.href}
-                to={l.href}
-                style={{ '--i': i } as CSSProperties}
+                to={site.cabinetPath}
+                className={styles.menuAccount}
+                style={{ '--i': links.length } as CSSProperties}
                 onClick={() => setOpen(false)}
               >
-                {l.label}
+                {user ? <Avatar user={user} /> : <UserIcon />}
+                {user ? site.cabinetLabel : site.loginLabel}
               </TransitionLink>
-            ) : (
-              <a
-                key={l.href}
-                href={l.href}
-                style={{ '--i': i } as CSSProperties}
-                onClick={() => setOpen(false)}
-              >
-                {l.label}
-              </a>
-            ),
+            </>
           )}
         </nav>
+
+        {cabinet && (
+          <TransitionLink
+            to={site.cabinetPath}
+            className={styles.account}
+            data-user={user ? 'true' : 'false'}
+            aria-label={user ? site.cabinetLabel : undefined}
+          >
+            {user ? <Avatar user={user} /> : <UserIcon />}
+            <span className={styles.accountLabel}>
+              {user ? firstName(user.name) : site.loginLabel}
+            </span>
+          </TransitionLink>
+        )}
 
         <TransitionLink
           to={site.bookingPath}

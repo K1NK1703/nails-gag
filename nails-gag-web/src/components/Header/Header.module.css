@@ -106,8 +106,73 @@
 }
 
 .cta {
-  margin-left: auto;
   padding: 10px 18px;
+}
+
+/* Вход в кабинет: стеклянная пилюля «Войти» / аватар с именем */
+.account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background-color: var(--glass-bg);
+  background-image: var(--glass-specular);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  box-shadow: var(--glass-shadow);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur) var(--ease),
+    translate var(--dur) var(--ease);
+}
+
+.account[data-user='true'] {
+  padding-left: 6px;
+}
+
+.account:focus-visible {
+  background-color: var(--glass-bg-strong);
+}
+
+@media (hover: hover) {
+  .account:hover {
+    background-color: var(--glass-bg-strong);
+    translate: 0 -1px;
+  }
+}
+
+.icon {
+  flex: none;
+}
+
+.avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* разделитель и пункт кабинета нужны только в мобильном меню */
+.divider {
+  display: none;
+}
+
+.menuAccount {
+  display: none;
 }
 
 .burger {
@@ -180,6 +245,46 @@
   .cta {
     padding: 8px 14px;
     font-size: 0.95rem;
+  }
+
+  /* на мобильном вход — круглая стеклянная кнопка только с иконкой/аватаром */
+  .account,
+  .account[data-user='true'] {
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    order: 1;
+  }
+
+  .cta {
+    order: 2;
+  }
+
+  .accountLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .divider {
+    display: block;
+    height: 1px;
+    margin: 6px 14px;
+    background: var(--line);
+  }
+
+  .nav .menuAccount {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
   }
 
   /* мобильное меню: стеклянная панель, всегда в DOM, анимируется через data-open */
@@ -264,6 +369,15 @@
   .logo {
     font-size: 1.05rem;
   }
+
+  .cta {
+    padding: 8px 12px;
+  }
+
+  /* на узких экранах стрелка не помещается в одну строку со входом и бургером */
+  .cta span {
+    display: none;
+  }
 }
 
 @media (min-width: 768px) {
@@ -273,7 +387,7 @@
   .burger {
     display: none;
   }
-  .cta {
+  .account {
     margin-left: 0;
   }
 }

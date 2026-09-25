@@ -1,7 +1,8 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRoutes } from './App'
+import { cabinet } from './content/cabinet'
 
 vi.mock('./lib/analytics', () => ({ track: vi.fn() }))
 import { track } from './lib/analytics'
@@ -50,15 +51,22 @@ describe('routes', () => {
     expect(track).toHaveBeenCalledWith({ name: 'page_view', path: '/privacy' })
   })
 
-  it('renders 404 for cabinet when flag is off', () => {
-    vi.stubEnv('VITE_FEATURE_CABINET', '')
+  it('renders 404 for cabinet when flag is "false"', () => {
+    vi.stubEnv('VITE_FEATURE_CABINET', 'false')
     renderAt('/cabinet')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Страница не найдена')
   })
 
-  it('renders cabinet stub when flag is on', () => {
-    vi.stubEnv('VITE_FEATURE_CABINET', 'true')
+  it('renders cabinet page by default with copy and a booking link', () => {
+    vi.stubEnv('VITE_FEATURE_CABINET', '')
     renderAt('/cabinet')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Личный кабинет')
+    expect(screen.getByText(cabinet.text)).toBeInTheDocument()
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('link', { name: /записаться/i })).toHaveAttribute(
+      'href',
+      '/booking',
+    )
+    expect(document.title).toBe('Личный кабинет — nails.gag')
   })
 })
