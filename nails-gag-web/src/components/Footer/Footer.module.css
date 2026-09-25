@@ -18,9 +18,30 @@
 }
 
 .links a {
+  position: relative;
   color: var(--ink-muted);
+  text-decoration: none;
 }
 
-.links a:hover {
-  color: var(--accent-hover);
+.links a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1.5px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease);
+}
+
+.links a:focus-visible::after {
+  transform: scaleX(1);
+}
+
+@media (hover: hover) {
+  .links a:hover::after {
+    transform: scaleX(1);
+  }
 }

@@ -104,12 +104,15 @@ h3 {
   -webkit-appearance: none;
   cursor: pointer;
   transition:
-    transform 0.15s ease,
-    background 0.15s ease;
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    background var(--dur) var(--ease);
 }
 
-.button:hover {
-  transform: translateY(-1px);
+/* стрелка → внутри кнопки */
+.button span {
+  display: inline-block;
+  transition: transform var(--dur) var(--ease);
 }
 
 .button--accent {
@@ -122,20 +125,60 @@ h3 {
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   padding: var(--space-4);
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
-/* reveal: скрываем только когда есть JS, иначе всё видно сразу */
+@media (hover: hover) {
+  .button:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .button:hover span {
+    transform: translateX(4px);
+  }
+
+  .button--accent:hover {
+    background: var(--accent-hover);
+  }
+
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-hover);
+    border-color: rgba(43, 37, 40, 0.2);
+  }
+}
+
+.button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* reveal: скрываем только когда есть JS, иначе всё видно сразу.
+   Сдвиг через translate, чтобы transform оставался свободным для hover. */
 .js .reveal {
   opacity: 0;
-  transform: translateY(14px);
+  translate: 0 14px;
   transition:
-    opacity 0.6s ease,
-    transform 0.6s ease;
+    opacity var(--dur) var(--ease),
+    translate 500ms var(--ease);
+}
+
+/* у карточек свой transition для hover: объединяем оба списка */
+.js .card.reveal {
+  transition:
+    opacity var(--dur) var(--ease),
+    translate 500ms var(--ease),
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
 .js .reveal.is-visible {
   opacity: 1;
-  transform: none;
+  translate: 0 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -144,11 +187,13 @@ h3 {
   }
   .js .reveal {
     opacity: 1;
-    transform: none;
-    transition: none;
+    translate: none;
   }
-  .button {
-    transition: none;
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
   }
 }
 

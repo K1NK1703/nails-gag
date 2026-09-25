@@ -33,6 +33,22 @@
   background: var(--accent);
 }
 
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.5);
+  }
+}
+
+@media (hover: hover) {
+  .logo:hover .dot {
+    animation: pulse 600ms var(--ease);
+  }
+}
+
 .nav {
   display: none;
   gap: var(--space-4);
@@ -40,13 +56,33 @@
 }
 
 .nav a {
+  position: relative;
   text-decoration: none;
   color: var(--ink);
   font-weight: 500;
 }
 
-.nav a:hover {
-  color: var(--accent-hover);
+.nav a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1.5px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease);
+}
+
+.nav a:focus-visible::after {
+  transform: scaleX(1);
+}
+
+@media (hover: hover) {
+  .nav a:hover::after {
+    transform: scaleX(1);
+  }
 }
 
 .cta {

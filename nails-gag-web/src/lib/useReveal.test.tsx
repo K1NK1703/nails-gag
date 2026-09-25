@@ -32,7 +32,7 @@ describe('useReveal', () => {
     expect(getByTestId('b')).toHaveClass('is-visible')
   })
 
-  it('элемент ниже вьюпорта показывается только по сигналу IntersectionObserver', () => {
+  it('элемент ниже вьюпорта показывается по сигналу IntersectionObserver и гаснет при уходе', () => {
     // jsdom всегда отдаёт нулевой rect, поэтому уводим один элемент под вьюпорт вручную.
     Element.prototype.getBoundingClientRect = function (this: Element) {
       const far = this instanceof HTMLElement && this.dataset['testid'] === 'b'
@@ -40,10 +40,10 @@ describe('useReveal', () => {
     }
 
     const observed: Element[] = []
-    let callback: IoCallback | undefined
+    const callbacks: IoCallback[] = []
     class FakeIo {
       constructor(cb: IoCallback) {
-        callback = cb
+        callbacks.push(cb)
       }
       observe(el: Element) {
         observed.push(el)
@@ -52,6 +52,7 @@ describe('useReveal', () => {
       disconnect() {}
     }
     globalThis.IntersectionObserver = FakeIo as unknown as typeof IntersectionObserver
+    const notify = (entry: IoEntry) => callbacks.forEach((cb) => cb([entry]))
 
     const { getByTestId } = render(<Demo />)
     const near = getByTestId('a')
@@ -59,9 +60,16 @@ describe('useReveal', () => {
 
     expect(near).toHaveClass('is-visible')
     expect(far).not.toHaveClass('is-visible')
-    expect(observed).toEqual([far])
+    // После появления элементы не отписываются: наблюдаем все, чтобы проигрывать повторно.
+    expect(new Set(observed)).toEqual(new Set([near, far]))
 
-    callback?.([{ isIntersecting: true, target: far }])
+    notify({ isIntersecting: true, target: far })
+    expect(far).toHaveClass('is-visible')
+
+    notify({ isIntersecting: false, target: far })
+    expect(far).not.toHaveClass('is-visible')
+
+    notify({ isIntersecting: true, target: far })
     expect(far).toHaveClass('is-visible')
   })
 })

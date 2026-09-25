@@ -20,17 +20,36 @@
   overflow: hidden;
   background: var(--surface);
   cursor: zoom-in;
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 
 .tile img {
   width: 100%;
   aspect-ratio: 3 / 4;
   object-fit: cover;
-  transition: transform 0.4s ease;
+  transition: transform 0.4s var(--ease);
 }
 
-.tile:hover img {
+.tile:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+}
+
+.tile:focus-visible img {
   transform: scale(1.03);
+}
+
+@media (hover: hover) {
+  .tile:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .tile:hover img {
+    transform: scale(1.03);
+  }
 }
 
 @media (min-width: 768px) {
@@ -47,6 +66,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tile,
   .tile img {
     transition: none;
   }

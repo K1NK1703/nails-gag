@@ -19,4 +19,15 @@ describe('Faq', () => {
     fireEvent(details, new Event('toggle'))
     expect(track).toHaveBeenCalledWith({ name: 'faq_open', id: faq[0].id })
   })
+
+  it('opens and closes a question on summary click', () => {
+    render(<Faq />)
+    const summary = screen.getByText(faq[0].question)
+    const details = summary.closest('details')!
+    expect(details.open).toBe(false)
+    fireEvent.click(summary)
+    expect(details.open).toBe(true)
+    fireEvent.click(summary)
+    expect(details.open).toBe(false)
+  })
 })
