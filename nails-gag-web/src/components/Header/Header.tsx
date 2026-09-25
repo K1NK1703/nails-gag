@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import { isCabinetEnabled } from '../../lib/features'
@@ -13,6 +14,7 @@ const links = [
 export function Header() {
   const [open, setOpen] = useState(false)
   const cabinet = isCabinetEnabled()
+  const navItems = cabinet ? [...links, { href: '/cabinet', label: 'Личный кабинет' }] : links
 
   useEffect(() => {
     if (!open) return
@@ -34,6 +36,7 @@ export function Header() {
         <button
           type="button"
           className={styles.burger}
+          data-open={open ? 'true' : 'false'}
           aria-label="Меню"
           aria-expanded={open}
           aria-controls="site-nav"
@@ -45,18 +48,19 @@ export function Header() {
         <nav
           id="site-nav"
           aria-label="Основное меню"
-          className={[styles.nav, open && styles.navOpen].filter(Boolean).join(' ')}
+          className={styles.nav}
+          data-open={open ? 'true' : 'false'}
         >
-          {links.map((l) => (
-            <a key={l.href} href={l.href} onClick={() => setOpen(false)}>
+          {navItems.map((l, i) => (
+            <a
+              key={l.href}
+              href={l.href}
+              style={{ '--i': i } as CSSProperties}
+              onClick={() => setOpen(false)}
+            >
               {l.label}
             </a>
           ))}
-          {cabinet && (
-            <a href="/cabinet" onClick={() => setOpen(false)}>
-              Личный кабинет
-            </a>
-          )}
         </nav>
 
         <a

@@ -120,9 +120,23 @@ h3 {
   color: var(--accent-ink);
 }
 
+.glass {
+  background-color: var(--glass-bg);
+  background-image: var(--glass-specular);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  box-shadow: var(--glass-shadow);
+}
+
+/* карточки — тоже стекло; без backdrop-filter остаётся полупрозрачный фон */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background-color: var(--glass-bg);
+  background-image: var(--glass-specular);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  box-shadow: var(--glass-shadow);
   border-radius: var(--radius-card);
   padding: var(--space-4);
   transition:
@@ -131,13 +145,26 @@ h3 {
     border-color var(--dur) var(--ease);
 }
 
+/* заливка акцентом — только по наведению/нажатию/фокусу, по умолчанию кнопка тёмная */
+.button:focus-visible {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button--accent:focus-visible {
+  background: var(--accent-hover);
+}
+
 @media (hover: hover) {
   .button:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-hover);
+    background: var(--accent);
+    color: var(--accent-ink);
   }
 
-  .button:hover span {
+  .button:hover span,
+  .button:focus-visible span {
     transform: translateX(4px);
   }
 
@@ -147,13 +174,22 @@ h3 {
 
   .card:hover {
     transform: translateY(-4px);
-    box-shadow: var(--shadow-hover);
-    border-color: rgba(43, 37, 40, 0.2);
+    box-shadow:
+      var(--shadow-hover),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    border-color: rgba(255, 255, 255, 0.9);
   }
 }
 
+/* на тач-устройствах hover нет — заливаем по нажатию */
 .button:active {
   transform: translateY(0) scale(0.98);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button--accent:active {
+  background: var(--accent-hover);
 }
 
 /* reveal: скрываем только когда есть JS, иначе всё видно сразу.

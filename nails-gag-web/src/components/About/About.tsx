@@ -1,12 +1,14 @@
 import { about } from '../../content/about'
 import { src, srcSet } from '../../content/gallery'
+import { useTilt } from '../../lib/useTilt'
 import styles from './About.module.css'
 
 export function About() {
+  const tiltRef = useTilt<HTMLDivElement>()
   return (
     <section id="about" className="section">
       <div className={`container ${styles.inner}`}>
-        <div className={`reveal ${styles.photo}`}>
+        <div ref={tiltRef} className={`reveal ${styles.photo}`}>
           <img
             src={src(about.photo.slug, 960)}
             srcSet={srcSet(about.photo.slug)}

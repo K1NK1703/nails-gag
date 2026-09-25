@@ -17,6 +17,7 @@ export const site = {
     locality: 'Санкт-Петербург',
     country: 'RU',
   },
+  mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, проспект КИМа, 6')}`,
   description:
     'Маникюр в Санкт-Петербурге: чёткие квадраты, аппаратная техника, любой дизайн за 2 500 ₽. Запись в Telegram.',
 } as const

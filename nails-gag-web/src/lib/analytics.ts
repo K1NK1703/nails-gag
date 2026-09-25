@@ -5,6 +5,7 @@ export type AnalyticsEvent =
   | { name: 'cta_click'; place: CtaPlace }
   | { name: 'gallery_open'; index: number }
   | { name: 'faq_open'; id: string }
+  | { name: 'map_open' }
 
 export function track(event: AnalyticsEvent): void {
   const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT

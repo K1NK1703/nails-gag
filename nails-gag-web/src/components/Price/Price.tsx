@@ -26,7 +26,7 @@ export function Price() {
                 href={site.bookingUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={['button', p.primary && 'button--accent'].filter(Boolean).join(' ')}
+                className="button"
                 onClick={() => track({ name: 'cta_click', place: 'price' })}
               >
                 Записаться <span aria-hidden="true">→</span>

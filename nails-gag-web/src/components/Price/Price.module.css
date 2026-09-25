@@ -19,8 +19,10 @@
 }
 
 .primary {
-  background: var(--surface-strong);
-  box-shadow: var(--shadow);
+  background-color: var(--glass-bg-strong);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .price {

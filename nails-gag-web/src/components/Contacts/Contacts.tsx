@@ -41,7 +41,16 @@ export function Contacts() {
           </li>
           <li className="card reveal">
             <span className="label">Адрес</span>
-            <span className={styles.value}>{site.address.street}</span>
+            <a
+              href={site.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.value}
+              aria-label={`${site.address.street} — открыть в Яндекс.Картах`}
+              onClick={() => track({ name: 'map_open' })}
+            >
+              {site.address.street}
+            </a>
             <span className={styles.hint}>{site.address.details}</span>
           </li>
         </ul>

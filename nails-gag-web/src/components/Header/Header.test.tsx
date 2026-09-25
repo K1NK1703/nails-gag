@@ -34,6 +34,16 @@ describe('Header', () => {
     expect(button).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('keeps the menu mounted and toggles data-open for transitions', () => {
+    render(<Header />)
+    const button = screen.getByRole('button', { name: /меню/i })
+    const nav = document.getElementById('site-nav')
+    expect(nav).toHaveAttribute('data-open', 'false')
+    fireEvent.click(button)
+    expect(nav).toHaveAttribute('data-open', 'true')
+    expect(screen.getByText('Прайс')).toHaveStyle({ '--i': '1' })
+  })
+
   it('closes mobile menu on Escape', () => {
     render(<Header />)
     const button = screen.getByRole('button', { name: /меню/i })
