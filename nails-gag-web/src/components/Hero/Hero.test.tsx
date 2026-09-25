@@ -6,10 +6,9 @@ vi.mock('../../lib/analytics', () => ({ track: vi.fn() }))
 import { track } from '../../lib/analytics'
 
 describe('Hero', () => {
-  it('renders h1 with tagline and price pill', () => {
+  it('renders h1 with tagline', () => {
     render(<Hero />)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Чёткие квадраты')
-    expect(screen.getByText(/2 500 ₽/)).toBeInTheDocument()
   })
 
   it('tracks cta click with place=hero', () => {

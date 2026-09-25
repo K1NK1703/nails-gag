@@ -8,7 +8,6 @@ export const about = {
   ],
   facts: [
     { label: 'С', value: '2023' },
-    { label: 'Техника', value: 'аппаратная' },
     { label: 'Студия', value: 'пр. КИМа, 6' },
   ],
 } as const

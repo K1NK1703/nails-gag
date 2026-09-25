@@ -6,7 +6,6 @@ export const site = {
   taglineLines: ['Чёткие', 'квадраты'] as const,
   subtitle: 'Идеальные формы без лишних слов.',
   kicker: 'Маникюр · Санкт-Петербург',
-  heroPricePill: 'Любой дизайн · 2 500 ₽',
   heroSignature: 'EST. 2023 — BY ALINA',
   bookingHandle: '@gagushichewa',
   bookingUrl: 'https://t.me/gagushichewa',

@@ -1,25 +1,27 @@
 .hero {
   position: relative;
   overflow: hidden;
-  padding-block: var(--space-5) 0;
+  min-height: calc(100vh - var(--header-h));
+  min-height: calc(100svh - var(--header-h));
 }
 
 .inner {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-4);
   min-height: calc(100vh - var(--header-h));
-  align-items: end;
+  min-height: calc(100svh - var(--header-h));
+  align-items: start;
+  padding-top: var(--space-5);
 }
 
 .text {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-3);
-  padding-bottom: var(--space-5);
-  z-index: 1;
+  max-width: 100%;
 }
 
 .accent {
@@ -32,54 +34,84 @@
   max-width: 28ch;
 }
 
-.pill {
-  display: inline-block;
-  padding: 8px 14px;
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.photo {
-  justify-self: end;
-  align-self: end;
+.figure {
+  position: absolute;
+  z-index: 1;
+  top: auto;
+  right: -6%;
+  bottom: 0;
+  height: min(62vh, 560px);
+  max-height: 100%;
   line-height: 0;
+  pointer-events: none;
+  opacity: 0.96;
+  mask-image:
+    linear-gradient(to top, transparent 0%, #000 25%),
+    linear-gradient(to bottom, transparent 0%, #000 10%);
+  mask-composite: intersect;
+  -webkit-mask-image:
+    linear-gradient(to top, transparent 0%, #000 25%),
+    linear-gradient(to bottom, transparent 0%, #000 10%);
+  -webkit-mask-composite: source-in;
+  animation: float 6s ease-in-out infinite alternate;
 }
 
-.photo img {
-  height: min(62vh, 640px);
+.figure img {
+  display: block;
+  height: 100%;
   width: auto;
-  max-width: 45vw;
-  object-fit: contain;
-  object-position: bottom;
-  filter: drop-shadow(0 24px 40px rgba(43, 37, 40, 0.18));
+  mask-image: linear-gradient(to right, transparent 0%, #000 25%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 25%);
 }
 
 .signature {
-  position: absolute;
-  right: 0;
-  top: var(--space-4);
-  font-size: 10px;
-  letter-spacing: 0.25em;
-  color: var(--ink-muted);
-  writing-mode: vertical-rl;
+  display: none;
+}
+
+@keyframes float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .figure {
+    animation: none;
+  }
 }
 
 @media (min-width: 768px) {
   .inner {
-    grid-template-columns: 1.1fr 0.9fr;
     align-items: center;
+    padding-top: 0;
   }
   .text {
-    padding-bottom: 0;
+    max-width: 58%;
   }
-  .photo {
-    align-self: end;
+  .figure {
+    right: clamp(24px, 8vw, 140px);
+    height: min(92%, 880px);
+    mask-image: linear-gradient(to top, transparent 0%, #000 22%);
+    -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 22%);
+    mask-composite: add;
+    -webkit-mask-composite: source-over;
   }
-  .photo img {
-    height: min(82vh, 820px);
-    max-width: none;
+  .figure img {
+    mask-image: linear-gradient(to right, transparent 0%, #000 20%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 20%);
+  }
+  .signature {
+    display: block;
+    position: absolute;
+    z-index: 3;
+    right: 0;
+    top: var(--space-4);
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--ink-muted);
+    writing-mode: vertical-rl;
   }
 }

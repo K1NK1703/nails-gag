@@ -14,7 +14,6 @@ export function Hero() {
             <span className={styles.accent}>.</span>
           </h1>
           <p className={styles.subtitle}>{site.subtitle}</p>
-          <p className={styles.pill}>{site.heroPricePill}</p>
           <a
             href={site.bookingUrl}
             target="_blank"
@@ -25,11 +24,11 @@ export function Hero() {
             Записаться <span aria-hidden="true">→</span>
           </a>
         </div>
-        <div className={styles.photo}>
+        <div className={styles.figure}>
           <img
             src="/hero-720.webp"
             srcSet="/hero-360.webp 360w, /hero-720.webp 720w, /hero-1440.webp 879w"
-            sizes="(min-width: 768px) 240px, 180px"
+            sizes="(min-width: 768px) 245px, 155px"
             alt={`${site.masterName}, мастер маникюра`}
             width={879}
             height={3181}
