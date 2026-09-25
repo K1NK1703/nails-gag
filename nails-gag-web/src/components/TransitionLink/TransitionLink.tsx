@@ -23,6 +23,9 @@ function prefersReducedMotion(): boolean {
   )
 }
 
+/** Номер последнего запущенного перехода: метку снимает только он, а не вытесненный им. */
+let transitionToken = 0
+
 /**
  * Link с переходом через View Transitions API.
  * В декларативном BrowserRouter проп viewTransition у Link ничего не делает
@@ -43,12 +46,13 @@ export function TransitionLink({ to, onClick, replace, state, ...rest }: Transit
     if (typeof document.startViewTransition === 'function' && !prefersReducedMotion()) {
       // Шапке имя перехода даём только на время анимации, см. Header.module.css.
       const root = document.documentElement
+      const token = ++transitionToken
       root.dataset['navTransition'] = ''
       const transition = document.startViewTransition(() => {
         flushSync(go)
       })
       const done = () => {
-        delete root.dataset['navTransition']
+        if (token === transitionToken) delete root.dataset['navTransition']
       }
       void Promise.resolve(transition.finished).then(done, done)
     } else {

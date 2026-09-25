@@ -12,10 +12,8 @@ export const HOSTING_PROVIDER = '{{HOSTING_PROVIDER}}'
 export const DEVELOPER_FIO = '{{DEVELOPER_FIO}}'
 export const SMS_PROVIDER = '{{SMS_PROVIDER}}'
 
-/** Домен сайта из VITE_SITE_URL; без переменной остаётся плейсхолдер. */
-export const SITE_DOMAIN =
-  (import.meta.env.VITE_SITE_URL ?? '').replace(/^https?:\/\//, '').replace(/\/+$/, '') ||
-  '{{SITE_URL}}'
+/** Домен сайта из общего адреса (VITE_SITE_URL или адрес по умолчанию, см. scripts/site-url.ts). */
+export const SITE_DOMAIN = new URL(__SITE_URL__).host
 
 /** Все допустимые плейсхолдеры в юридических текстах. */
 export const PLACEHOLDERS = [
@@ -26,5 +24,4 @@ export const PLACEHOLDERS = [
   HOSTING_PROVIDER,
   DEVELOPER_FIO,
   SMS_PROVIDER,
-  '{{SITE_URL}}',
 ] as const

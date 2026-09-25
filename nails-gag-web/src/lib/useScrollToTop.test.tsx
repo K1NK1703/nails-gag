@@ -1,45 +1,64 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, useNavigate } from 'react-router'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { MockInstance } from 'vitest'
 import { AppRoutes } from '../App'
 
 vi.mock('./analytics', () => ({ track: vi.fn() }))
+
+function BackButton() {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => void navigate(-1)}>
+      Назад
+    </button>
+  )
+}
 
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <AppRoutes />
+      <BackButton />
     </MemoryRouter>,
   )
 }
 
+const TOP = { top: 0, left: 0, behavior: 'instant' }
+
 describe('useScrollToTop', () => {
+  let scrollTo: MockInstance<typeof window.scrollTo>
+
+  beforeEach(() => {
+    scrollTo = vi.spyOn(window, 'scrollTo')
+  })
+
   afterEach(() => {
-    // @ts-expect-error jsdom не реализует scrollTo, тест сам его подставляет
-    delete window.scrollTo
+    scrollTo.mockRestore()
   })
 
   it('прокручивает наверх при переходе на новый маршрут по ссылке', () => {
-    window.scrollTo = vi.fn()
     renderAt('/')
-    ;(window.scrollTo as ReturnType<typeof vi.fn>).mockClear()
-
     fireEvent.click(screen.getByText('Политика обработки персональных данных'))
-
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
+    expect(scrollTo).toHaveBeenCalledWith(TOP)
   })
 
-  it('прокручивает наверх и при заходе через initialEntries', () => {
-    window.scrollTo = vi.fn()
+  it('не прокручивает при первом монтировании', () => {
     renderAt('/privacy')
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
 
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
+  it('не прокручивает на POP (назад), позицию восстанавливает браузер', () => {
+    renderAt('/')
+    fireEvent.click(screen.getByText('Политика обработки персональных данных'))
+    scrollTo.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Чёткие квадраты')
+    expect(scrollTo).not.toHaveBeenCalled()
   })
 
   it('не прокручивает, если в адресе есть хэш', () => {
-    window.scrollTo = vi.fn()
     renderAt('/#contacts')
-
-    expect(window.scrollTo).not.toHaveBeenCalled()
+    expect(scrollTo).not.toHaveBeenCalled()
   })
 })

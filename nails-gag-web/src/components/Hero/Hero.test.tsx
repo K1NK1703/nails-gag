@@ -33,7 +33,9 @@ describe('Hero', () => {
 
   it('master card links to the about section and shows the master name', () => {
     renderHero()
-    const card = screen.getByRole('link', { name: 'Подробнее о мастере' })
+    // Доступное имя — видимый текст карточки (WCAG 2.5.3), стрелка скрыта от скринридеров.
+    const card = screen.getByRole('link', { name: `${site.masterName} мастер маникюра` })
+    expect(card).not.toHaveAttribute('aria-label')
     expect(card).toHaveAttribute('href', '#about')
     expect(card).toHaveTextContent(site.masterName)
   })

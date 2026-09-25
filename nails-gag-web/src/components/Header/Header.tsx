@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
@@ -54,17 +54,31 @@ export function Header() {
   const cabinet = isCabinetEnabled()
   const { user } = useAuth()
 
+  const headerRef = useRef<HTMLElement>(null)
+  const burgerRef = useRef<HTMLButtonElement>(null)
+
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      // Фокус мог остаться в закрытом меню — возвращаем его на кнопку, которая меню открыла.
+      burgerRef.current?.focus()
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.target instanceof Node && headerRef.current?.contains(e.target)) return
+      setOpen(false)
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
   }, [open])
 
   return (
-    <header className={styles.header}>
+    <header ref={headerRef} className={styles.header}>
       <div className={`container ${styles.inner}`}>
         <a href="/" className={styles.logo} aria-label="nails.gag, на главную">
           <span className={styles.dot} aria-hidden="true" />
@@ -72,6 +86,7 @@ export function Header() {
         </a>
 
         <button
+          ref={burgerRef}
           type="button"
           className={styles.burger}
           data-open={open ? 'true' : 'false'}
@@ -120,7 +135,7 @@ export function Header() {
             to={site.cabinetPath}
             className={styles.account}
             data-user={user ? 'true' : 'false'}
-            aria-label={user ? site.cabinetLabel : undefined}
+            title={user ? site.cabinetLabel : undefined}
           >
             {user ? <Avatar user={user} /> : <UserIcon />}
             <span className={styles.accountLabel}>

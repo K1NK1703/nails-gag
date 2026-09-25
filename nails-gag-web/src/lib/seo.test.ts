@@ -23,6 +23,20 @@ describe('headFor', () => {
     expect(head).toContain('href="https://nails-gag.ru/terms"')
     expect(head).not.toContain('application/ld+json')
   })
+
+  it('marks booking and cabinet stubs as noindex', () => {
+    for (const path of ['/booking', '/cabinet']) {
+      expect(headFor(path, 'https://nails-gag.ru')).toContain(
+        '<meta name="robots" content="noindex" />',
+      )
+    }
+  })
+
+  it('keeps public pages indexable', () => {
+    for (const path of ['/', '/privacy', '/terms']) {
+      expect(headFor(path, 'https://nails-gag.ru')).not.toContain('name="robots"')
+    }
+  })
 })
 
 describe('titleFor', () => {

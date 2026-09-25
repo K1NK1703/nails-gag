@@ -1,5 +1,5 @@
 import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { BrowserRouter, MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TransitionLink } from './TransitionLink'
 
@@ -32,10 +32,72 @@ function setStartViewTransition(fn: StartViewTransition | undefined) {
   })
 }
 
+function renderBrowserApp(useTransitions?: boolean) {
+  return render(
+    <BrowserRouter useTransitions={useTransitions}>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <>
+              <h1>Главная</h1>
+              <TransitionLink to="/next">Дальше</TransitionLink>
+            </>
+          }
+        />
+        <Route path="/next" element={<h1>Следующая</h1>} />
+      </Routes>
+    </BrowserRouter>,
+  )
+}
+
 describe('TransitionLink', () => {
   afterEach(() => {
     // @ts-expect-error jsdom не реализует startViewTransition, тест сам его подставляет
     delete document.startViewTransition
+    delete document.documentElement.dataset['navTransition']
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('с настоящим BrowserRouter (useTransitions={false}) новый маршрут уже в DOM внутри колбэка перехода', () => {
+    let headingInsideCallback: string | null | undefined
+    setStartViewTransition((cb) => {
+      cb()
+      headingInsideCallback = document.querySelector('h1')?.textContent
+      return { finished: Promise.resolve() }
+    })
+    renderBrowserApp(false)
+    fireEvent.click(screen.getByRole('link', { name: 'Дальше' }))
+    expect(headingInsideCallback).toBe('Следующая')
+    expect(window.location.pathname).toBe('/next')
+  })
+
+  it('метку снимает только последний переход, а не вытесненный им', async () => {
+    const finishers: Array<() => void> = []
+    setStartViewTransition((cb) => {
+      cb()
+      const finished = new Promise<void>((resolve) => finishers.push(resolve))
+      return { finished }
+    })
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<TransitionLink to="/next">Дальше</TransitionLink>} />
+          <Route path="/next" element={<TransitionLink to="/">Назад</TransitionLink>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('link', { name: 'Дальше' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Назад' }))
+    expect(finishers).toHaveLength(2)
+
+    finishers[0]?.()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(document.documentElement).toHaveAttribute('data-nav-transition')
+
+    finishers[1]?.()
+    await waitFor(() => expect(document.documentElement).not.toHaveAttribute('data-nav-transition'))
   })
 
   it('навигирует без View Transitions API', () => {

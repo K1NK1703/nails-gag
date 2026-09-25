@@ -2,7 +2,13 @@ import { privacy } from '../content/privacy'
 import { site } from '../content/site'
 import { terms } from '../content/terms'
 
-type Meta = { title: string; description: string; jsonLd?: Record<string, unknown> }
+type Meta = {
+  title: string
+  description: string
+  jsonLd?: Record<string, unknown>
+  /** Страница-заглушка: не индексировать. */
+  noindex?: boolean
+}
 
 /** Заголовок вкладки для маршрута: общий источник правды для пререндера и клиента. */
 export function titleFor(path: string): string {
@@ -55,6 +61,13 @@ const TERMS: Meta = {
 const BOOKING: Meta = {
   title: titleFor('/booking'),
   description: `Онлайн-запись на маникюр в ${site.name}.`,
+  noindex: true,
+}
+
+const CABINET: Meta = {
+  title: titleFor('/cabinet'),
+  description: `Личный кабинет клиента ${site.name}.`,
+  noindex: true,
 }
 
 const META: Record<string, Meta> = {
@@ -62,6 +75,7 @@ const META: Record<string, Meta> = {
   '/privacy': PRIVACY,
   '/terms': TERMS,
   '/booking': BOOKING,
+  '/cabinet': CABINET,
 }
 
 function metaFor(path: string): Meta {
@@ -73,7 +87,7 @@ function escape(s: string): string {
   return s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;')
 }
 
-/** HTML для <head>: title, description, canonical, Open Graph и JSON-LD. */
+/** HTML для <head>: title, description, canonical, Open Graph, robots и JSON-LD. */
 export function headFor(path: string, siteUrl: string): string {
   const base = siteUrl.replace(/\/$/, '')
   const url = `${base}${path === '/' ? '/' : path}`
@@ -93,6 +107,7 @@ export function headFor(path: string, siteUrl: string): string {
     `<meta property="og:locale" content="ru_RU" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
   ]
+  if (meta.noindex) parts.push(`<meta name="robots" content="noindex" />`)
   if (meta.jsonLd) {
     const ld = { ...meta.jsonLd, url: `${base}/` }
     // Экранируем угловую скобку, чтобы содержимое JSON не закрыло script раньше времени.

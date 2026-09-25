@@ -29,12 +29,15 @@ describe('Header', () => {
   it('logged-in user sees the first name and a «Личный кабинет» entry', () => {
     vi.stubEnv('VITE_PREVIEW_USER', 'Алина')
     renderHeader()
-    const entries = screen.getAllByRole('link', { name: 'Личный кабинет' })
-    expect(entries).toHaveLength(2)
-    for (const link of entries) expect(link).toHaveAttribute('href', '/cabinet')
-    const pill = entries.find((l) => l.getAttribute('aria-label') === 'Личный кабинет')
-    expect(pill).toHaveTextContent('Алина')
-    expect(pill?.querySelector('.avatar')).toHaveTextContent(/^А$/)
+    const nav = screen.getByRole('navigation', { name: 'Основное меню' })
+    const entry = within(nav).getByRole('link', { name: 'Личный кабинет' })
+    expect(entry).toHaveAttribute('href', '/cabinet')
+    // Доступное имя плашки совпадает с видимым текстом (WCAG 2.5.3), подсказка — в title.
+    const pill = screen.getByRole('link', { name: 'Алина' })
+    expect(pill).toHaveAttribute('href', '/cabinet')
+    expect(pill).not.toHaveAttribute('aria-label')
+    expect(pill).toHaveAttribute('title', 'Личный кабинет')
+    expect(pill.querySelector('.avatar')).toHaveTextContent(/^А$/)
     expect(screen.queryByRole('link', { name: 'Войти' })).not.toBeInTheDocument()
   })
 
@@ -88,6 +91,27 @@ describe('Header', () => {
     fireEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'true')
     fireEvent.keyDown(window, { key: 'Escape' })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('returns focus to the burger when the menu is closed with Escape', () => {
+    renderHeader()
+    const button = screen.getByRole('button', { name: /меню/i })
+    fireEvent.click(button)
+    const nav = screen.getByRole('navigation', { name: 'Основное меню' })
+    within(nav).getByText('Прайс').focus()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveFocus()
+  })
+
+  it('closes mobile menu on pointerdown outside the header, but not inside', () => {
+    renderHeader()
+    const button = screen.getByRole('button', { name: /меню/i })
+    fireEvent.click(button)
+    fireEvent.pointerDown(screen.getByText('Прайс'))
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.pointerDown(document.body)
     expect(button).toHaveAttribute('aria-expanded', 'false')
   })
 

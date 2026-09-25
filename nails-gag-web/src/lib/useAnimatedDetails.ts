@@ -10,11 +10,19 @@ function canAnimate(el: HTMLElement): boolean {
   return !window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** Высота свёрнутого <details>: summary + вертикальные padding и border. */
+/**
+ * Высота свёрнутого <details>: summary + вертикальные padding и border.
+ * Вертикальные margin у summary учитываем со знаком: в Faq они отрицательные
+ * (расширяют зону клика), и без этого свёрнутая высота выходила больше
+ * фактической — в конце анимации закрытия блок «прыгал».
+ */
 function collapsedHeight(el: HTMLDetailsElement, summary: HTMLElement): number {
   const cs = getComputedStyle(el)
+  const ss = getComputedStyle(summary)
   const extra = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'] as const
-  return extra.reduce((h, key) => h + (parseFloat(cs[key]) || 0), summary.offsetHeight)
+  const box = extra.reduce((h, key) => h + (parseFloat(cs[key]) || 0), summary.offsetHeight)
+  const margins = (parseFloat(ss.marginTop) || 0) + (parseFloat(ss.marginBottom) || 0)
+  return box + margins
 }
 
 /**

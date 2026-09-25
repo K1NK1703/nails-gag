@@ -22,7 +22,7 @@ export function Hero() {
           >
             Записаться <span aria-hidden="true">→</span>
           </TransitionLink>
-          <a href="#about" className={styles.masterCard} aria-label="Подробнее о мастере">
+          <a href="#about" className={styles.masterCard}>
             <span className={styles.portrait}>
               <img
                 src="/portrait-240.webp"
@@ -35,7 +35,7 @@ export function Hero() {
               />
             </span>
             <span className={styles.masterText}>
-              <strong className={styles.masterName}>{site.masterName}</strong>
+              <strong className={styles.masterName}>{site.masterName}</strong>{' '}
               <span className={styles.masterMeta}>мастер маникюра</span>
             </span>
             <span className={styles.chevron} aria-hidden="true">

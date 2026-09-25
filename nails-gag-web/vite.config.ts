@@ -1,11 +1,13 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { resolveSiteUrl } from './scripts/site-url.ts'
 
-export default defineConfig(({ isSsrBuild }) => ({
+export default defineConfig(({ isSsrBuild, mode }) => ({
   plugins: [react()],
   define: {
     __BUILD_YEAR__: JSON.stringify(new Date().getFullYear()),
+    __SITE_URL__: JSON.stringify(resolveSiteUrl(mode)),
   },
   css: {
     modules: {
