@@ -65,7 +65,7 @@ describe('Cursor', () => {
     // Инерция: после одного кадра курсор ещё в пути, затем догоняет цель и цикл останавливается.
     pointer('pointermove', document, { clientX: 200, clientY: 50 })
     act(() => vi.advanceTimersToNextFrame())
-    expect(el.style.transform).toBe('translate3d(118px, 50px, 0)')
+    expect(el.style.transform).toBe('translate3d(130px, 50px, 0)')
     act(() => vi.advanceTimersByTime(2000))
     expect(el.style.transform).toBe('translate3d(200px, 50px, 0)')
     expect(vi.getTimerCount()).toBe(0)
@@ -78,9 +78,13 @@ describe('Cursor', () => {
     pointer('pointerover', span)
     expect(el).toHaveAttribute('data-state', 'link')
 
-    pointer('pointerdown', span)
+    // Нажатие сразу ставит руку под указатель, без инерции.
+    pointer('pointermove', document, { clientX: 400, clientY: 300 })
+    pointer('pointerdown', span, { clientX: 400, clientY: 300 })
     expect(el).toHaveAttribute('data-state', 'press')
-    pointer('pointerup', span)
+    expect(el.style.transform).toBe('translate3d(400px, 300px, 0)')
+    expect(vi.getTimerCount()).toBe(0)
+    pointer('pointerup', span, { clientX: 400, clientY: 300 })
     expect(el).toHaveAttribute('data-state', 'link')
 
     const tile = document.createElement('button')

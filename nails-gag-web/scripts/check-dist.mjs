@@ -74,18 +74,31 @@ if (placeholders.length) {
   )
 }
 
-for (const f of [
-  'privacy/index.html',
-  'privacy.html',
-  'terms/index.html',
-  'terms.html',
-  'booking/index.html',
-  'cabinet/index.html',
-  'sitemap.xml',
-  'robots.txt',
-  'og.jpg',
-  'favicon.svg',
-]) {
+// Каждая пререндеренная страница (оба варианта файла) несёт свой <title>.
+const TITLES = {
+  'index.html': 'маникюр в Санкт-Петербурге',
+  'privacy/index.html': 'Политика обработки персональных данных',
+  'privacy.html': 'Политика обработки персональных данных',
+  'terms/index.html': 'Пользовательское соглашение',
+  'terms.html': 'Пользовательское соглашение',
+  'booking/index.html': 'Онлайн-запись',
+  'booking.html': 'Онлайн-запись',
+  'cabinet/index.html': 'Личный кабинет',
+  'cabinet.html': 'Личный кабинет',
+}
+for (const [file, expected] of Object.entries(TITLES)) {
+  let html
+  try {
+    html = await readFile(path.join(DIST, file), 'utf8')
+  } catch {
+    failures.push(`missing ${file}`)
+    continue
+  }
+  const title = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? ''
+  expect(title.includes(expected), `${file}: <title> «${title}» does not contain «${expected}»`)
+}
+
+for (const f of ['sitemap.xml', 'robots.txt', 'og.jpg', 'favicon.svg']) {
   try {
     await access(path.join(DIST, f))
   } catch {

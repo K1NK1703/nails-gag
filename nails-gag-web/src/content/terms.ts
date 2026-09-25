@@ -1,15 +1,12 @@
 import { OPERATOR_EMAIL, OPERATOR_FIO, OPERATOR_INN, SITE_DOMAIN } from './privacy'
-import type { PrivacySection } from './privacy'
+import type { LegalSection } from './legal-types'
 import { site } from './site'
-
-/** Раздел соглашения: та же форма, что у политики. */
-export type TermsSection = PrivacySection
 
 export type Terms = {
   title: string
   version: string
   updated: string
-  sections: TermsSection[]
+  sections: LegalSection[]
 }
 
 const studio = `${site.address.locality}, ${site.address.street} (${site.address.details})`

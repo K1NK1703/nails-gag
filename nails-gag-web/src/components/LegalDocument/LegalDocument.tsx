@@ -1,4 +1,5 @@
-import type { PrivacySection } from '../../content/privacy'
+import type { LegalSection } from '../../content/legal-types'
+import { ui } from '../../content/ui'
 import page from '../../pages/Page.module.css'
 import styles from './LegalDocument.module.css'
 
@@ -6,7 +7,7 @@ export type LegalDocumentProps = {
   title: string
   version: string
   updated: string
-  sections: PrivacySection[]
+  sections: LegalSection[]
 }
 
 const anchor = (id: string) => `p-${id}`
@@ -17,10 +18,10 @@ export function LegalDocument({ title, version, updated, sections }: LegalDocume
     <main className={`container ${page.page}`}>
       <h1>{title}</h1>
       <p className={page.muted}>
-        Версия {version} · обновлено {updated}
+        {ui.legal.version} {version} · {ui.legal.updated} {updated}
       </p>
-      <nav aria-label="Содержание" className={`glass ${styles.toc}`}>
-        <p className={styles.tocTitle}>Содержание</p>
+      <nav aria-label={ui.legal.toc} className={`glass ${styles.toc}`}>
+        <p className={styles.tocTitle}>{ui.legal.toc}</p>
         <ol className={styles.tocList}>
           {sections.map((s) => (
             <li key={s.id}>

@@ -1,5 +1,6 @@
 import { TransitionLink } from '../TransitionLink/TransitionLink'
 import { site } from '../../content/site'
+import { ui } from '../../content/ui'
 import { track } from '../../lib/analytics'
 import styles from './Hero.module.css'
 
@@ -40,7 +41,7 @@ export function Hero() {
             </span>
             <span className={styles.masterText}>
               <strong className={styles.masterName}>{site.masterName}</strong>{' '}
-              <span className={styles.masterMeta}>мастер маникюра</span>
+              <span className={styles.masterMeta}>{ui.masterRole}</span>
             </span>
             <span className={styles.chevron} aria-hidden="true">
               →
@@ -58,7 +59,7 @@ export function Hero() {
             />
             <img
               src={BLANK_PIXEL}
-              alt={`${site.masterName}, мастер маникюра`}
+              alt={`${site.masterName}, ${ui.masterRole}`}
               width={879}
               height={2163}
               fetchPriority="high"

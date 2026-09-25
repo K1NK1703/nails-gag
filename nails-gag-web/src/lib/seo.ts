@@ -1,3 +1,5 @@
+import { booking } from '../content/booking'
+import { cabinet } from '../content/cabinet'
 import { privacy } from '../content/privacy'
 import { site } from '../content/site'
 import { terms } from '../content/terms'
@@ -20,9 +22,9 @@ export function titleFor(path: string): string {
     case '/terms':
       return `${terms.title} — ${site.name}`
     case '/booking':
-      return `Онлайн-запись — ${site.name}`
+      return `${booking.title} — ${site.name}`
     case '/cabinet':
-      return `Личный кабинет — ${site.name}`
+      return `${cabinet.title} — ${site.name}`
     default:
       return `Страница не найдена — ${site.name}`
   }

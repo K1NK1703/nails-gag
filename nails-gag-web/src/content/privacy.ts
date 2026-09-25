@@ -8,21 +8,14 @@ import {
   SITE_DOMAIN,
   SMS_PROVIDER,
 } from './placeholders'
+import type { LegalSection } from './legal-types'
 import { site } from './site'
-
-export type PrivacySection = {
-  /** Якорь раздела: на странице становится id="p-<id>". */
-  id: string
-  title: string
-  paragraphs: string[]
-  list?: string[]
-}
 
 export type Privacy = {
   title: string
   version: string
   updated: string
-  sections: PrivacySection[]
+  sections: LegalSection[]
 }
 
 /* Плейсхолдеры объявлены в placeholders.ts и реэкспортируются отсюда. */

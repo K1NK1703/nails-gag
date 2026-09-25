@@ -1,5 +1,7 @@
 import { TransitionLink } from '../TransitionLink/TransitionLink'
+import { privacy } from '../../content/privacy'
 import { site } from '../../content/site'
+import { terms } from '../../content/terms'
 import styles from './Footer.module.css'
 
 export function Footer() {
@@ -13,8 +15,8 @@ export function Footer() {
           <span className={styles.performer}>{site.performerLine}</span>
         </div>
         <nav className={styles.links} aria-label="Подвал">
-          <TransitionLink to="/privacy">Политика обработки персональных данных</TransitionLink>
-          <TransitionLink to="/terms">Пользовательское соглашение</TransitionLink>
+          <TransitionLink to="/privacy">{privacy.title}</TransitionLink>
+          <TransitionLink to="/terms">{terms.title}</TransitionLink>
         </nav>
       </div>
     </footer>

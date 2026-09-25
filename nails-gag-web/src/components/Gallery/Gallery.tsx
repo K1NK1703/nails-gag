@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { gallery, src, srcSet } from '../../content/gallery'
+import { ui } from '../../content/ui'
 import { track } from '../../lib/analytics'
 import { Lightbox } from '../Lightbox/Lightbox'
 import styles from './Gallery.module.css'
@@ -22,7 +23,7 @@ export function Gallery() {
   return (
     <section id="gallery" className="section">
       <div className="container">
-        <span className="kicker">{`Портфолио · ${gallery.length} фото`}</span>
+        <span className="kicker">{ui.galleryKicker(gallery.length)}</span>
         <h2 className={styles.title}>Работы</h2>
         <ul className={styles.grid}>
           {gallery.map((photo, i) => (

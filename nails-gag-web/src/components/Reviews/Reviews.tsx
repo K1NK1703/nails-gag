@@ -1,14 +1,12 @@
 import { reviews } from '../../content/reviews'
-import { plural } from '../../lib/plural'
+import { ui } from '../../content/ui'
 import styles from './Reviews.module.css'
 
 export function Reviews() {
   return (
     <section id="reviews" className="section">
       <div className="container">
-        <span className="kicker">
-          {`${reviews.length} ${plural(reviews.length, ['отзыв', 'отзыва', 'отзывов'])}`}
-        </span>
+        <span className="kicker">{ui.reviewsKicker(reviews.length)}</span>
         <h2 className={styles.title}>Отзывы</h2>
         <ul className={styles.list}>
           {reviews.map((r) => (

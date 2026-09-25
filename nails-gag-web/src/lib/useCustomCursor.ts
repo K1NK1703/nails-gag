@@ -7,7 +7,7 @@ const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
 const LINK = 'a, button, [role=button], summary, label'
 const PHOTO = '[data-cursor="photo"]'
 const FIELD = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])'
-const EASE = 0.18
+const EASE = 0.3
 const EPSILON = 0.1
 
 function canUseCustomCursor() {
@@ -108,7 +108,16 @@ export function useCustomCursor() {
       if (e.relatedTarget === null) setInside(false)
     }
     const onDown = (e: PointerEvent) => {
-      if (e.pointerType !== 'touch') setPressed(true)
+      if (e.pointerType === 'touch') return
+      setPressed(true)
+      // Нажатие — «прилипаем» к указателю, чтобы видимая рука совпадала с точкой клика.
+      target.x = current.x = e.clientX
+      target.y = current.y = e.clientY
+      apply()
+      if (raf) {
+        cancelAnimationFrame(raf)
+        raf = 0
+      }
     }
     const onUp = () => setPressed(false)
 
