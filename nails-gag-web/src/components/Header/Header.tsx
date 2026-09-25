@@ -52,20 +52,33 @@ export function Header() {
           className={styles.nav}
           data-open={open ? 'true' : 'false'}
         >
-          {navItems.map((l, i) => (
-            <a
-              key={l.href}
-              href={l.href}
-              style={{ '--i': i } as CSSProperties}
-              onClick={() => setOpen(false)}
-            >
-              {l.label}
-            </a>
-          ))}
+          {navItems.map((l, i) =>
+            l.href === '/cabinet' ? (
+              <Link
+                key={l.href}
+                to={l.href}
+                viewTransition
+                style={{ '--i': i } as CSSProperties}
+                onClick={() => setOpen(false)}
+              >
+                {l.label}
+              </Link>
+            ) : (
+              <a
+                key={l.href}
+                href={l.href}
+                style={{ '--i': i } as CSSProperties}
+                onClick={() => setOpen(false)}
+              >
+                {l.label}
+              </a>
+            ),
+          )}
         </nav>
 
         <Link
           to={site.bookingPath}
+          viewTransition
           className={`button ${styles.cta}`}
           onClick={() => track({ name: 'cta_click', place: 'header' })}
         >

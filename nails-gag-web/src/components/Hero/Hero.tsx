@@ -17,6 +17,7 @@ export function Hero() {
           <p className={styles.subtitle}>{site.subtitle}</p>
           <Link
             to={site.bookingPath}
+            viewTransition
             className="button button--accent"
             onClick={() => track({ name: 'cta_click', place: 'hero' })}
           >

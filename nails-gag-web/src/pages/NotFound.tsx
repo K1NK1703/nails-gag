@@ -12,7 +12,7 @@ export function NotFound() {
     <main className={`container ${styles.page}`}>
       <h1>Страница не найдена</h1>
       <p className={styles.muted}>Такой страницы нет. Вернитесь на главную.</p>
-      <Link to="/" className="button">
+      <Link to="/" viewTransition className="button">
         На главную
       </Link>
     </main>

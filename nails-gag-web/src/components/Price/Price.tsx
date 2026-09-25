@@ -28,6 +28,7 @@ export function Price() {
         <p className={styles.note}>
           <Link
             to={site.bookingPath}
+            viewTransition
             className={styles.link}
             onClick={() => track({ name: 'cta_click', place: 'price' })}
           >

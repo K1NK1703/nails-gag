@@ -3,6 +3,9 @@
   top: 0;
   z-index: 50;
   height: var(--header-h);
+  /* Захватывается отдельно от ::view-transition-old/new(root), см. global.css —
+     иначе шапка мигала бы вместе со страницей при переходе. */
+  view-transition-name: header;
 }
 
 /* Liquid Glass шапки — на псевдоэлементе: элемент с backdrop-filter становится

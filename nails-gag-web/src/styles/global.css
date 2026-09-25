@@ -237,3 +237,44 @@ h3 {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+/* Плавные переходы между страницами SPA (View Transitions API).
+   Хедер анимируется отдельно (view-transition-name: header в Header.module.css),
+   чтобы не мигать вместе со страницей — он один на всё приложение и не прыгает. */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: 220ms var(--ease) both page-out;
+}
+
+::view-transition-new(root) {
+  animation: 320ms var(--ease) both page-in;
+}
+
+@keyframes page-out {
+  to {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+::view-transition-old(header),
+::view-transition-new(header) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
