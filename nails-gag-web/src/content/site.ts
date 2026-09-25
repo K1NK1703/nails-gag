@@ -12,15 +12,15 @@ export const site = {
   channelHandle: '@nailsAaaa',
   channelUrl: 'https://t.me/nailsAaaa',
   address: {
-    street: 'Проспект КИМа, 6',
-    details: 'метро Приморская · 3 этаж, студия 365',
+    street: 'Улица Шевченко, 9',
+    details: 'метро Горный институт',
     locality: 'Санкт-Петербург',
     country: 'RU',
   },
   priceKicker: 'Одна цена на всё',
   priceNote: { linkText: 'Запись в Telegram', rest: ' — напишите, и я подберу время.' },
-  contactsKicker: 'Telegram · метро Приморская',
-  mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, проспект КИМа, 6')}`,
+  contactsKicker: 'Telegram · метро Горный институт',
+  mapsUrl: `https://yandex.ru/maps/?text=${encodeURIComponent('Санкт-Петербург, улица Шевченко, 9')}`,
   description:
     'Маникюр в Санкт-Петербурге: чёткие квадраты, аппаратная техника, любой дизайн за 2 500 ₽. Запись в Telegram.',
 } as const
