@@ -1,21 +1,21 @@
 /**
- * Настройки оформления, которые посетитель выбирает в шапке («Оформление»): тема и
- * фирменный курсор. Хранятся в localStorage; все обращения к window/document — только
- * в обработчиках и эффектах, на сервере функции чтения возвращают значения по умолчанию.
+ * Тема оформления, которую посетитель выбирает переключателем в шапке. По умолчанию —
+ * всегда светлая (системная настройка не учитывается); тёмная хранится в localStorage.
+ * Все обращения к window/document — только в обработчиках и эффектах, на сервере
+ * функции чтения возвращают значения по умолчанию.
  */
 
-export type ThemeChoice = 'system' | 'light' | 'dark'
-export type EffectiveTheme = 'light' | 'dark'
-export type CursorPref = 'on' | 'off'
+export type ThemeChoice = 'light' | 'dark'
 
 /** Ключ темы продублирован в инлайн-скрипте index.html — меняйте вместе. */
 export const THEME_KEY = 'nails-gag-theme'
-export const CURSOR_KEY = 'nails-gag-cursor'
-/** Событие на window после любой записи настроек: подписчики перечитывают значения. */
+/** Событие на window после записи темы: подписчики перечитывают значение. */
 export const PREFS_EVENT = 'nails-gag:prefs'
-export const DARK_QUERY = '(prefers-color-scheme: dark)'
-/** Цвет адресной строки мобильных браузеров — совпадает с --bg-start темы. */
-export const THEME_COLORS: Record<EffectiveTheme, string> = { light: '#ebe3e5', dark: '#1f181c' }
+/**
+ * Цвет адресной строки мобильных браузеров. Должен совпадать с --bg-start соответствующей
+ * темы в src/styles/tokens.css (светлый — и с meta theme-color в index.html).
+ */
+export const THEME_COLORS: Record<ThemeChoice, string> = { light: '#ebe3e5', dark: '#1f181c' }
 
 /** Запасная копия на случай недоступного localStorage: выбор живёт до перезагрузки. */
 const memory = new Map<string, string | null>()
@@ -42,7 +42,7 @@ function write(key: string, value: string | null) {
   window.dispatchEvent(new CustomEvent(PREFS_EVENT))
 }
 
-/** Подписка на изменения настроек (эта вкладка — PREFS_EVENT, другие — storage). */
+/** Подписка на изменения темы (эта вкладка — PREFS_EVENT, другие — storage). */
 export function subscribePrefs(onChange: () => void): () => void {
   window.addEventListener(PREFS_EVENT, onChange)
   window.addEventListener('storage', onChange)
@@ -52,54 +52,20 @@ export function subscribePrefs(onChange: () => void): () => void {
   }
 }
 
-export function isThemeChoice(value: unknown): value is ThemeChoice {
-  return value === 'system' || value === 'light' || value === 'dark'
-}
-
 export function readThemeChoice(): ThemeChoice {
-  const value = read(THEME_KEY)
-  return value === 'light' || value === 'dark' ? value : 'system'
+  return read(THEME_KEY) === 'dark' ? 'dark' : 'light'
 }
 
-/** «Как в системе» не хранится: ключ удаляется, чтобы инлайн-скрипт не ставил data-theme. */
+/** Светлая — значение по умолчанию и не хранится: ключ удаляется. */
 export function writeThemeChoice(choice: ThemeChoice) {
-  write(THEME_KEY, choice === 'system' ? null : choice)
+  write(THEME_KEY, choice === 'dark' ? 'dark' : null)
 }
 
-export function systemPrefersDark(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia(DARK_QUERY).matches
-  )
-}
-
-export function effectiveTheme(choice: ThemeChoice): EffectiveTheme {
-  if (choice !== 'system') return choice
-  return systemPrefersDark() ? 'dark' : 'light'
-}
-
-/**
- * Ставит/снимает data-theme на <html> и обновляет meta theme-color по действующей схеме
- * (для 'system' — по prefers-color-scheme, если effective не передана).
- */
-export function applyThemeChoice(
-  choice: ThemeChoice,
-  effective: EffectiveTheme = effectiveTheme(choice),
-) {
+/** Ставит/снимает data-theme="dark" на <html> и обновляет meta theme-color. */
+export function applyThemeChoice(choice: ThemeChoice) {
   if (typeof document === 'undefined') return
   const root = document.documentElement
-  if (choice === 'system') root.removeAttribute('data-theme')
-  else root.setAttribute('data-theme', choice)
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', THEME_COLORS[effective])
-}
-
-export function readCursorPref(): CursorPref {
-  return read(CURSOR_KEY) === 'off' ? 'off' : 'on'
-}
-
-export function writeCursorPref(pref: CursorPref) {
-  write(CURSOR_KEY, pref)
+  if (choice === 'dark') root.setAttribute('data-theme', 'dark')
+  else root.removeAttribute('data-theme')
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[choice])
 }

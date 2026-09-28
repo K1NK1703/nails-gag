@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { PREFS_EVENT, readCursorPref } from './prefs'
 
 export type CursorState = 'default' | 'link' | 'photo' | 'press'
 
@@ -18,8 +17,7 @@ function canUseCustomCursor() {
   return (
     window.matchMedia(FINE_POINTER).matches &&
     !window.matchMedia(REDUCED_MOTION).matches &&
-    !window.matchMedia(FORCED_COLORS).matches &&
-    readCursorPref() === 'on'
+    !window.matchMedia(FORCED_COLORS).matches
   )
 }
 
@@ -37,10 +35,10 @@ function hoverStateOf(target: EventTarget | null): { state: CursorState; field: 
 
 /**
  * Кастомный курсор-«рука с маникюром». Включается только на устройствах с hover и точным
- * указателем, без prefers-reduced-motion и forced-colors и если посетитель не выключил его
- * в «Оформлении» (перепроверяется по PREFS_EVENT); на сервере и на тач-устройствах enabled = false,
- * слушатели не вешаются. Позиция пишется прямо в style.transform элемента (без ре-рендеров),
- * с инерцией через requestAnimationFrame; цикл останавливается, когда курсор догнал цель.
+ * указателем, без prefers-reduced-motion и forced-colors; на сервере и на тач-устройствах
+ * enabled = false, слушатели не вешаются. Позиция пишется прямо в style.transform элемента
+ * (без ре-рендеров), с инерцией через requestAnimationFrame; цикл останавливается, когда
+ * курсор догнал цель.
  */
 export function useCustomCursor() {
   const ref = useRef<HTMLDivElement>(null)
@@ -62,10 +60,8 @@ export function useCustomCursor() {
     }
     update()
     for (const q of queries) q.addEventListener?.('change', update)
-    window.addEventListener(PREFS_EVENT, update)
     return () => {
       for (const q of queries) q.removeEventListener?.('change', update)
-      window.removeEventListener(PREFS_EVENT, update)
     }
   }, [])
 

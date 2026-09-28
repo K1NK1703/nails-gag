@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --bg-start: #ebe3e5;
   --bg-end: #e1d6da;
@@ -65,46 +65,9 @@
 }
 
 /* Тёмная тема: графитово-сливовая, тёплый светлый текст, акцент ярче для контраста.
-   «Как в системе» — нет data-theme, работает медиазапрос; явный выбор ставит
-   data-theme на <html> (инлайн-скрипт в index.html до первой отрисовки + useTheme). */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg-start: #1f181c;
-    --bg-end: #15111a;
-    --ink: #f1e9ec;
-    --ink-muted: #b8aab1;
-    --accent: #e2549a;
-    --accent-ink: #1a0d13;
-    --accent-hover: #f06cab;
-    --surface: rgba(255, 255, 255, 0.06);
-    --surface-strong: rgba(255, 255, 255, 0.1);
-    --line: rgba(255, 255, 255, 0.14);
-    --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-    --shadow-hover: 0 18px 40px rgba(0, 0, 0, 0.5);
-    --glass-bg: rgba(40, 30, 36, 0.55);
-    --glass-bg-strong: rgba(40, 30, 36, 0.75);
-    --glass-border: rgba(255, 255, 255, 0.14);
-    --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    --glass-specular: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.08),
-      rgba(255, 255, 255, 0) 40%
-    );
-    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    --glass-border-hover: rgba(255, 255, 255, 0.28);
-    --pill-hover-bg: rgba(255, 255, 255, 0.08);
-    --pill-hover-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    --sheen: rgba(255, 255, 255, 0.12);
-    --button-bg: #f1e9ec;
-    --button-ink: #1f181c;
-    --hero-glow: rgba(226, 84, 154, 0.2);
-  }
-}
-
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-
+   По умолчанию всегда светлая (системная схема не учитывается); тёмную включает только
+   data-theme="dark" на <html> — инлайн-скрипт в index.html до первой отрисовки + useTheme.
+   --bg-start должен совпадать с THEME_COLORS.dark в src/lib/prefs.ts (meta theme-color). */
 :root[data-theme='dark'] {
   color-scheme: dark;
   --bg-start: #1f181c;
@@ -149,18 +112,6 @@
   }
 
   :root[data-theme='dark'] {
-    --ink-muted: #d9ced3;
-    --line: rgba(255, 255, 255, 0.4);
-    --glass-bg: #261d22;
-    --glass-bg-strong: #2c2228;
-    --glass-border: rgba(255, 255, 255, 0.4);
-    --glass-border-hover: rgba(255, 255, 255, 0.6);
-    --glass-specular: none;
-  }
-}
-
-@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
     --ink-muted: #d9ced3;
     --line: rgba(255, 255, 255, 0.4);
     --glass-bg: #261d22;

@@ -1,45 +1,26 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import {
-  applyThemeChoice,
-  DARK_QUERY,
-  readThemeChoice,
-  subscribePrefs,
-  systemPrefersDark,
-  writeThemeChoice,
-} from './prefs'
-import type { EffectiveTheme, ThemeChoice } from './prefs'
+import { applyThemeChoice, readThemeChoice, subscribePrefs, writeThemeChoice } from './prefs'
+import type { ThemeChoice } from './prefs'
 
-const serverChoice = (): ThemeChoice => 'system'
-const serverDark = () => false
-const noSubscription = () => () => {}
-
-function subscribeSystem(onChange: () => void): () => void {
-  if (typeof window.matchMedia !== 'function') return () => {}
-  const query = window.matchMedia(DARK_QUERY)
-  query.addEventListener?.('change', onChange)
-  return () => query.removeEventListener?.('change', onChange)
-}
+const serverTheme = (): ThemeChoice => 'light'
 
 /**
- * Выбор темы: 'system' | 'light' | 'dark'. На сервере и при гидрации — 'system'/'light'
- * (разметка от темы не зависит), сохранённый выбор подхватывается сразу после гидрации.
- * Пока выбрано «Как в системе», слушает prefers-color-scheme; data-theme и theme-color
- * применяются эффектом.
+ * Тема: 'light' (по умолчанию) | 'dark'. На сервере и при гидрации — 'light' (разметка от
+ * темы не зависит), сохранённый выбор подхватывается сразу после гидрации; data-theme и
+ * theme-color применяются эффектом. Экземпляры и вкладки синхронизируются через subscribePrefs.
  */
 export function useTheme() {
-  const choice = useSyncExternalStore(subscribePrefs, readThemeChoice, serverChoice)
-  const systemDark = useSyncExternalStore(
-    choice === 'system' ? subscribeSystem : noSubscription,
-    systemPrefersDark,
-    serverDark,
-  )
-  const effective: EffectiveTheme = choice === 'system' ? (systemDark ? 'dark' : 'light') : choice
+  const theme = useSyncExternalStore(subscribePrefs, readThemeChoice, serverTheme)
 
   useEffect(() => {
-    applyThemeChoice(choice, effective)
-  }, [choice, effective])
+    applyThemeChoice(theme)
+  }, [theme])
 
-  const setChoice = useCallback((next: ThemeChoice) => writeThemeChoice(next), [])
+  const setTheme = useCallback((next: ThemeChoice) => writeThemeChoice(next), [])
+  const toggle = useCallback(
+    () => writeThemeChoice(readThemeChoice() === 'dark' ? 'light' : 'dark'),
+    [],
+  )
 
-  return { choice, setChoice, effective }
+  return { theme, setTheme, toggle }
 }

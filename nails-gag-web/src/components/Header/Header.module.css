@@ -249,27 +249,19 @@
     font-size: 0.95rem;
   }
 
-  /* на мобильном вход — круглая стеклянная кнопка только с иконкой/аватаром */
-  .account,
-  .account[data-user='true'] {
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
+  /* на мобильном вход в кабинет — только в меню: в строке шапки лого, тема, запись, бургер */
+  .account {
+    display: none;
+  }
+
+  /* переключатель темы прижат вправо, перед «Записаться» */
+  .theme {
     order: 1;
+    margin-left: auto;
   }
 
   .cta {
     order: 2;
-  }
-
-  .accountLabel {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 
   .divider {
@@ -374,9 +366,26 @@
     padding: 8px 12px;
   }
 
-  /* на узких экранах стрелка не помещается в одну строку со входом и бургером */
+  /* на узких экранах стрелка не помещается в одну строку с темой и бургером */
   .cta span {
     display: none;
+  }
+}
+
+/* 320px: лого, тема, «Записаться» и бургер — в одну строку */
+@media (max-width: 359px) {
+  .inner {
+    column-gap: 6px;
+  }
+
+  .logo {
+    gap: 6px;
+    font-size: 0.95rem;
+  }
+
+  .cta {
+    padding: 8px 10px;
+    font-size: 0.875rem;
   }
 }
 

@@ -1,6 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CURSOR_KEY, PREFS_EVENT, writeCursorPref } from './prefs'
 import { useCustomCursor } from './useCustomCursor'
 
 function stubMatchMedia(fine: boolean, reducedMotion = false, forcedColors = false) {
@@ -60,25 +59,5 @@ describe('useCustomCursor', () => {
     stubMatchMedia(true, false, true)
     const { result } = renderHook(() => useCustomCursor())
     expect(result.current.enabled).toBe(false)
-  })
-
-  it('выключен, если посетитель отключил фирменный курсор', () => {
-    stubMatchMedia(true)
-    localStorage.setItem(CURSOR_KEY, 'off')
-    const { result } = renderHook(() => useCustomCursor())
-    expect(result.current.enabled).toBe(false)
-  })
-
-  it('перепроверяет настройку по PREFS_EVENT', () => {
-    stubMatchMedia(true)
-    const { result } = renderHook(() => useCustomCursor())
-    expect(result.current.enabled).toBe(true)
-    act(() => writeCursorPref('off'))
-    expect(result.current.enabled).toBe(false)
-    act(() => {
-      localStorage.setItem(CURSOR_KEY, 'on')
-      window.dispatchEvent(new CustomEvent(PREFS_EVENT))
-    })
-    expect(result.current.enabled).toBe(true)
   })
 })
