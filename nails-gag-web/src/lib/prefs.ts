@@ -15,7 +15,7 @@ export const PREFS_EVENT = 'nails-gag:prefs'
  * Цвет адресной строки мобильных браузеров. Должен совпадать с --bg-start соответствующей
  * темы в src/styles/tokens.css (светлый — и с meta theme-color в index.html).
  */
-export const THEME_COLORS: Record<ThemeChoice, string> = { light: '#ebe3e5', dark: '#1f181c' }
+export const THEME_COLORS: Record<ThemeChoice, string> = { light: '#ebe3e5', dark: '#171717' }
 
 /** Запасная копия на случай недоступного localStorage: выбор живёт до перезагрузки. */
 const memory = new Map<string, string | null>()
