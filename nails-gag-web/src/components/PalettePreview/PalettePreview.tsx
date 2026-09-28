@@ -11,7 +11,10 @@ import styles from './PalettePreview.module.css'
 const KEY = 'nails-gag-palette'
 const PALETTES = [
   { id: 'current', label: 'Текущая' },
-  { id: 'a', label: 'A · Графит' },
+  { id: 'a', label: 'Графит · было' },
+  { id: 'a1', label: 'Графит · розовый 1' },
+  { id: 'a2', label: 'Графит · розовый 2' },
+  { id: 'a3', label: 'Графит · розовый 3' },
   { id: 'b', label: 'B · Тёплая ночь' },
   { id: 'c', label: 'C · Индиго' },
 ] as const
