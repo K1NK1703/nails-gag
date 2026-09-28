@@ -132,4 +132,16 @@ describe('Header', () => {
     fireEvent.click(within(nav).getByRole('link', { name: 'Войти' }))
     expect(button).toHaveAttribute('aria-expanded', 'false')
   })
+
+  it('puts the «Оформление» button before the account entry', () => {
+    vi.stubEnv('VITE_PREVIEW_USER', '')
+    renderHeader()
+    const appearance = screen.getByRole('button', { name: 'Оформление' })
+    const account = screen.getAllByRole('link', { name: 'Войти' }).at(-1)
+    expect(account).toBeDefined()
+    if (!account) return
+    expect(
+      appearance.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
 })

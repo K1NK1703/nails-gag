@@ -34,6 +34,8 @@
   /* тёмная кнопка по умолчанию (.button) */
   --button-bg: var(--ink);
   --button-ink: #ffffff;
+  /* подсветка за фигурой в герое: в светлой не нужна */
+  --hero-glow: transparent;
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --dur: 260ms;
@@ -95,6 +97,7 @@
     --sheen: rgba(255, 255, 255, 0.12);
     --button-bg: #f1e9ec;
     --button-ink: #1f181c;
+    --hero-glow: rgba(226, 84, 154, 0.2);
   }
 }
 
@@ -128,4 +131,42 @@
   --sheen: rgba(255, 255, 255, 0.12);
   --button-bg: #f1e9ec;
   --button-ink: #1f181c;
+  --hero-glow: rgba(226, 84, 154, 0.2);
+}
+
+/* Повышенная контрастность (prefers-contrast: more): непрозрачное стекло без backdrop-filter,
+   рамки и разделители заметнее, приглушённый текст ближе к основному. */
+@media (prefers-contrast: more) {
+  :root {
+    --ink-muted: #3d3538;
+    --line: rgba(43, 37, 40, 0.4);
+    --glass-bg: #f6f1f3;
+    --glass-bg-strong: #fbf8f9;
+    --glass-border: rgba(43, 37, 40, 0.4);
+    --glass-border-hover: rgba(43, 37, 40, 0.6);
+    --glass-specular: none;
+    --glass-filter: none;
+  }
+
+  :root[data-theme='dark'] {
+    --ink-muted: #d9ced3;
+    --line: rgba(255, 255, 255, 0.4);
+    --glass-bg: #261d22;
+    --glass-bg-strong: #2c2228;
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-border-hover: rgba(255, 255, 255, 0.6);
+    --glass-specular: none;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ink-muted: #d9ced3;
+    --line: rgba(255, 255, 255, 0.4);
+    --glass-bg: #261d22;
+    --glass-bg-strong: #2c2228;
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-border-hover: rgba(255, 255, 255, 0.6);
+    --glass-specular: none;
+  }
 }

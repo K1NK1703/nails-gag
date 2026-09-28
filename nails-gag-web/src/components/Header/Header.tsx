@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { site } from '../../content/site'
 import { track } from '../../lib/analytics'
 import { useAuth } from '../../lib/auth'
 import type { User } from '../../lib/auth'
 import { isCabinetEnabled } from '../../lib/features'
+import { Appearance } from '../Appearance/Appearance'
 import { TransitionLink } from '../TransitionLink/TransitionLink'
 import styles from './Header.module.css'
 
@@ -51,11 +52,18 @@ function firstName(name: string): string {
 
 export function Header() {
   const [open, setOpen] = useState(false)
+  const [appearanceOpen, setAppearanceOpen] = useState(false)
   const cabinet = isCabinetEnabled()
   const { user } = useAuth()
 
   const headerRef = useRef<HTMLElement>(null)
   const burgerRef = useRef<HTMLButtonElement>(null)
+
+  // Меню и «Оформление» не открыты одновременно: панели на мобильном занимают одно место.
+  const onAppearanceChange = useCallback((next: boolean) => {
+    setAppearanceOpen(next)
+    if (next) setOpen(false)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -93,7 +101,10 @@ export function Header() {
           aria-label="Меню"
           aria-expanded={open}
           aria-controls="site-nav"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setOpen((v) => !v)
+            setAppearanceOpen(false)
+          }}
         >
           <span aria-hidden="true" />
         </button>
@@ -129,6 +140,8 @@ export function Header() {
             </>
           )}
         </nav>
+
+        <Appearance open={appearanceOpen} onOpenChange={onAppearanceChange} />
 
         {cabinet && (
           <TransitionLink

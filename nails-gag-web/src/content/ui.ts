@@ -12,6 +12,17 @@ export const ui = {
   galleryKicker: (count: number) => `Портфолио · ${count} фото`,
   reviewForms: ['отзыв', 'отзыва', 'отзывов'] as [string, string, string],
   reviewsKicker: (count: number) => `${count} ${plural(count, ui.reviewForms)}`,
+  /** Настройки оформления в шапке. */
+  appearance: {
+    label: 'Оформление',
+    theme: 'Тема',
+    themes: {
+      system: 'Как в системе',
+      light: 'Светлая',
+      dark: 'Тёмная',
+    },
+    cursor: 'Фирменный курсор',
+  },
   notFound: {
     title: 'Страница не найдена',
     text: 'Такой страницы нет. Вернитесь на главную.',

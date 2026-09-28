@@ -50,7 +50,7 @@
 
 .example {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 0.625rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   border: 1px dashed var(--line);

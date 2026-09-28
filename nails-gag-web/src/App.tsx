@@ -6,7 +6,6 @@ import { Header } from './components/Header/Header'
 import { track } from './lib/analytics'
 import { isCabinetEnabled } from './lib/features'
 import { useScrollToTop } from './lib/useScrollToTop'
-import { useTheme } from './lib/useTheme'
 import { Booking } from './pages/Booking'
 import { Cabinet } from './pages/Cabinet'
 import { Home } from './pages/Home'
@@ -18,8 +17,6 @@ export function AppRoutes() {
   const { pathname } = useLocation()
 
   useScrollToTop()
-  // Сохранённая тема и слежение за системной схемой (data-theme, theme-color).
-  useTheme()
 
   useEffect(() => {
     track({ name: 'page_view', path: pathname })
