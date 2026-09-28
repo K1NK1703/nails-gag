@@ -10,6 +10,31 @@ type Props = {
   onNavigate: (index: number) => void
 }
 
+/** Линейные иконки в стиле шапки: 1.5px, скруглённые концы, цвет — currentColor. */
+function Icon({ d }: { d: string }) {
+  return (
+    <svg
+      className={styles.icon}
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={d} />
+    </svg>
+  )
+}
+
+const CLOSE = 'M5 5l10 10M15 5 5 15'
+const PREV = 'M12 4.5 6.5 10l5.5 5.5'
+const NEXT = 'M8 4.5l5.5 5.5L8 15.5'
+
 export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -98,7 +123,7 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
             onClose()
           }}
         >
-          ×
+          <Icon d={CLOSE} />
         </button>
         <button
           type="button"
@@ -109,7 +134,7 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
             prev()
           }}
         >
-          ←
+          <Icon d={PREV} />
         </button>
         <figure ref={figureRef} className={styles.figure}>
           <img
@@ -119,8 +144,10 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
             alt={photo.alt}
           />
           <figcaption>
-            {index + 1} / {count}
-            {photo.caption ? ` · ${photo.caption}` : ''}
+            <span className={styles.counter}>
+              {index + 1} / {count}
+            </span>
+            {photo.caption && <span className={styles.caption}>{photo.caption}</span>}
           </figcaption>
         </figure>
         <button
@@ -132,7 +159,7 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
             next()
           }}
         >
-          →
+          <Icon d={NEXT} />
         </button>
       </dialog>
     </div>,

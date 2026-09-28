@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(20, 16, 18, 0.92);
+  background: rgba(12, 12, 12, 0.94);
 }
 
 .dialog {
@@ -44,37 +44,72 @@
 }
 
 .figure figcaption {
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  opacity: 0.8;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
   text-align: center;
 }
 
+/* счётчик — маленькая стеклянная пилюля, цифры одной ширины */
+.counter {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.caption {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Кнопки: тёмное стекло с тонкой линейной иконкой; по наведению заливаются светлым,
+   как основная кнопка сайта в тёмной теме. */
 .close,
 .arrow {
   position: absolute;
-  width: 44px;
-  height: 44px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background-color: rgba(255, 255, 255, 0.08);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 50%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background-color: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
-  box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  color: #fff;
-  font-size: 1.3rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
-  transition: background-color var(--dur) var(--ease);
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    scale var(--dur) var(--ease);
+}
+
+.icon {
+  display: block;
 }
 
 @media (hover: hover) {
   .close:hover,
   .arrow:hover {
-    background-color: rgba(255, 255, 255, 0.16);
+    background-color: #f2efee;
+    border-color: #f2efee;
+    color: #141414;
   }
+}
+
+.close:active,
+.arrow:active {
+  scale: 0.94;
 }
 
 .close {
@@ -84,24 +119,32 @@
 
 .arrow {
   top: 50%;
-  transform: translateY(-50%);
+  translate: 0 -50%;
+  width: 56px;
+  height: 56px;
 }
 
 .arrowPrev {
-  left: var(--space-3);
+  left: var(--space-4);
 }
 
 .arrowNext {
-  right: var(--space-3);
+  right: var(--space-4);
 }
 
 @media (max-width: 767px) {
+  /* на телефоне стрелки внизу по краям, на уровне счётчика — под большим пальцем */
+  .close {
+    width: 44px;
+    height: 44px;
+  }
+
   .arrow {
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     top: auto;
-    bottom: var(--space-3);
-    transform: none;
+    bottom: var(--space-4);
+    translate: none;
   }
 
   .arrowPrev {
@@ -110,5 +153,20 @@
 
   .arrowNext {
     right: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .close:active,
+  .arrow:active {
+    scale: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .close,
+  .arrow,
+  .counter {
+    border-color: ButtonText;
   }
 }
