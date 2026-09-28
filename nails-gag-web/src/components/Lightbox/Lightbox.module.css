@@ -103,7 +103,14 @@
 
 /* кольцо фокуса — вплотную к иконке, а не по всей невидимой зоне нажатия */
 .close:focus-visible {
-  outline-offset: -6px;
+  outline: none;
+}
+
+/* фокус с клавиатуры — тонкое кольцо вокруг иконки, а не квадрат по зоне нажатия */
+.close:focus-visible .icon {
+  outline: 1.5px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 7px;
+  border-radius: 50%;
 }
 
 .close:hover,
@@ -131,9 +138,9 @@
 }
 
 .arrow:focus-visible .icon {
-  outline: 2px solid #fff;
+  outline: 1.5px solid rgba(255, 255, 255, 0.85);
   outline-offset: 8px;
-  border-radius: 8px;
+  border-radius: 50%;
 }
 
 .arrowPrev {
