@@ -23,8 +23,8 @@
   z-index: -1;
   background-color: var(--glass-bg-strong);
   background-image: var(--glass-specular);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
   border-bottom: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
@@ -120,8 +120,8 @@
   background-color: var(--glass-bg);
   background-image: var(--glass-specular);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
   box-shadow: var(--glass-shadow);
   color: var(--ink);
   font-weight: 600;
@@ -160,7 +160,7 @@
   border-radius: 50%;
   object-fit: cover;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
@@ -301,11 +301,9 @@
     background-color: var(--glass-bg-strong);
     background-image: var(--glass-specular);
     border: 1px solid var(--glass-border);
-    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    box-shadow:
-      0 18px 40px rgba(43, 37, 40, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+    box-shadow: var(--shadow-hover), var(--glass-highlight);
     opacity: 0;
     translate: 0 -8px;
     visibility: hidden;
@@ -353,15 +351,15 @@
 
   .nav a:focus-visible,
   .nav a:active {
-    background-color: rgba(255, 255, 255, 0.55);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background-color: var(--pill-hover-bg);
+    box-shadow: var(--pill-hover-highlight);
   }
 }
 
 @media (max-width: 767px) and (hover: hover) {
   .nav a:hover {
-    background-color: rgba(255, 255, 255, 0.55);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background-color: var(--pill-hover-bg);
+    box-shadow: var(--pill-hover-highlight);
   }
 }
 

@@ -31,6 +31,20 @@ expect(!home.includes('<!--app-head-->'), 'home: <!--app-head--> not replaced')
 expect(!/instagram/i.test(home), 'home: instagram mention found')
 expect(home.includes('<div id="root" data-route="/">'), 'home: data-route="/" missing on #root')
 
+// Тема: инлайн-скрипт ставит data-theme до первой отрисовки (без вспышки светлой темы),
+// а сама пререндеренная разметка от темы не зависит.
+const THEME_SCRIPT = "localStorage.getItem('nails-gag-theme')"
+const themeScript = /<script>([^<]*)<\/script>/.exec(home)?.[1] ?? ''
+expect(themeScript.includes(THEME_SCRIPT), 'home: inline theme script missing in <head>')
+expect(
+  home.indexOf(THEME_SCRIPT) < home.indexOf('rel="preload"'),
+  'home: inline theme script must come before the font preloads',
+)
+expect(
+  themeScript.length <= 200,
+  `home: inline theme script is ${themeScript.length} bytes (> 200)`,
+)
+
 const privacyPage = await readFile(path.join(DIST, 'privacy/index.html'), 'utf8')
 expect(!privacyPage.includes('<!--app-html-->'), 'privacy: <!--app-html--> not replaced')
 expect(!privacyPage.includes('<!--app-head-->'), 'privacy: <!--app-head--> not replaced')
@@ -95,6 +109,10 @@ for (const [file, expected] of Object.entries(TITLES)) {
     continue
   }
   const title = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? ''
+  expect(
+    !/data-theme/.test(html.replace(themeScript, '')),
+    `${file}: prerendered HTML has data-theme`,
+  )
   expect(title.includes(expected), `${file}: <title> «${title}» does not contain «${expected}»`)
 }
 

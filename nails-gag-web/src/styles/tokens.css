@@ -1,4 +1,6 @@
 :root {
+  color-scheme: light dark;
+
   --bg-start: #ebe3e5;
   --bg-end: #e1d6da;
   --ink: #2b2528;
@@ -19,6 +21,19 @@
   --glass-blur: 18px;
   --glass-shadow: 0 10px 30px rgba(43, 37, 40, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --glass-specular: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 40%);
+  /* верхний блик стеклянных карточек/пилюль и их рамка по наведению */
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --glass-border-hover: rgba(255, 255, 255, 0.9);
+  --glass-filter: blur(var(--glass-blur)) saturate(140%);
+  /* подсветка пункта мобильного меню / сегмента по наведению */
+  --pill-hover-bg: rgba(255, 255, 255, 0.55);
+  --pill-hover-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  /* блик на фото «Обо мне» */
+  --sheen: rgba(255, 255, 255, 0.28);
+
+  /* тёмная кнопка по умолчанию (.button) */
+  --button-bg: var(--ink);
+  --button-ink: #ffffff;
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --dur: 260ms;
@@ -45,4 +60,72 @@
   :root {
     --gutter: 32px;
   }
+}
+
+/* Тёмная тема: графитово-сливовая, тёплый светлый текст, акцент ярче для контраста.
+   «Как в системе» — нет data-theme, работает медиазапрос; явный выбор ставит
+   data-theme на <html> (инлайн-скрипт в index.html до первой отрисовки + useTheme). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg-start: #1f181c;
+    --bg-end: #15111a;
+    --ink: #f1e9ec;
+    --ink-muted: #b8aab1;
+    --accent: #e2549a;
+    --accent-ink: #1a0d13;
+    --accent-hover: #f06cab;
+    --surface: rgba(255, 255, 255, 0.06);
+    --surface-strong: rgba(255, 255, 255, 0.1);
+    --line: rgba(255, 255, 255, 0.14);
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+    --shadow-hover: 0 18px 40px rgba(0, 0, 0, 0.5);
+    --glass-bg: rgba(40, 30, 36, 0.55);
+    --glass-bg-strong: rgba(40, 30, 36, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.14);
+    --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --glass-specular: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0) 40%
+    );
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --glass-border-hover: rgba(255, 255, 255, 0.28);
+    --pill-hover-bg: rgba(255, 255, 255, 0.08);
+    --pill-hover-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --sheen: rgba(255, 255, 255, 0.12);
+    --button-bg: #f1e9ec;
+    --button-ink: #1f181c;
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-start: #1f181c;
+  --bg-end: #15111a;
+  --ink: #f1e9ec;
+  --ink-muted: #b8aab1;
+  --accent: #e2549a;
+  --accent-ink: #1a0d13;
+  --accent-hover: #f06cab;
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-strong: rgba(255, 255, 255, 0.1);
+  --line: rgba(255, 255, 255, 0.14);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-hover: 0 18px 40px rgba(0, 0, 0, 0.5);
+  --glass-bg: rgba(40, 30, 36, 0.55);
+  --glass-bg-strong: rgba(40, 30, 36, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --glass-specular: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 40%);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --glass-border-hover: rgba(255, 255, 255, 0.28);
+  --pill-hover-bg: rgba(255, 255, 255, 0.08);
+  --pill-hover-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --sheen: rgba(255, 255, 255, 0.12);
+  --button-bg: #f1e9ec;
+  --button-ink: #1f181c;
 }
