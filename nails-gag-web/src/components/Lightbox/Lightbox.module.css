@@ -6,6 +6,11 @@
 }
 
 .dialog {
+  /* поля вокруг фото: сверху — под крестик, снизу — под подпись и индикатор */
+  --pad-top: 64px;
+  --pad-bottom: 92px;
+  --pad-side: 12px;
+
   position: absolute;
   inset: 0;
   width: 100%;
@@ -13,160 +18,263 @@
   max-width: none;
   max-height: none;
   margin: 0;
-  padding: var(--space-3);
+  padding: 0;
   border: 0;
   background: transparent;
   color: #fff;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
 }
 
 .dialog :focus-visible {
   outline-color: #fff;
 }
 
-.figure {
-  margin: 0;
-  max-width: min(92vw, 1100px);
-  max-height: 90vh;
+/* Лента слайдов: нативная горизонтальная прокрутка со snap — на iOS свайп идёт за пальцем
+   с инерцией и доводкой, без JS-анимаций. */
+.track {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  color: #fff;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior: contain;
+  touch-action: pan-x pinch-zoom;
+  scrollbar-width: none;
 }
 
-.figure img {
-  max-height: 80vh;
+.track::-webkit-scrollbar {
+  display: none;
+}
+
+.slide {
+  flex: 0 0 100%;
+  display: grid;
+  place-items: center;
+  padding: var(--pad-top) var(--pad-side) var(--pad-bottom);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+
+.slide img {
+  display: block;
   width: auto;
-  max-width: 100%;
+  height: auto;
+  max-width: min(100%, 1100px);
+  max-height: calc(100vh - var(--pad-top) - var(--pad-bottom));
+  max-height: calc(100dvh - var(--pad-top) - var(--pad-bottom));
   border-radius: 12px;
   object-fit: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
-.figure figcaption {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  font-size: 0.8125rem;
-  text-align: center;
-}
-
-/* счётчик — маленькая стеклянная пилюля, цифры одной ширины */
-.counter {
-  padding: 4px 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.caption {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-/* Кнопки: тёмное стекло с тонкой линейной иконкой; по наведению заливаются светлым,
-   как основная кнопка сайта в тёмной теме. */
+/* Кнопки без подложек: тонкая линейная иконка, тень — чтобы читалась поверх светлого фото. */
 .close,
 .arrow {
   position: absolute;
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
   padding: 0;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background-color: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  border: 0;
+  background: none;
+  color: #fff;
+  opacity: 0.75;
   cursor: pointer;
-  transition:
-    background-color var(--dur) var(--ease),
-    border-color var(--dur) var(--ease),
-    color var(--dur) var(--ease),
-    scale var(--dur) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity var(--dur) var(--ease);
 }
 
 .icon {
   display: block;
-}
-
-@media (hover: hover) {
-  .close:hover,
-  .arrow:hover {
-    background-color: #f2efee;
-    border-color: #f2efee;
-    color: #141414;
-  }
-}
-
-.close:active,
-.arrow:active {
-  scale: 0.94;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  transition: translate var(--dur) var(--ease);
 }
 
 .close {
-  top: var(--space-3);
-  right: var(--space-3);
+  top: 10px;
+  right: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
 }
 
+/* кольцо фокуса — вплотную к иконке, а не по всей невидимой зоне нажатия */
+.close:focus-visible {
+  outline-offset: -6px;
+}
+
+.close:hover,
+.close:focus-visible,
+.arrow:hover,
+.arrow:focus-visible {
+  opacity: 1;
+}
+
+.close:active .icon {
+  scale: 0.9;
+}
+
+/* Стрелки — высокие прозрачные полосы по краям; сама стрелка проявляется при наведении
+   и сдвигается на 2px в свою сторону. */
 .arrow {
-  top: 50%;
-  translate: 0 -50%;
-  width: 56px;
-  height: 56px;
+  top: 72px;
+  bottom: 104px;
+  width: 88px;
+  opacity: 0.45;
+}
+
+.arrow:focus-visible {
+  outline: none;
+}
+
+.arrow:focus-visible .icon {
+  outline: 2px solid #fff;
+  outline-offset: 8px;
+  border-radius: 8px;
 }
 
 .arrowPrev {
-  left: var(--space-4);
+  left: 0;
 }
 
 .arrowNext {
-  right: var(--space-4);
+  right: 0;
 }
 
-@media (max-width: 767px) {
-  /* на телефоне стрелки внизу по краям, на уровне счётчика — под большим пальцем */
+.arrowPrev:hover .icon {
+  translate: -2px 0;
+}
+
+.arrowNext:hover .icon {
+  translate: 2px 0;
+}
+
+/* На тач-устройствах листают свайпом: стрелки остаются только для скринридеров. */
+@media not ((hover: hover) and (pointer: fine)) {
+  .arrow:not(:focus-visible) {
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 768px) {
+  .dialog {
+    --pad-top: 72px;
+    --pad-bottom: 104px;
+    --pad-side: 96px;
+  }
+
   .close {
-    width: 44px;
-    height: 44px;
+    top: 16px;
+    right: 16px;
   }
+}
 
-  .arrow {
-    width: 48px;
-    height: 48px;
-    top: auto;
-    bottom: var(--space-4);
-    translate: none;
-  }
+/* Подпись и индикатор внизу. */
+.info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 0 var(--space-4);
+  pointer-events: none;
+}
 
-  .arrowPrev {
-    left: var(--space-3);
-  }
+.caption {
+  min-height: 1.35em;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: center;
+  animation: fade-in var(--dur) var(--ease);
+}
 
-  .arrowNext {
-    right: var(--space-3);
+@keyframes fade-in {
+  from {
+    opacity: 0;
   }
+}
+
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dot {
+  width: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.28);
+  transition:
+    width var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
+}
+
+.dot[data-active] {
+  width: 22px;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .close:active,
-  .arrow:active {
+  .caption {
+    animation: none;
+  }
+
+  .dot,
+  .icon {
+    transition: none;
+  }
+
+  .arrowPrev:hover .icon,
+  .arrowNext:hover .icon,
+  .close:active .icon {
+    translate: none;
     scale: none;
   }
 }
 
 @media (forced-colors: active) {
   .close,
-  .arrow,
-  .counter {
-    border-color: ButtonText;
+  .arrow {
+    color: ButtonText;
+    opacity: 1;
+  }
+
+  .icon {
+    filter: none;
+  }
+
+  .dot {
+    background: GrayText;
+  }
+
+  .dot[data-active] {
+    background: CanvasText;
   }
 }
