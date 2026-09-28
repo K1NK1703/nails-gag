@@ -23,9 +23,6 @@ function prefersReducedMotion(): boolean {
   )
 }
 
-/** Номер последнего запущенного перехода: метку снимает только он, а не вытесненный им. */
-let transitionToken = 0
-
 /**
  * Link с переходом через View Transitions API.
  * В декларативном BrowserRouter проп viewTransition у Link ничего не делает
@@ -44,17 +41,11 @@ export function TransitionLink({ to, onClick, replace, state, ...rest }: Transit
       void navigate(to, { replace, state })
     }
     if (typeof document.startViewTransition === 'function' && !prefersReducedMotion()) {
-      // Шапке имя перехода даём только на время анимации, см. Header.module.css.
-      const root = document.documentElement
-      const token = ++transitionToken
-      root.dataset['navTransition'] = ''
-      const transition = document.startViewTransition(() => {
+      // Никаким элементам со стеклом view-transition-name не даём: в WebKit такой элемент
+      // становится backdrop root, и после перехода размытие шапки и меню пропадало.
+      document.startViewTransition(() => {
         flushSync(go)
       })
-      const done = () => {
-        if (token === transitionToken) delete root.dataset['navTransition']
-      }
-      void Promise.resolve(transition.finished).then(done, done)
     } else {
       go()
     }

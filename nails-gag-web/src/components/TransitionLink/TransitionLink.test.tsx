@@ -1,4 +1,4 @@
-import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { BrowserRouter, MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TransitionLink } from './TransitionLink'
@@ -55,7 +55,6 @@ describe('TransitionLink', () => {
   afterEach(() => {
     // @ts-expect-error jsdom не реализует startViewTransition, тест сам его подставляет
     delete document.startViewTransition
-    delete document.documentElement.dataset['navTransition']
     window.history.replaceState(null, '', '/')
   })
 
@@ -70,34 +69,6 @@ describe('TransitionLink', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Дальше' }))
     expect(headingInsideCallback).toBe('Следующая')
     expect(window.location.pathname).toBe('/next')
-  })
-
-  it('метку снимает только последний переход, а не вытесненный им', async () => {
-    const finishers: Array<() => void> = []
-    setStartViewTransition((cb) => {
-      cb()
-      const finished = new Promise<void>((resolve) => finishers.push(resolve))
-      return { finished }
-    })
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <Routes>
-          <Route path="/" element={<TransitionLink to="/next">Дальше</TransitionLink>} />
-          <Route path="/next" element={<TransitionLink to="/">Назад</TransitionLink>} />
-        </Routes>
-      </MemoryRouter>,
-    )
-    fireEvent.click(screen.getByRole('link', { name: 'Дальше' }))
-    fireEvent.click(screen.getByRole('link', { name: 'Назад' }))
-    expect(finishers).toHaveLength(2)
-
-    finishers[0]?.()
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(document.documentElement).toHaveAttribute('data-nav-transition')
-
-    finishers[1]?.()
-    await waitFor(() => expect(document.documentElement).not.toHaveAttribute('data-nav-transition'))
   })
 
   it('навигирует без View Transitions API', () => {
@@ -117,23 +88,6 @@ describe('TransitionLink', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Дальше' }))
     expect(start).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Следующая')
-  })
-
-  it('помечает <html> на время перехода и снимает метку по его окончании', async () => {
-    let finish = () => {}
-    const finished = new Promise<void>((resolve) => {
-      finish = resolve
-    })
-    setStartViewTransition((cb) => {
-      expect(document.documentElement).toHaveAttribute('data-nav-transition')
-      cb()
-      return { finished }
-    })
-    renderApp()
-    fireEvent.click(screen.getByRole('link', { name: 'Дальше' }))
-    expect(document.documentElement).toHaveAttribute('data-nav-transition')
-    finish()
-    await waitFor(() => expect(document.documentElement).not.toHaveAttribute('data-nav-transition'))
   })
 
   it('клик с metaKey отдаётся браузеру: без перехода и без preventDefault', () => {

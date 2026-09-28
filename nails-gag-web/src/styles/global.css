@@ -7,6 +7,8 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: var(--header-h);
+  /* фон страницы для Safari 26: под полупрозрачным тоном шапки и при оттягивании страницы */
+  background-color: var(--bg-start);
 }
 
 body {
@@ -240,33 +242,12 @@ h3 {
 /* Плавные переходы между страницами SPA (View Transitions API): запускает их
    TransitionLink через document.startViewTransition. @view-transition не нужен —
    он действует только на межстраничные (cross-document) переходы.
-   Хедер анимируется отдельно (view-transition-name: header в Header.module.css),
-   чтобы не мигать вместе со страницей — он один на всё приложение и не прыгает. */
-::view-transition-old(root) {
-  animation: 220ms var(--ease) both page-out;
-}
-
+   Обычный кроссфейд без собственных имён: одинаковые пиксели старого и нового снимка
+   (шапка) остаются на месте. Шапке имя не даём — в WebKit это ломало её размытие. */
+::view-transition-old(root),
 ::view-transition-new(root) {
-  animation: 320ms var(--ease) both page-in;
-}
-
-@keyframes page-out {
-  to {
-    opacity: 0;
-    translate: 0 -10px;
-  }
-}
-
-@keyframes page-in {
-  from {
-    opacity: 0;
-    translate: 0 12px;
-  }
-}
-
-::view-transition-old(header),
-::view-transition-new(header) {
-  animation: none;
+  animation-duration: 260ms;
+  animation-timing-function: var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
