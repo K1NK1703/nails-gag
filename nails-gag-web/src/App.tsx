@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router'
 import { Cursor } from './components/Cursor/Cursor'
 import { Footer } from './components/Footer/Footer'
@@ -12,6 +12,15 @@ import { Home } from './pages/Home'
 import { NotFound } from './pages/NotFound'
 import { Privacy } from './pages/Privacy'
 import { Terms } from './pages/Terms'
+
+// ВРЕМЕННО: панель выбора тёмной палитры, только в dev — в сборку не попадает.
+const PalettePreview = import.meta.env.DEV
+  ? lazy(() =>
+      import('./components/PalettePreview/PalettePreview').then((m) => ({
+        default: m.PalettePreview,
+      })),
+    )
+  : null
 
 export function AppRoutes() {
   const { pathname } = useLocation()
@@ -35,6 +44,11 @@ export function AppRoutes() {
       </Routes>
       <Footer />
       <Cursor />
+      {PalettePreview && (
+        <Suspense fallback={null}>
+          <PalettePreview />
+        </Suspense>
+      )}
     </>
   )
 }

@@ -1,0 +1,46 @@
+/* ВРЕМЕННО: панель выбора тёмной палитры (только dev) */
+.panel {
+  position: fixed;
+  z-index: 200;
+  left: 50%;
+  bottom: 16px;
+  translate: -50% 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 18px;
+  background: rgba(20, 20, 20, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  font-size: 0.8125rem;
+}
+
+.title {
+  float: left;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+
+.option {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.option[aria-pressed='true'] {
+  background: #fff;
+  color: #111;
+  font-weight: 600;
+}
