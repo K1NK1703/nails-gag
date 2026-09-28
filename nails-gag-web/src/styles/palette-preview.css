@@ -2,12 +2,7 @@
    Удалить вместе с src/components/PalettePreview после выбора. */
 
 /* A — Графит */
-:root[data-theme='dark']:is(
-    [data-palette='a'],
-    [data-palette='a1'],
-    [data-palette='a2'],
-    [data-palette='a3']
-  ) {
+:root[data-theme='dark'][data-palette='a'] {
   --bg-start: #171717;
   --bg-end: #0e0e0e;
   --ink: #f2efee;
@@ -33,25 +28,6 @@
   --button-bg: #f2efee;
   --button-ink: #141414;
   --hero-glow: rgba(211, 160, 177, 0.07);
-}
-
-/* Графит с более насыщенным розовым: от мягкого к яркому */
-:root[data-theme='dark'][data-palette='a1'] {
-  --accent: #e28aab;
-  --accent-hover: #eca3bf;
-  --hero-glow: rgba(226, 138, 171, 0.08);
-}
-
-:root[data-theme='dark'][data-palette='a2'] {
-  --accent: #e8739f;
-  --accent-hover: #ef8fb3;
-  --hero-glow: rgba(232, 115, 159, 0.09);
-}
-
-:root[data-theme='dark'][data-palette='a3'] {
-  --accent: #ec5f98;
-  --accent-hover: #f27dac;
-  --hero-glow: rgba(236, 95, 152, 0.1);
 }
 
 /* B — Тёплая ночь */
