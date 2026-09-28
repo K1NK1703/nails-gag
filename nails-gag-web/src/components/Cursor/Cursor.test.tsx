@@ -2,9 +2,13 @@ import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Cursor } from './Cursor'
 
-function stubMatchMedia(fine: boolean, reducedMotion = false) {
+function stubMatchMedia(fine: boolean, reducedMotion = false, forcedColors = false) {
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('reduce') ? reducedMotion : fine,
+    matches: query.includes('reduce')
+      ? reducedMotion
+      : query.includes('forced-colors')
+        ? forcedColors
+        : fine,
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},

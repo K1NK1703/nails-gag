@@ -5,6 +5,7 @@ import { track } from '../../lib/analytics'
 import { useAuth } from '../../lib/auth'
 import type { User } from '../../lib/auth'
 import { isCabinetEnabled } from '../../lib/features'
+import { ThemeToggle } from '../ThemeToggle/ThemeToggle'
 import { TransitionLink } from '../TransitionLink/TransitionLink'
 import styles from './Header.module.css'
 
@@ -130,6 +131,8 @@ export function Header() {
           )}
         </nav>
 
+        <ThemeToggle className={styles.theme} />
+
         {cabinet && (
           <TransitionLink
             to={site.cabinetPath}
@@ -138,9 +141,7 @@ export function Header() {
             title={user ? site.cabinetLabel : undefined}
           >
             {user ? <Avatar user={user} /> : <UserIcon />}
-            <span className={styles.accountLabel}>
-              {user ? firstName(user.name) : site.loginLabel}
-            </span>
+            <span>{user ? firstName(user.name) : site.loginLabel}</span>
           </TransitionLink>
         )}
 

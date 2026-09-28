@@ -132,4 +132,29 @@ describe('Header', () => {
     fireEvent.click(within(nav).getByRole('link', { name: 'Войти' }))
     expect(button).toHaveAttribute('aria-expanded', 'false')
   })
+
+  it('puts the theme switch before the account entry', () => {
+    vi.stubEnv('VITE_PREVIEW_USER', '')
+    renderHeader()
+    const toggle = screen.getByRole('switch', { name: 'Тёмная тема' })
+    const nav = screen.getByRole('navigation', { name: 'Основное меню' })
+    const account = screen.getAllByRole('link', { name: 'Войти' }).find((a) => !nav.contains(a))
+    expect(account).toBeDefined()
+    if (!account) return
+    expect(toggle.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Переключатель — в строке шапки, не в выпадающем меню.
+    expect(nav.contains(toggle)).toBe(false)
+  })
+
+  it('on mobile the header bar has no account entry: it lives only in the menu', () => {
+    vi.stubEnv('VITE_PREVIEW_USER', '')
+    renderHeader()
+    const nav = screen.getByRole('navigation', { name: 'Основное меню' })
+    // Вне меню — только десктопная плашка .account; на ≤767px её прячет Header.module.css
+    // (display: none), так что на мобильном вход остаётся только в меню.
+    const outside = screen.getAllByRole('link', { name: 'Войти' }).filter((a) => !nav.contains(a))
+    expect(outside).toHaveLength(1)
+    expect(outside[0]).toHaveClass('account')
+    expect(within(nav).getByRole('link', { name: 'Войти' })).toHaveAttribute('href', '/cabinet')
+  })
 })

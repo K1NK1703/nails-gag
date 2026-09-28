@@ -1,0 +1,165 @@
+/* Кнопка — только зона нажатия 44px; видимая пилюля — .track 56×30 (на самых узких
+   экранах 48×26). Отрицательные поля по вертикали, чтобы зона нажатия не раздувала шапку
+   относительно соседних 40px-контролов. */
+.toggle {
+  --track-w: 56px;
+  --track-h: 30px;
+  --knob: 24px;
+  --knob-inset: 2px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-block: -2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* фокус рисуем на пилюле, а не на прозрачной зоне нажатия */
+.toggle:focus-visible {
+  outline: none;
+}
+
+.toggle:focus-visible .track {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.track {
+  position: relative;
+  display: block;
+  width: var(--track-w);
+  height: var(--track-h);
+  border-radius: var(--radius-pill);
+  background-color: var(--glass-bg);
+  background-image: var(--glass-specular);
+  /* рамка по --line: белая стеклянная рамка терялась бы на светлой шапке */
+  border: 1px solid var(--line);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.08),
+    var(--glass-highlight);
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+@media (hover: hover) {
+  .toggle:hover .track {
+    background-color: var(--glass-bg-strong);
+  }
+}
+
+/* бегунок: светлая — слева с солнцем, тёмная — справа с луной */
+.knob {
+  position: absolute;
+  top: var(--knob-inset);
+  left: var(--knob-inset);
+  display: grid;
+  place-items: center;
+  width: var(--knob);
+  height: var(--knob);
+  border-radius: 50%;
+  background: var(--button-bg);
+  color: var(--button-ink);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  transition:
+    translate var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
+}
+
+.toggle:active .knob {
+  scale: 0.94;
+}
+
+.sun,
+.moon {
+  grid-area: 1 / 1;
+  display: block;
+  transition:
+    opacity var(--dur) var(--ease),
+    rotate var(--dur) var(--ease);
+}
+
+.moon {
+  opacity: 0;
+  rotate: -30deg;
+}
+
+/* две звёздочки на свободной половине дорожки — видны только в тёмной */
+.stars {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 30% 34%, var(--ink) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 44% 66%, var(--ink) 0 0.9px, transparent 1.4px);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+:global(:root[data-theme='dark']) .knob {
+  /* ширина дорожки − рамки − бегунок − два отступа */
+  translate: calc(var(--track-w) - 2px - var(--knob) - 2 * var(--knob-inset)) 0;
+}
+
+:global(:root[data-theme='dark']) .sun {
+  opacity: 0;
+  rotate: 90deg;
+}
+
+:global(:root[data-theme='dark']) .moon {
+  opacity: 1;
+  rotate: 0deg;
+}
+
+:global(:root[data-theme='dark']) .stars {
+  opacity: 0.8;
+}
+
+@media (max-width: 359px) {
+  .toggle {
+    --track-w: 48px;
+    --track-h: 26px;
+    --knob: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knob,
+  .sun,
+  .moon,
+  .stars {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .track {
+    border-color: ButtonText;
+  }
+
+  .knob {
+    forced-color-adjust: none;
+    background: CanvasText;
+    color: Canvas;
+  }
+
+  .stars {
+    display: none;
+  }
+
+  .toggle:focus-visible .track {
+    outline-color: Highlight;
+  }
+}

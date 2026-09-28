@@ -1,4 +1,6 @@
 :root {
+  color-scheme: light;
+
   --bg-start: #ebe3e5;
   --bg-end: #e1d6da;
   --ink: #2b2528;
@@ -19,6 +21,21 @@
   --glass-blur: 18px;
   --glass-shadow: 0 10px 30px rgba(43, 37, 40, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --glass-specular: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 40%);
+  /* верхний блик стеклянных карточек/пилюль и их рамка по наведению */
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --glass-border-hover: rgba(255, 255, 255, 0.9);
+  --glass-filter: blur(var(--glass-blur)) saturate(140%);
+  /* подсветка пункта мобильного меню / сегмента по наведению */
+  --pill-hover-bg: rgba(255, 255, 255, 0.55);
+  --pill-hover-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  /* блик на фото «Обо мне» */
+  --sheen: rgba(255, 255, 255, 0.28);
+
+  /* тёмная кнопка по умолчанию (.button) */
+  --button-bg: var(--ink);
+  --button-ink: #ffffff;
+  /* подсветка за фигурой в герое: в светлой не нужна */
+  --hero-glow: transparent;
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --dur: 260ms;
@@ -44,5 +61,64 @@
 @media (min-width: 768px) {
   :root {
     --gutter: 32px;
+  }
+}
+
+/* Тёмная тема «Графит»: почти чёрный нейтральный фон, тёплый белый текст, насыщенный
+   розовый акцент. Стекло — едва заметная белая вуаль, основная кнопка светлая.
+   По умолчанию всегда светлая (системная схема не учитывается); тёмную включает только
+   data-theme="dark" на <html> — инлайн-скрипт в index.html до первой отрисовки + useTheme.
+   --bg-start должен совпадать с THEME_COLORS.dark в src/lib/prefs.ts (meta theme-color). */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-start: #171717;
+  --bg-end: #0e0e0e;
+  --ink: #f2efee;
+  --ink-muted: #a9a3a4;
+  --accent: #e8739f;
+  --accent-hover: #ef8fb3;
+  --accent-ink: #1a1416;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.1);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --shadow-hover: 0 18px 40px rgba(0, 0, 0, 0.6);
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-strong: rgba(255, 255, 255, 0.07);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-specular: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 40%);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.22);
+  --pill-hover-bg: rgba(255, 255, 255, 0.07);
+  --pill-hover-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --sheen: rgba(255, 255, 255, 0.08);
+  --button-bg: #f2efee;
+  --button-ink: #141414;
+  --hero-glow: rgba(232, 115, 159, 0.09);
+}
+
+/* Повышенная контрастность (prefers-contrast: more): непрозрачное стекло без backdrop-filter,
+   рамки и разделители заметнее, приглушённый текст ближе к основному. */
+@media (prefers-contrast: more) {
+  :root {
+    --ink-muted: #3d3538;
+    --line: rgba(43, 37, 40, 0.4);
+    --glass-bg: #f6f1f3;
+    --glass-bg-strong: #fbf8f9;
+    --glass-border: rgba(43, 37, 40, 0.4);
+    --glass-border-hover: rgba(43, 37, 40, 0.6);
+    --glass-specular: none;
+    --glass-filter: none;
+  }
+
+  :root[data-theme='dark'] {
+    --ink-muted: #d6d2d1;
+    --line: rgba(255, 255, 255, 0.4);
+    --glass-bg: #1e1e1e;
+    --glass-bg-strong: #242424;
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-border-hover: rgba(255, 255, 255, 0.6);
+    --glass-specular: none;
   }
 }

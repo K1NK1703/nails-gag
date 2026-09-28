@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 
 export type CursorState = 'default' | 'link' | 'photo' | 'press'
 
-const FINE_POINTER = '(hover: hover) and (pointer: fine)'
+export const FINE_POINTER = '(hover: hover) and (pointer: fine)'
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
+/** В режиме принудительных цветов (Windows High Contrast) рисованная рука выпадает из палитры. */
+const FORCED_COLORS = '(forced-colors: active)'
 const LINK = 'a, button, [role=button], summary, label'
 const PHOTO = '[data-cursor="photo"]'
 const FIELD = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])'
@@ -12,7 +14,11 @@ const EPSILON = 0.1
 
 function canUseCustomCursor() {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
-  return window.matchMedia(FINE_POINTER).matches && !window.matchMedia(REDUCED_MOTION).matches
+  return (
+    window.matchMedia(FINE_POINTER).matches &&
+    !window.matchMedia(REDUCED_MOTION).matches &&
+    !window.matchMedia(FORCED_COLORS).matches
+  )
 }
 
 function hoverStateOf(target: EventTarget | null): { state: CursorState; field: boolean } {
@@ -29,9 +35,10 @@ function hoverStateOf(target: EventTarget | null): { state: CursorState; field: 
 
 /**
  * Кастомный курсор-«рука с маникюром». Включается только на устройствах с hover и точным
- * указателем и без prefers-reduced-motion; на сервере и на тач-устройствах enabled = false,
- * слушатели не вешаются. Позиция пишется прямо в style.transform элемента (без ре-рендеров),
- * с инерцией через requestAnimationFrame; цикл останавливается, когда курсор догнал цель.
+ * указателем, без prefers-reduced-motion и forced-colors; на сервере и на тач-устройствах
+ * enabled = false, слушатели не вешаются. Позиция пишется прямо в style.transform элемента
+ * (без ре-рендеров), с инерцией через requestAnimationFrame; цикл останавливается, когда
+ * курсор догнал цель.
  */
 export function useCustomCursor() {
   const ref = useRef<HTMLDivElement>(null)
@@ -44,8 +51,13 @@ export function useCustomCursor() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const queries = [window.matchMedia(FINE_POINTER), window.matchMedia(REDUCED_MOTION)]
-    const update = () => setEnabled(canUseCustomCursor())
+    const queries = [FINE_POINTER, REDUCED_MOTION, FORCED_COLORS].map((q) => window.matchMedia(q))
+    const update = () => {
+      const on = canUseCustomCursor()
+      setEnabled(on)
+      // После повторного включения рука появится по первому движению, а не в углу экрана.
+      if (!on) setMoved(false)
+    }
     update()
     for (const q of queries) q.addEventListener?.('change', update)
     return () => {

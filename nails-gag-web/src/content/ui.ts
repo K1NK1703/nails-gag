@@ -12,6 +12,8 @@ export const ui = {
   galleryKicker: (count: number) => `Портфолио · ${count} фото`,
   reviewForms: ['отзыв', 'отзыва', 'отзывов'] as [string, string, string],
   reviewsKicker: (count: number) => `${count} ${plural(count, ui.reviewForms)}`,
+  /** Переключатель темы в шапке (role="switch", включён — тёмная). */
+  darkTheme: 'Тёмная тема',
   notFound: {
     title: 'Страница не найдена',
     text: 'Такой страницы нет. Вернитесь на главную.',

@@ -2,9 +2,13 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useCustomCursor } from './useCustomCursor'
 
-function stubMatchMedia(fine: boolean, reducedMotion = false) {
+function stubMatchMedia(fine: boolean, reducedMotion = false, forcedColors = false) {
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('reduce') ? reducedMotion : fine,
+    matches: query.includes('reduce')
+      ? reducedMotion
+      : query.includes('forced-colors')
+        ? forcedColors
+        : fine,
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -12,6 +16,7 @@ function stubMatchMedia(fine: boolean, reducedMotion = false) {
 }
 
 afterEach(() => {
+  localStorage.clear()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -48,5 +53,11 @@ describe('useCustomCursor', () => {
     })
     // Элемент не привязан к ref — слушатели не вешаются, состояние не меняется.
     expect(result.current.state).toBe('default')
+  })
+
+  it('в режиме forced-colors выключен', () => {
+    stubMatchMedia(true, false, true)
+    const { result } = renderHook(() => useCustomCursor())
+    expect(result.current.enabled).toBe(false)
   })
 })

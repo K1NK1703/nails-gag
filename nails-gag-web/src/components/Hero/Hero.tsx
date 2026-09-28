@@ -33,7 +33,7 @@ export function Hero() {
                 srcSet="/portrait-240.webp 240w, /portrait-480.webp 480w"
                 sizes="88px"
                 width={240}
-                height={276}
+                height={240}
                 alt=""
                 loading="eager"
                 fetchPriority="high"

@@ -2,16 +2,11 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  height: var(--header-h);
-}
-
-/* При переходе между страницами шапка захватывается отдельно от
-   ::view-transition-old/new(root) (см. global.css), иначе мигала бы вместе со страницей.
-   Имя ставится только на время перехода (TransitionLink вешает data-nav-transition на <html>):
-   элемент с view-transition-name становится backdrop root и иначе ломал бы размытие
-   мобильного меню. */
-:global(html[data-nav-transition]) .header {
-  view-transition-name: header;
+  min-height: var(--header-h);
+  /* Тон стекла — на самом sticky-элементе, не на ::before: Safari 26 красит зону статус-бара
+     по background-color закреплённого сверху элемента (псевдоэлементы не смотрит). Без него
+     Safari снимал пиксели и прыгал между сплошной полосой и просветом под Dynamic Island. */
+  background-color: var(--glass-bg-strong);
 }
 
 /* Liquid Glass шапки — на псевдоэлементе: элемент с backdrop-filter становится
@@ -21,19 +16,21 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background-color: var(--glass-bg-strong);
   background-image: var(--glass-specular);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
   border-bottom: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
 .inner {
-  height: 100%;
+  min-height: var(--header-h);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-2) var(--space-4);
+  /* при крупном тексте (зум, настройки шрифта) пункты переносятся, а не вылезают за экран */
+  padding-block: var(--space-2);
 }
 
 .logo {
@@ -114,14 +111,13 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   padding: 8px 14px;
   border-radius: var(--radius-pill);
   background-color: var(--glass-bg);
   background-image: var(--glass-specular);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
   box-shadow: var(--glass-shadow);
   color: var(--ink);
   font-weight: 600;
@@ -160,7 +156,7 @@
   border-radius: 50%;
   object-fit: cover;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
@@ -239,7 +235,7 @@
 
 @media (max-width: 767px) {
   .inner {
-    gap: var(--space-2);
+    column-gap: var(--space-2);
   }
 
   .cta {
@@ -247,27 +243,19 @@
     font-size: 0.95rem;
   }
 
-  /* на мобильном вход — круглая стеклянная кнопка только с иконкой/аватаром */
-  .account,
-  .account[data-user='true'] {
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
+  /* на мобильном вход в кабинет — только в меню: в строке шапки лого, тема, запись, бургер */
+  .account {
+    display: none;
+  }
+
+  /* переключатель темы прижат вправо, перед «Записаться» */
+  .theme {
     order: 1;
+    margin-left: auto;
   }
 
   .cta {
     order: 2;
-  }
-
-  .accountLabel {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 
   .divider {
@@ -293,7 +281,7 @@
     flex-direction: column;
     gap: 2px;
     position: absolute;
-    top: calc(var(--header-h) + 8px);
+    top: calc(100% + 8px);
     left: var(--gutter);
     right: var(--gutter);
     padding: 8px;
@@ -301,11 +289,9 @@
     background-color: var(--glass-bg-strong);
     background-image: var(--glass-specular);
     border: 1px solid var(--glass-border);
-    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    box-shadow:
-      0 18px 40px rgba(43, 37, 40, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+    box-shadow: var(--shadow-hover), var(--glass-highlight);
     opacity: 0;
     translate: 0 -8px;
     visibility: hidden;
@@ -353,15 +339,15 @@
 
   .nav a:focus-visible,
   .nav a:active {
-    background-color: rgba(255, 255, 255, 0.55);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background-color: var(--pill-hover-bg);
+    box-shadow: var(--pill-hover-highlight);
   }
 }
 
 @media (max-width: 767px) and (hover: hover) {
   .nav a:hover {
-    background-color: rgba(255, 255, 255, 0.55);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background-color: var(--pill-hover-bg);
+    box-shadow: var(--pill-hover-highlight);
   }
 }
 
@@ -374,9 +360,26 @@
     padding: 8px 12px;
   }
 
-  /* на узких экранах стрелка не помещается в одну строку со входом и бургером */
+  /* на узких экранах стрелка не помещается в одну строку с темой и бургером */
   .cta span {
     display: none;
+  }
+}
+
+/* 320px: лого, тема, «Записаться» и бургер — в одну строку */
+@media (max-width: 359px) {
+  .inner {
+    column-gap: 6px;
+  }
+
+  .logo {
+    gap: 6px;
+    font-size: 0.95rem;
+  }
+
+  .cta {
+    padding: 8px 10px;
+    font-size: 0.875rem;
   }
 }
 
@@ -389,5 +392,28 @@
   }
   .account {
     margin-left: 0;
+  }
+}
+
+/* Windows High Contrast: полоски бургера нарисованы фоном — задаём системный цвет явно */
+@media (forced-colors: active) {
+  .burger {
+    border-color: ButtonText;
+  }
+
+  .burger span,
+  .burger span::before,
+  .burger span::after {
+    forced-color-adjust: none;
+    background-color: ButtonText;
+  }
+
+  .burger[data-open='true'] span {
+    background-color: transparent;
+  }
+
+  .nav a::after {
+    forced-color-adjust: none;
+    background: LinkText;
   }
 }
