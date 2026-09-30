@@ -16,10 +16,13 @@ dist/
 dist-ssr/
 *.log
 
-# gradle / java (for the future backend)
+# gradle / java
 .gradle/
 build/
 out/
+.kotlin/
+*.class
+*.hprof
 
 # env
 .env
