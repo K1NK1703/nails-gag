@@ -27,6 +27,11 @@ management:
   tracing:
     sampling:
       probability: 1.0
+  otlp:
+    metrics:
+      export:
+        # Иначе OtlpMeterRegistry шлёт метрики на localhost:4318 по умолчанию; включает профиль observability.
+        enabled: false
 
 logging:
   structured:

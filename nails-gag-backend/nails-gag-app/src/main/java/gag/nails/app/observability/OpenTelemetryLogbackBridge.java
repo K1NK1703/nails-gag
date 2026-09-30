@@ -1,7 +1,8 @@
-package gag.nails.observability;
+package gag.nails.app.observability;
 
 import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.Appender;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender;
 import org.slf4j.LoggerFactory;
@@ -29,12 +30,15 @@ class OpenTelemetryLogbackBridge implements InitializingBean, DisposableBean {
 
     @Override
     public void afterPropertiesSet() {
-        LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
-        Logger root = context.getLogger(Logger.ROOT_LOGGER_NAME);
+        Logger root = rootLogger();
         // Повторный контекст в тестах не должен множить appender-ы.
-        root.detachAppender(APPENDER_NAME);
+        Appender<ILoggingEvent> previous = root.getAppender(APPENDER_NAME);
+        if (previous != null) {
+            root.detachAppender(previous);
+            previous.stop();
+        }
         appender.setName(APPENDER_NAME);
-        appender.setContext(context);
+        appender.setContext(root.getLoggerContext());
         appender.setOpenTelemetry(openTelemetry);
         appender.start();
         root.addAppender(appender);
@@ -42,8 +46,11 @@ class OpenTelemetryLogbackBridge implements InitializingBean, DisposableBean {
 
     @Override
     public void destroy() {
-        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        root.detachAppender(appender);
+        rootLogger().detachAppender(appender);
         appender.stop();
+    }
+
+    private static Logger rootLogger() {
+        return (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     }
 }
