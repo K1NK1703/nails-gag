@@ -22,6 +22,8 @@ services:
     profiles: ["observability"]
     ports:
       - "3000:3000"   # Grafana (admin/admin)
+      - "3100:3100"   # Loki HTTP API
+      - "3200:3200"   # Tempo HTTP API
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
 

@@ -2,6 +2,8 @@
 springBoot = "4.1.1"
 springModulith = "2.1.1"
 archunit = "1.5.1"
+# Инструментация OTel: 2.28.x собрана под OpenTelemetry 1.62, как в BOM Spring Boot 4.1.1
+opentelemetryInstrumentation = "2.28.1-alpha"
 palantirJavaFormat = "2.100.0"
 spotless = "8.10.3"
 foojay = "1.0.0"
@@ -19,6 +21,8 @@ spring-boot-starter-validation = { module = "org.springframework.boot:spring-boo
 spring-boot-starter-liquibase = { module = "org.springframework.boot:spring-boot-starter-liquibase" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-starter-opentelemetry = { module = "org.springframework.boot:spring-boot-starter-opentelemetry" }
+# Boot не связывает Logback с SdkLoggerProvider сам; логи в OTLP уходят через этот appender
+opentelemetry-logback-appender = { module = "io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0", version.ref = "opentelemetryInstrumentation" }
 spring-boot-docker-compose = { module = "org.springframework.boot:spring-boot-docker-compose" }
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }

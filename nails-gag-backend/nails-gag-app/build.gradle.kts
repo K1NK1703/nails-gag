@@ -12,6 +12,8 @@ dependencies {
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.liquibase)
     implementation(libs.spring.boot.starter.actuator)
+    implementation(libs.spring.boot.starter.opentelemetry)
+    implementation(libs.opentelemetry.logback.appender)
     implementation(libs.spring.modulith.starter.core)
     runtimeOnly(libs.postgresql)
 
