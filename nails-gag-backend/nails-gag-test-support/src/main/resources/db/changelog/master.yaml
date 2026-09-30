@@ -1,0 +1,7 @@
+# Тестовый мастер-changelog: подхватывает changelog'и всех модулей, оказавшихся на classpath.
+# Имена файлов в db/changelog/modules/ начинаются с номера — это порядок применения.
+databaseChangeLog:
+  - includeAll:
+      path: db/changelog/modules
+      relativeToChangelogFile: false
+      errorIfMissingOrEmpty: false
