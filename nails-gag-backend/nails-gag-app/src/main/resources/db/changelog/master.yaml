@@ -1,0 +1,5 @@
+# Мастер-changelog приложения: changelog'и модулей подключаются по имени файла в порядке номеров.
+databaseChangeLog:
+  - includeAll:
+      path: db/changelog/modules
+      relativeToChangelogFile: false
