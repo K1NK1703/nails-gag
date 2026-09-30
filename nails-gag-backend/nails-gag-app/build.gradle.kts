@@ -35,3 +35,8 @@ springBoot {
 tasks.bootJar {
     archiveFileName = "app.jar"
 }
+
+// bootRun работает из корня проекта, иначе профиль local не найдёт compose.yaml.
+tasks.bootRun {
+    workingDir = rootDir
+}

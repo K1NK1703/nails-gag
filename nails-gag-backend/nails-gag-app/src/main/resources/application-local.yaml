@@ -1,0 +1,11 @@
+# Профиль local: читаемые логи вместо JSON, Compose поднимает базу сам.
+spring:
+  docker:
+    compose:
+      file: compose.yaml
+      lifecycle-management: start-only
+
+logging:
+  structured:
+    format:
+      console:
