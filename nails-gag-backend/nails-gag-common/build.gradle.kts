@@ -5,4 +5,5 @@ plugins {
 dependencies {
     api(libs.spring.boot.starter)
     api(libs.spring.boot.starter.validation)
+    api(libs.spring.modulith.starter.core)
 }
