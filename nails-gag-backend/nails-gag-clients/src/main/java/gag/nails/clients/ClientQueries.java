@@ -37,4 +37,7 @@ public interface ClientQueries {
 
     /** Журнал согласий клиента, новые первыми. Мастер или сам клиент. */
     List<ConsentView> consents(UUID clientId, Actor actor);
+
+    /** Журнал изменений признака предоплаты, новые первыми. Только мастер. */
+    List<PrepaymentFlagChangeView> prepaymentHistory(UUID clientId, Actor actor);
 }

@@ -4,6 +4,7 @@ import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientView;
 import gag.nails.clients.ConsentKind;
 import gag.nails.clients.ConsentView;
+import gag.nails.clients.PrepaymentFlagChangeView;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import java.util.List;
@@ -24,12 +25,17 @@ class DefaultClientQueries implements ClientQueries {
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
+    private final PrepaymentFlagChangeRepository flagChanges;
     private final DefaultDocumentVersionService documents;
 
     DefaultClientQueries(
-            ClientRepository clients, ConsentRepository consents, DefaultDocumentVersionService documents) {
+            ClientRepository clients,
+            ConsentRepository consents,
+            PrepaymentFlagChangeRepository flagChanges,
+            DefaultDocumentVersionService documents) {
         this.clients = clients;
         this.consents = consents;
+        this.flagChanges = flagChanges;
         this.documents = documents;
     }
 
@@ -78,6 +84,14 @@ class DefaultClientQueries implements ClientQueries {
         actor.requireMasterOrSelf(clientId);
         return consents.findAllByClientIdOrderByGivenAtDesc(clientId).stream()
                 .map(ConsentEntity::toView)
+                .toList();
+    }
+
+    @Override
+    public List<PrepaymentFlagChangeView> prepaymentHistory(UUID clientId, Actor actor) {
+        actor.requireMaster();
+        return flagChanges.findAllByClientIdOrderByChangedAtDescIdDesc(clientId).stream()
+                .map(PrepaymentFlagChangeEntity::toView)
                 .toList();
     }
 }

@@ -8,7 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 
 interface PrepaymentFlagChangeRepository extends JpaRepository<PrepaymentFlagChangeEntity, UUID> {
 
-    List<PrepaymentFlagChangeEntity> findAllByClientIdOrderByChangedAtDesc(UUID clientId);
+    /** Новые первыми; при равном времени — по id (UUID v7 растёт со временем создания). */
+    List<PrepaymentFlagChangeEntity> findAllByClientIdOrderByChangedAtDescIdDesc(UUID clientId);
 
     @Modifying(flushAutomatically = true)
     @Query("update PrepaymentFlagChangeEntity c set c.clientId = :to where c.clientId = :from")

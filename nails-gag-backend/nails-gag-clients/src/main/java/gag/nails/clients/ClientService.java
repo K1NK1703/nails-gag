@@ -7,6 +7,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Команды над клиентами. Мастер действует над любым клиентом, клиент — только над собой
@@ -59,4 +60,21 @@ public interface ClientService {
      * @throws ClientNotFoundException если клиента нет
      */
     void recordConsent(UUID clientId, RecordConsent command, Actor actor);
+
+    /**
+     * Изменение признака по правилу системы — вызывает модуль записей (поздняя отмена, неявка,
+     * выполненный визит с предоплатой). Причины мастера ({@code MASTER_*}, {@code MERGED}) здесь
+     * недопустимы.
+     *
+     * @throws ValidationException если причина зарезервирована за мастером
+     * @throws ClientNotFoundException если клиента нет
+     */
+    void applySystemPrepaymentChange(UUID clientId, PrepaymentFlagChange change);
+
+    /**
+     * Мастер ставит или снимает признак вручную, с необязательным комментарием.
+     *
+     * @throws ClientNotFoundException если клиента нет
+     */
+    void setPrepaymentRequired(UUID clientId, boolean required, @Nullable String comment, Actor actor);
 }
