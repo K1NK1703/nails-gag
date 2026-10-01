@@ -9,7 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 
 interface ConsentRepository extends JpaRepository<ConsentEntity, UUID> {
 
-    List<ConsentEntity> findAllByClientIdOrderByGivenAtDesc(UUID clientId);
+    /** Новые первыми; при равном времени — по id (UUID v7 растёт со временем создания). */
+    List<ConsentEntity> findAllByClientIdOrderByGivenAtDescIdDesc(UUID clientId);
 
     boolean existsByClientIdAndKindAndDocumentVersion(UUID clientId, ConsentKind kind, String documentVersion);
 

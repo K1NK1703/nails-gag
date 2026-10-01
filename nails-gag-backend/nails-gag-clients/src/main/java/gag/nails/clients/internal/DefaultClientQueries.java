@@ -82,7 +82,7 @@ class DefaultClientQueries implements ClientQueries {
     @Override
     public List<ConsentView> consents(UUID clientId, Actor actor) {
         actor.requireMasterOrSelf(clientId);
-        return consents.findAllByClientIdOrderByGivenAtDesc(clientId).stream()
+        return consents.findAllByClientIdOrderByGivenAtDescIdDesc(clientId).stream()
                 .map(ConsentEntity::toView)
                 .toList();
     }

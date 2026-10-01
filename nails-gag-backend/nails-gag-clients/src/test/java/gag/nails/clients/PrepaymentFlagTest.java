@@ -98,6 +98,18 @@ class PrepaymentFlagTest {
     }
 
     @Test
+    void repeatedReasonIsJournaledWithoutChangingTheFlag() {
+        clients.applySystemPrepaymentChange(
+                maria.id(), new PrepaymentFlagChange(true, PrepaymentFlagReason.NO_SHOW, null, null));
+        clock.advance(Duration.ofMinutes(1));
+        clients.applySystemPrepaymentChange(
+                maria.id(), new PrepaymentFlagChange(true, PrepaymentFlagReason.NO_SHOW, null, null));
+
+        assertThat(queries.get(maria.id(), master).prepaymentRequired()).isTrue();
+        assertThat(queries.prepaymentHistory(maria.id(), master)).hasSize(2);
+    }
+
+    @Test
     void clientSeesOwnFlagButNotHistoryAndCannotChangeIt() {
         var me = Actor.client(maria.id());
 

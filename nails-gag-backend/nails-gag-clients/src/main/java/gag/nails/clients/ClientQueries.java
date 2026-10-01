@@ -32,7 +32,10 @@ public interface ClientQueries {
      */
     Optional<String> masterNote(UUID clientId, Actor actor);
 
-    /** Есть ли у клиента согласия всех перечисленных видов на действующие версии документов. Без проверки прав. */
+    /**
+     * Есть ли у клиента согласия всех перечисленных видов на действующие версии документов. Без
+     * проверки прав. Пустой набор — {@code true}; для несуществующего клиента — {@code false}.
+     */
     boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds);
 
     /** Журнал согласий клиента, новые первыми. Мастер или сам клиент. */

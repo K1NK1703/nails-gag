@@ -62,6 +62,7 @@ class ClientMergeTest {
                 .extracting(PrepaymentFlagChangeView::reason)
                 .containsExactly(PrepaymentFlagReason.MERGED, PrepaymentFlagReason.NO_SHOW);
         assertThat(queries.byId(card.id())).isEmpty();
+        assertThat(queries.byPhone("+79211234567")).map(ClientView::id).contains(registered.id());
         assertThat(events.ofType(ClientMerged.class)
                         .matching(e -> e.removedClientId().equals(card.id())
                                 && e.survivorClientId().equals(registered.id())))
@@ -94,6 +95,27 @@ class ClientMergeTest {
         assertThat(survivor.phone()).isEqualTo("+79211234567");
         assertThat(survivor.prepaymentRequired()).isFalse();
         assertThat(queries.prepaymentHistory(target.id(), master)).isEmpty();
+        assertThat(queries.byPhone("+79211234567")).map(ClientView::id).contains(target.id());
+    }
+
+    @Test
+    void survivorKeepsOwnPhoneFlagAndAppendsNote() {
+        var target = clients.create(new CreateClient("Мария", null, null, "+79211234567", null, null), master);
+        var source = clients.create(new CreateClient("Маша", null, null, "+79219876543", null, null), master);
+        clients.updateMasterNote(target.id(), "квадрат", master);
+        clients.updateMasterNote(source.id(), "аллергия на гель", master);
+        clients.setPrepaymentRequired(target.id(), true, null, master);
+        clients.setPrepaymentRequired(source.id(), true, null, master);
+
+        clock.advance(Duration.ofMinutes(1));
+        clients.merge(source.id(), target.id(), master);
+
+        assertThat(queries.byPhone("+79211234567")).map(ClientView::id).contains(target.id());
+        assertThat(queries.byPhone("+79219876543")).isEmpty();
+        assertThat(queries.masterNote(target.id(), master)).contains("квадрат\nаллергия на гель");
+        assertThat(queries.prepaymentHistory(target.id(), master))
+                .extracting(PrepaymentFlagChangeView::reason)
+                .containsExactly(PrepaymentFlagReason.MASTER_SET, PrepaymentFlagReason.MASTER_SET);
     }
 
     @Test

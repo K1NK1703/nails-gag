@@ -32,12 +32,12 @@ import org.springframework.transaction.annotation.Transactional;
 class DefaultClientService implements ClientService {
 
     /** Причины, которые ставит только мастер или объединение; правилу системы они недоступны. */
-    private static final Set<PrepaymentFlagReason> SYSTEM_REASONS_EXCLUDED = EnumSet.of(
+    private static final Set<PrepaymentFlagReason> MASTER_ONLY_REASONS = EnumSet.of(
             PrepaymentFlagReason.MASTER_SET, PrepaymentFlagReason.MASTER_WAIVED, PrepaymentFlagReason.MERGED);
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
-    private final PrepaymentFlagChangeRepository flagChanges;
+    private final PrepaymentFlagJournal flagJournal;
     private final DefaultDocumentVersionService documents;
     private final ClientMerger merger;
     private final CommandValidator validator;
@@ -46,14 +46,14 @@ class DefaultClientService implements ClientService {
     DefaultClientService(
             ClientRepository clients,
             ConsentRepository consents,
-            PrepaymentFlagChangeRepository flagChanges,
+            PrepaymentFlagJournal flagJournal,
             DefaultDocumentVersionService documents,
             ClientMerger merger,
             CommandValidator validator,
             Clock clock) {
         this.clients = clients;
         this.consents = consents;
-        this.flagChanges = flagChanges;
+        this.flagJournal = flagJournal;
         this.documents = documents;
         this.merger = merger;
         this.validator = validator;
@@ -130,17 +130,23 @@ class DefaultClientService implements ClientService {
     @Override
     public void applySystemPrepaymentChange(UUID clientId, PrepaymentFlagChange change) {
         validator.requireValid(change);
-        if (SYSTEM_REASONS_EXCLUDED.contains(change.reason())) {
+        if (MASTER_ONLY_REASONS.contains(change.reason())) {
             throw new ValidationException("reason", "reserved for the master");
         }
-        changeFlag(require(clientId), change, ChangedBy.SYSTEM);
+        flagJournal.record(
+                require(clientId),
+                change.required(),
+                change.reason(),
+                ChangedBy.SYSTEM,
+                change.bookingId(),
+                change.comment());
     }
 
     @Override
     public void setPrepaymentRequired(UUID clientId, boolean required, @Nullable String comment, Actor actor) {
         actor.requireMaster();
         var reason = required ? PrepaymentFlagReason.MASTER_SET : PrepaymentFlagReason.MASTER_WAIVED;
-        changeFlag(require(clientId), new PrepaymentFlagChange(required, reason, null, comment), ChangedBy.MASTER);
+        flagJournal.record(require(clientId), required, reason, ChangedBy.MASTER, null, comment);
     }
 
     @Override
@@ -150,19 +156,6 @@ class DefaultClientService implements ClientService {
             throw new ValidationException("targetId", "must differ from sourceId");
         }
         return merger.merge(require(sourceId), require(targetId));
-    }
-
-    /** Каждое изменение попадает в журнал, даже если значение признака не поменялось: это история причин. */
-    private void changeFlag(ClientEntity client, PrepaymentFlagChange change, ChangedBy setBy) {
-        client.setPrepaymentRequired(change.required());
-        flagChanges.save(new PrepaymentFlagChangeEntity(
-                client.id(),
-                change.required(),
-                change.reason(),
-                setBy,
-                change.bookingId(),
-                change.comment(),
-                clock.instant()));
     }
 
     /** Карточка от мастера с тем же телефоном становится аккаунтом клиента; её данные важнее данных провайдера. */

@@ -16,6 +16,7 @@ class ClientMerger {
     private final ClientRepository clients;
     private final ConsentRepository consents;
     private final PrepaymentFlagChangeRepository flagChanges;
+    private final PrepaymentFlagJournal flagJournal;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -23,26 +24,28 @@ class ClientMerger {
             ClientRepository clients,
             ConsentRepository consents,
             PrepaymentFlagChangeRepository flagChanges,
+            PrepaymentFlagJournal flagJournal,
             ApplicationEventPublisher events,
             Clock clock) {
         this.clients = clients;
         this.consents = consents;
         this.flagChanges = flagChanges;
+        this.flagJournal = flagJournal;
         this.events = events;
         this.clock = clock;
     }
 
     /**
-     * Остаётся клиент с аккаунтом; если аккаунта нет ни у кого — {@code second} (цель объединения).
+     * Остаётся клиент с аккаунтом; если аккаунта нет ни у кого — {@code target}.
      *
      * @throws MergeTwoAccountsException если аккаунт есть у обоих
      */
-    MergeResult merge(ClientEntity first, ClientEntity second) {
-        if (first.accountId().isPresent() && second.accountId().isPresent()) {
+    MergeResult merge(ClientEntity source, ClientEntity target) {
+        if (source.accountId().isPresent() && target.accountId().isPresent()) {
             throw new MergeTwoAccountsException();
         }
-        var survivor = first.accountId().isPresent() ? first : second;
-        var removed = survivor == first ? second : first;
+        var survivor = source.accountId().isPresent() ? source : target;
+        var removed = survivor == source ? target : source;
 
         var removedPhone = removed.phone().orElse(null);
         var flagToCarry = removed.prepaymentRequired() && !survivor.prepaymentRequired();
@@ -57,9 +60,7 @@ class ClientMerger {
             survivor.setPhone(removedPhone);
         }
         if (flagToCarry) {
-            survivor.setPrepaymentRequired(true);
-            flagChanges.save(new PrepaymentFlagChangeEntity(
-                    survivor.id(), true, PrepaymentFlagReason.MERGED, ChangedBy.MASTER, null, null, clock.instant()));
+            flagJournal.record(survivor, true, PrepaymentFlagReason.MERGED, ChangedBy.MASTER, null, null);
         }
         events.publishEvent(new ClientMerged(removed.id(), survivor.id(), clock.instant()));
         return new MergeResult(survivor.id(), removed.id());
