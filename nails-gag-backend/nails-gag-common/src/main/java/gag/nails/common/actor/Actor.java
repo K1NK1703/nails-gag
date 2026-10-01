@@ -58,6 +58,13 @@ public record Actor(Set<Role> roles, @Nullable UUID clientId) {
         }
     }
 
+    /** Мастер действует над любым клиентом, клиент — только над собой. */
+    public void requireMasterOrSelf(UUID clientId) {
+        if (!isMaster() && !isClient(clientId)) {
+            throw new AccessDeniedException();
+        }
+    }
+
     public UUID requireClientId() {
         return client().orElseThrow(AccessDeniedException::new);
     }

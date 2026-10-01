@@ -9,6 +9,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.modulith.test.ApplicationModuleTest.BootstrapMode;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestExecutionListeners;
+import org.springframework.test.context.TestExecutionListeners.MergeMode;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -17,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
  * идёт в транзакции с откатом, поэтому тесты не видят данных друг друга. Транзакция не
  * фиксируется: ограничения БД срабатывают только при flush (JPQL-запрос или явный {@code
  * flush()}), а слушатели {@code AFTER_COMMIT} не вызываются — события проверяются через {@code
- * PublishedEvents}.
+ * PublishedEvents}. Часы перед каждым тестом возвращаются на START.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -25,5 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 @ApplicationModuleTest(mode = BootstrapMode.DIRECT_DEPENDENCIES)
 @ActiveProfiles("test")
 @Import({PostgresTestcontainers.class, TestTimeConfiguration.class})
+@TestExecutionListeners(listeners = ResetClockListener.class, mergeMode = MergeMode.MERGE_WITH_DEFAULTS)
 @Transactional
 public @interface ModuleTest {}
