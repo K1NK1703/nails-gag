@@ -107,6 +107,10 @@ class ClientEntity {
         return Optional.ofNullable(accountId);
     }
 
+    void attachAccount(UUID accountId) {
+        this.accountId = accountId;
+    }
+
     boolean prepaymentRequired() {
         return prepaymentRequired;
     }
