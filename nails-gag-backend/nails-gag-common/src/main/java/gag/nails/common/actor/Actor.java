@@ -5,14 +5,16 @@ import gag.nails.common.error.ValidationException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Кто выполняет действие. Все команды публичных API модулей принимают {@code Actor}.
  *
  * @param roles роли аккаунта, не пусто
- * @param clientId идентификатор клиента, если аккаунт вошёл как клиент; иначе {@code null}
+ * @param clientId идентификатор клиента, если аккаунт вошёл как клиент; иначе {@code null}; наружу
+ *     использовать {@link #client()}
  */
-public record Actor(Set<Role> roles, UUID clientId) {
+public record Actor(Set<Role> roles, @Nullable UUID clientId) {
 
     public Actor {
         if (roles.isEmpty()) {
@@ -52,6 +54,13 @@ public record Actor(Set<Role> roles, UUID clientId) {
 
     public void requireMaster() {
         if (!isMaster()) {
+            throw new AccessDeniedException();
+        }
+    }
+
+    /** Мастер действует над любым клиентом, клиент — только над собой. */
+    public void requireMasterOrSelf(UUID clientId) {
+        if (!isMaster() && !isClient(clientId)) {
             throw new AccessDeniedException();
         }
     }

@@ -91,7 +91,7 @@ SPRING_PROFILES_ACTIVE=local ./gradlew :nails-gag-app:bootRun   # поднима
 ./gradlew spotlessApply                           # форматирование
 ```
 
-Модули: `nails-gag-common` (роли, исключения, время), `nails-gag-test-support` (тестовая обвязка), `nails-gag-app` (запуск, конфигурация, миграции). Доменные модули добавляются по мере реализации.
+Модули: `nails-gag-common` (роли, исключения, время), `nails-gag-test-support` (тестовая обвязка), `nails-gag-app` (запуск, конфигурация, миграции). Доменные модули: `nails-gag-catalog` (услуги и дополнения, прайс), `nails-gag-clients` (клиенты, согласия и версии документов, признак предоплаты, объединение дублей).
 
 ### Профили
 

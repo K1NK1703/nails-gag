@@ -45,6 +45,15 @@ class ActorTest {
     }
 
     @Test
+    void requireMasterOrSelfAllowsMasterAndOwnerOnly() {
+        Actor.master().requireMasterOrSelf(CLIENT_ID);
+        Actor.client(CLIENT_ID).requireMasterOrSelf(CLIENT_ID);
+
+        assertThatThrownBy(() -> Actor.client(CLIENT_ID).requireMasterOrSelf(UUID.randomUUID()))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
     void requireClientIdRejectsActorWithoutClient() {
         assertThat(Actor.client(CLIENT_ID).requireClientId()).isEqualTo(CLIENT_ID);
         assertThatThrownBy(() -> Actor.master().requireClientId()).isInstanceOf(AccessDeniedException.class);

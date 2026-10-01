@@ -11,6 +11,9 @@ on:
       - "nails-gag-backend/**"
       - ".github/workflows/backend.yml"
 
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: nails-gag-backend
