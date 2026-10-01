@@ -20,15 +20,22 @@ public interface CatalogService {
     /** @throws ServiceNotFoundException если услуги нет */
     ServiceView update(UUID serviceId, UpdateService command, Actor actor);
 
+    /** @throws ServiceNotFoundException если услуги нет */
     void activate(UUID serviceId, Actor actor);
 
-    /** Скрытая услуга остаётся в истории записей, но недоступна для новых. */
+    /**
+     * Скрытая услуга остаётся в истории записей, но недоступна для новых.
+     *
+     * @throws ServiceNotFoundException если услуги нет
+     */
     void deactivate(UUID serviceId, Actor actor);
 
     /**
-     * Задаёт порядок прайса: позиции 0, 1, 2… в порядке списка. Услуги вне списка сохраняют
-     * свои позиции.
+     * Задаёт порядок прайса: перечисленные услуги получают позиции 0, 1, 2… в порядке списка,
+     * остальные следуют за ними, сохраняя прежний относительный порядок. Итог — сплошная
+     * нумерация без совпадающих позиций.
      *
+     * @throws ValidationException если в списке есть повторы
      * @throws ServiceNotFoundException если какой-то услуги нет
      */
     void reorder(List<UUID> orderedServiceIds, Actor actor);

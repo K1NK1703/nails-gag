@@ -6,8 +6,7 @@ import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,12 +44,11 @@ class DefaultCatalogQueries implements CatalogQueries {
 
     @Override
     public List<ServiceView> requireActive(List<UUID> serviceIds) {
-        var found = services.findAllByIdIn(serviceIds).stream()
-                .collect(Collectors.toMap(ServiceEntity::id, Function.identity()));
-        return serviceIds.stream().map(id -> requireActive(found.get(id), id)).toList();
+        var found = services.findByIds(serviceIds);
+        return serviceIds.stream().map(id -> activeView(found.get(id), id)).toList();
     }
 
-    private static ServiceView requireActive(ServiceEntity entity, UUID id) {
+    private static ServiceView activeView(@Nullable ServiceEntity entity, UUID id) {
         if (entity == null) {
             throw new ServiceNotFoundException(id);
         }

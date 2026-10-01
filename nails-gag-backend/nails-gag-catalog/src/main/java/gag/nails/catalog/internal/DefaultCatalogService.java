@@ -2,7 +2,6 @@ package gag.nails.catalog.internal;
 
 import gag.nails.catalog.CatalogService;
 import gag.nails.catalog.CreateService;
-import gag.nails.catalog.ServiceKind;
 import gag.nails.catalog.ServiceView;
 import gag.nails.catalog.UpdateService;
 import gag.nails.catalog.error.ServiceNotFoundException;
@@ -10,10 +9,8 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,8 +30,7 @@ class DefaultCatalogService implements CatalogService {
     public ServiceView create(CreateService command, Actor actor) {
         actor.requireMaster();
         validator.requireValid(command);
-        requireDurationMatchesKind(command.kind(), command.durationMinutes());
-        var entity = new ServiceEntity(command, (int) services.count());
+        var entity = new ServiceEntity(command, nextSortOrder());
         return services.save(entity).toView();
     }
 
@@ -43,7 +39,6 @@ class DefaultCatalogService implements CatalogService {
         actor.requireMaster();
         validator.requireValid(command);
         var entity = require(serviceId);
-        requireDurationMatchesKind(entity.kind(), command.durationMinutes());
         entity.apply(command);
         return entity.toView();
     }
@@ -63,15 +58,23 @@ class DefaultCatalogService implements CatalogService {
     @Override
     public void reorder(List<UUID> orderedServiceIds, Actor actor) {
         actor.requireMaster();
-        var byId = services.findAllByIdIn(orderedServiceIds).stream()
-                .collect(Collectors.toMap(ServiceEntity::id, Function.identity()));
-        for (int position = 0; position < orderedServiceIds.size(); position++) {
-            var id = orderedServiceIds.get(position);
-            var entity = byId.get(id);
+        if (Set.copyOf(orderedServiceIds).size() != orderedServiceIds.size()) {
+            throw new ValidationException("orderedServiceIds", "must not contain duplicates");
+        }
+        var listed = services.findByIds(orderedServiceIds);
+        var all = services.findAllByOrderBySortOrderAscTitleAsc();
+        var position = 0;
+        for (var id : orderedServiceIds) {
+            var entity = listed.get(id);
             if (entity == null) {
                 throw new ServiceNotFoundException(id);
             }
-            entity.setSortOrder(position);
+            entity.setSortOrder(position++);
+        }
+        for (var entity : all) {
+            if (!listed.containsKey(entity.id())) {
+                entity.setSortOrder(position++);
+            }
         }
     }
 
@@ -79,13 +82,9 @@ class DefaultCatalogService implements CatalogService {
         return services.findById(serviceId).orElseThrow(() -> new ServiceNotFoundException(serviceId));
     }
 
-    /** Длительность есть у основных услуг и только у них; дополнения слот не занимают. */
-    private static void requireDurationMatchesKind(ServiceKind kind, @Nullable Integer durationMinutes) {
-        if (kind == ServiceKind.MAIN && durationMinutes == null) {
-            throw new ValidationException("durationMinutes", "required for a main service");
-        }
-        if (kind == ServiceKind.ADDON && durationMinutes != null) {
-            throw new ValidationException("durationMinutes", "not allowed for an add-on");
-        }
+    private int nextSortOrder() {
+        return services.findFirstByOrderBySortOrderDesc()
+                .map(last -> last.sortOrder() + 1)
+                .orElse(0);
     }
 }

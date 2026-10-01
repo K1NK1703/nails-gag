@@ -107,6 +107,44 @@ class CatalogServiceTest {
                 .isInstanceOf(ServiceNotFoundException.class);
     }
 
+    @Test
+    void reorderRejectsDuplicateIds() {
+        assertThatThrownBy(() -> catalog.reorder(List.of(FRENCH, MANICURE, FRENCH), master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e ->
+                        assertThat(((ValidationException) e).params()).containsEntry("field", "orderedServiceIds"));
+    }
+
+    @Test
+    void reorderKeepsUnlistedServicesAfterListedOnes() {
+        catalog.reorder(List.of(DESIGN), master);
+
+        var all = queries.all();
+        assertThat(all).extracting(ServiceView::id).containsExactly(DESIGN, MANICURE, FRENCH);
+        assertThat(all).extracting(ServiceView::sortOrder).containsExactly(0, 1, 2);
+    }
+
+    @Test
+    void updatePersistsChanges() {
+        catalog.update(
+                FRENCH,
+                new UpdateService(
+                        "Френч",
+                        "Классический или цветной — на ваш выбор",
+                        new BigDecimal("350.00"),
+                        null,
+                        "Доп. покрытие",
+                        true,
+                        false),
+                master);
+
+        var french = queries.all().stream()
+                .filter(s -> s.id().equals(FRENCH))
+                .findFirst()
+                .orElseThrow();
+        assertThat(french.price()).isEqualByComparingTo("350.00");
+    }
+
     private static CreateService mainService(String title, Integer duration) {
         return new CreateService(
                 ServiceKind.MAIN, title, "", new BigDecimal("3000.00"), duration, "Основная услуга", true, false);

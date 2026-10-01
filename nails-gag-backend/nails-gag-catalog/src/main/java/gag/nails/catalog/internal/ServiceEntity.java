@@ -4,6 +4,7 @@ import gag.nails.catalog.CreateService;
 import gag.nails.catalog.ServiceKind;
 import gag.nails.catalog.ServiceView;
 import gag.nails.catalog.UpdateService;
+import gag.nails.common.error.ValidationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -42,6 +43,7 @@ class ServiceEntity {
     private boolean highlightOnLanding;
     private boolean active;
 
+    // Аудит, не бизнес-время: бизнес-время берётся только из Clock.
     @CreationTimestamp
     @Column(updatable = false)
     private Instant createdAt;
@@ -65,8 +67,12 @@ class ServiceEntity {
                 command.highlightOnLanding()));
     }
 
-    /** {@code final}: вызывается из конструктора, иначе javac предупреждает о this-escape. */
+    /**
+     * Применяет правку, проверив инвариант «длительность есть у основных услуг и только у них».
+     * {@code final}: вызывается из конструктора, иначе javac предупреждает о this-escape.
+     */
     final void apply(UpdateService command) {
+        requireDurationMatchesKind(kind, command.durationMinutes());
         this.title = command.title();
         this.description = command.description();
         this.price = command.price();
@@ -96,6 +102,10 @@ class ServiceEntity {
         return title;
     }
 
+    int sortOrder() {
+        return sortOrder;
+    }
+
     boolean active() {
         return active;
     }
@@ -113,5 +123,15 @@ class ServiceEntity {
                 showOnLanding,
                 highlightOnLanding,
                 active);
+    }
+
+    /** Дополнения слот не занимают, поэтому длительности у них нет. */
+    private static void requireDurationMatchesKind(ServiceKind kind, @Nullable Integer durationMinutes) {
+        if (kind == ServiceKind.MAIN && durationMinutes == null) {
+            throw new ValidationException("durationMinutes", "required for a main service");
+        }
+        if (kind == ServiceKind.ADDON && durationMinutes != null) {
+            throw new ValidationException("durationMinutes", "not allowed for an add-on");
+        }
     }
 }
