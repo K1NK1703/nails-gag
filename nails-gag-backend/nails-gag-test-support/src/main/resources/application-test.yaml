@@ -4,7 +4,7 @@ spring:
     hibernate:
       ddl-auto: validate
   liquibase:
-    change-log: classpath:db/changelog/master.yaml
+    change-log: classpath:db/changelog/test-master.yaml
 nails-gag:
   time-zone: Europe/Moscow
 logging:
