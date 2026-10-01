@@ -20,4 +20,5 @@ rootProject.name = "nails-gag-backend"
 
 include("nails-gag-common")
 include("nails-gag-test-support")
+include("nails-gag-catalog")
 include("nails-gag-app")

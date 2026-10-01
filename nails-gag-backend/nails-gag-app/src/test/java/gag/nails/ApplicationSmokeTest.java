@@ -53,4 +53,13 @@ class ApplicationSmokeTest {
     void clockRunsInSalonTimeZone() {
         assertThat(clock.getZone().getId()).isEqualTo("Europe/Moscow");
     }
+
+    @Test
+    void catalogIsSeeded() {
+        var services = jdbc.sql("select count(*) from catalog.service")
+                .query(Integer.class)
+                .single();
+
+        assertThat(services).isEqualTo(3);
+    }
 }

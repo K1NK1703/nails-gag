@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(project(":nails-gag-common"))
+    implementation(project(":nails-gag-catalog"))
 
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.data.jpa)
