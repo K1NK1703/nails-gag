@@ -36,7 +36,7 @@ class CatalogServiceTest {
         assertThat(created.id()).isNotNull();
         assertThat(created.sortOrder()).isEqualTo(3);
         assertThat(created.active()).isTrue();
-        assertThat(queries.all()).extracting(ServiceView::title).endsWith("Педикюр");
+        assertThat(queries.all(master)).extracting(ServiceView::title).endsWith("Педикюр");
     }
 
     @Test
@@ -82,7 +82,7 @@ class CatalogServiceTest {
         assertThat(updated.kind()).isEqualTo(ServiceKind.ADDON);
         assertThat(updated.title()).isEqualTo("Френч цветной");
         assertThat(updated.price()).isEqualByComparingTo("350.00");
-        assertThat(queries.byId(FRENCH).title()).isEqualTo("Френч цветной");
+        assertThat(queries.get(FRENCH).title()).isEqualTo("Френч цветной");
     }
 
     @Test
@@ -98,7 +98,7 @@ class CatalogServiceTest {
     void reorderAssignsPositionsInGivenOrder() {
         catalog.reorder(List.of(DESIGN, FRENCH, MANICURE), master);
 
-        assertThat(queries.all()).extracting(ServiceView::id).containsExactly(DESIGN, FRENCH, MANICURE);
+        assertThat(queries.all(master)).extracting(ServiceView::id).containsExactly(DESIGN, FRENCH, MANICURE);
     }
 
     @Test
@@ -119,7 +119,7 @@ class CatalogServiceTest {
     void reorderKeepsUnlistedServicesAfterListedOnes() {
         catalog.reorder(List.of(DESIGN), master);
 
-        var all = queries.all();
+        var all = queries.all(master);
         assertThat(all).extracting(ServiceView::id).containsExactly(DESIGN, MANICURE, FRENCH);
         assertThat(all).extracting(ServiceView::sortOrder).containsExactly(0, 1, 2);
     }
@@ -138,7 +138,7 @@ class CatalogServiceTest {
                         false),
                 master);
 
-        var french = queries.all().stream()
+        var french = queries.all(master).stream()
                 .filter(s -> s.id().equals(FRENCH))
                 .findFirst()
                 .orElseThrow();

@@ -2,14 +2,20 @@ package gag.nails.catalog;
 
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.common.actor.Actor;
+import gag.nails.common.error.AccessDeniedException;
 import java.util.List;
 import java.util.UUID;
 
-/** Чтение каталога. Доступно без ограничений по ролям: прайс публичный. */
+/** Чтение каталога. Прайс публичный: доступно без ограничений по ролям, кроме отмеченных методов. */
 public interface CatalogQueries {
 
-    /** Все услуги, включая скрытые, в порядке прайса — для админки. */
-    List<ServiceView> all();
+    /**
+     * Все услуги, включая скрытые, в порядке прайса. Только мастер.
+     *
+     * @throws AccessDeniedException если действует не мастер
+     */
+    List<ServiceView> all(Actor actor);
 
     /** Активные услуги в порядке прайса — для формы записи. */
     List<ServiceView> activeServices();
@@ -18,7 +24,7 @@ public interface CatalogQueries {
     List<ServiceView> landingPriceList();
 
     /** @throws ServiceNotFoundException если услуги нет */
-    ServiceView byId(UUID serviceId);
+    ServiceView get(UUID serviceId);
 
     /**
      * Услуги по идентификаторам в том же порядке, что запрошены.

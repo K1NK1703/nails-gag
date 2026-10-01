@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.common.actor.Actor;
+import gag.nails.common.error.AccessDeniedException;
 import gag.nails.testsupport.ModuleTest;
 import java.math.BigDecimal;
 import java.util.List;
@@ -18,6 +20,7 @@ class CatalogQueriesTest {
 
     private static final UUID MANICURE = UUID.fromString("019a0c00-0000-7000-8000-000000000001");
     private static final UUID FRENCH = UUID.fromString("019a0c00-0000-7000-8000-000000000002");
+    private static final Actor MASTER = Actor.master();
 
     @Autowired
     CatalogQueries queries;
@@ -43,12 +46,18 @@ class CatalogQueriesTest {
                 .update();
 
         assertThat(queries.activeServices()).extracting(ServiceView::title).doesNotContain("Френч");
-        assertThat(queries.all()).extracting(ServiceView::title).contains("Френч");
+        assertThat(queries.all(MASTER)).extracting(ServiceView::title).contains("Френч");
+    }
+
+    @Test
+    void allIsMasterOnly() {
+        assertThatThrownBy(() -> queries.all(Actor.client(UUID.randomUUID())))
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
     void byIdReturnsFullView() {
-        var manicure = queries.byId(MANICURE);
+        var manicure = queries.get(MANICURE);
 
         assertThat(manicure.kind()).isEqualTo(ServiceKind.MAIN);
         assertThat(manicure.price()).isEqualByComparingTo(new BigDecimal("2500.00"));
@@ -60,7 +69,7 @@ class CatalogQueriesTest {
     void unknownIdIsReported() {
         var missing = UUID.randomUUID();
 
-        assertThatThrownBy(() -> queries.byId(missing))
+        assertThatThrownBy(() -> queries.get(missing))
                 .isInstanceOf(ServiceNotFoundException.class)
                 .satisfies(
                         e -> assertThat(((ServiceNotFoundException) e).params()).containsEntry("serviceId", missing));

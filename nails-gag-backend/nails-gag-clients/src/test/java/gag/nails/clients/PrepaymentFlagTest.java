@@ -84,6 +84,15 @@ class PrepaymentFlagTest {
     }
 
     @Test
+    void masterCommentIsLimited() {
+        var tooLong = "к".repeat(501);
+
+        assertThatThrownBy(() -> clients.setPrepaymentRequired(maria.id(), true, tooLong, master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "comment"));
+    }
+
+    @Test
     void historyIsOrderedNewestFirst() {
         clients.applySystemPrepaymentChange(
                 maria.id(), new PrepaymentFlagChange(true, PrepaymentFlagReason.NO_SHOW, null, null));

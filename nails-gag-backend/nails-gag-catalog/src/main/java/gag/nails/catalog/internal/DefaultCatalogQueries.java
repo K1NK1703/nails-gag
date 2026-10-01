@@ -4,6 +4,7 @@ import gag.nails.catalog.CatalogQueries;
 import gag.nails.catalog.ServiceView;
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.common.actor.Actor;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -21,7 +22,8 @@ class DefaultCatalogQueries implements CatalogQueries {
     }
 
     @Override
-    public List<ServiceView> all() {
+    public List<ServiceView> all(Actor actor) {
+        actor.requireMaster();
         return views(services.findAllByOrderBySortOrderAscTitleAsc());
     }
 
@@ -36,7 +38,7 @@ class DefaultCatalogQueries implements CatalogQueries {
     }
 
     @Override
-    public ServiceView byId(UUID serviceId) {
+    public ServiceView get(UUID serviceId) {
         return services.findById(serviceId)
                 .map(ServiceEntity::toView)
                 .orElseThrow(() -> new ServiceNotFoundException(serviceId));

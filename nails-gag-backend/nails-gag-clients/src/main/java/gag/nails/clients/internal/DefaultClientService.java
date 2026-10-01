@@ -35,6 +35,9 @@ class DefaultClientService implements ClientService {
     private static final Set<PrepaymentFlagReason> MASTER_ONLY_REASONS = EnumSet.of(
             PrepaymentFlagReason.MASTER_SET, PrepaymentFlagReason.MASTER_WAIVED, PrepaymentFlagReason.MERGED);
 
+    /** Та же граница, что у {@link PrepaymentFlagChange#comment()}. */
+    private static final int MAX_COMMENT_LENGTH = 500;
+
     private final ClientRepository clients;
     private final ConsentRepository consents;
     private final PrepaymentFlagJournal flagJournal;
@@ -98,8 +101,8 @@ class DefaultClientService implements ClientService {
     @Override
     public ClientView changePhone(UUID clientId, String phone, Actor actor) {
         actor.requireMaster();
-        var client = require(clientId);
         var normalized = Phones.require(phone);
+        var client = require(clientId);
         requirePhoneFree(normalized, clientId);
         client.setPhone(normalized);
         return client.toView();
@@ -145,6 +148,9 @@ class DefaultClientService implements ClientService {
     @Override
     public void setPrepaymentRequired(UUID clientId, boolean required, @Nullable String comment, Actor actor) {
         actor.requireMaster();
+        if (comment != null && comment.length() > MAX_COMMENT_LENGTH) {
+            throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
+        }
         var reason = required ? PrepaymentFlagReason.MASTER_SET : PrepaymentFlagReason.MASTER_WAIVED;
         flagJournal.record(require(clientId), required, reason, ChangedBy.MASTER, null, comment);
     }

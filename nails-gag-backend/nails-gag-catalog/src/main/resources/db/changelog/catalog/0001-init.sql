@@ -7,11 +7,11 @@ CREATE SCHEMA IF NOT EXISTS catalog;
 --comment: услуги и дополнения; записи хранят снимок названия и цены, поэтому услуги не удаляются, а скрываются
 CREATE TABLE catalog.service (
     id                   uuid PRIMARY KEY,
-    kind                 varchar(16)    NOT NULL CHECK (kind IN ('MAIN', 'ADDON')),
+    kind                 varchar(16)    NOT NULL CONSTRAINT service_kind_check CHECK (kind IN ('MAIN', 'ADDON')),
     title                varchar(200)   NOT NULL,
     description          text           NOT NULL DEFAULT '',
-    price                numeric(12, 2) NOT NULL CHECK (price >= 0),
-    duration_minutes     integer        CHECK (duration_minutes > 0),
+    price                numeric(12, 2) NOT NULL CONSTRAINT service_price_check CHECK (price >= 0),
+    duration_minutes     integer        CONSTRAINT service_duration_minutes_check CHECK (duration_minutes > 0),
     category             varchar(100)   NOT NULL,
     sort_order           integer        NOT NULL DEFAULT 0,
     show_on_landing      boolean        NOT NULL DEFAULT false,
