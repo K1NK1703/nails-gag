@@ -10,13 +10,13 @@ CREATE TABLE clients.client (
     first_name          varchar(100) NOT NULL,
     last_name           varchar(100),
     patronymic          varchar(100),
-    phone               varchar(16) UNIQUE,
+    phone               varchar(16) CONSTRAINT client_phone_key UNIQUE,
     email               varchar(254),
     birth_day           integer CHECK (birth_day BETWEEN 1 AND 31),
     birth_month         integer CHECK (birth_month BETWEEN 1 AND 12),
     master_note         text,
     source              varchar(32) NOT NULL CHECK (source IN ('SELF_REGISTERED', 'ADDED_BY_MASTER')),
-    account_id          uuid UNIQUE,
+    account_id          uuid CONSTRAINT client_account_id_key UNIQUE,
     prepayment_required boolean NOT NULL DEFAULT false,
     created_at          timestamptz NOT NULL,
     updated_at          timestamptz NOT NULL
@@ -44,7 +44,8 @@ CREATE TABLE clients.document_version (
     kind           varchar(16) NOT NULL CHECK (kind IN ('POLICY', 'OFFER')),
     version        varchar(64) NOT NULL,
     effective_from date NOT NULL,
-    UNIQUE (kind, version)
+    CONSTRAINT document_version_kind_version_key UNIQUE (kind, version),
+    CONSTRAINT document_version_kind_effective_from_key UNIQUE (kind, effective_from)
 );
 
 --changeset nails-gag:clients-0001-consent

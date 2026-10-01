@@ -8,12 +8,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional(readOnly = true)
 class DefaultClientQueries implements ClientQueries {
+
+    /** Спецсимволы LIKE и сам символ экранирования из {@link ClientRepository#search}. */
+    private static final Pattern LIKE_SPECIALS = Pattern.compile("[%_!]");
 
     private final ClientRepository clients;
 
@@ -23,7 +27,7 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public ClientView get(UUID clientId, Actor actor) {
-        DefaultClientService.requireMasterOrSelf(actor, clientId);
+        actor.requireMasterOrSelf(clientId);
         return byId(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
     }
 
@@ -34,13 +38,15 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public Optional<ClientView> byPhone(String phone) {
-        return Phones.normalize(phone).flatMap(clients::findByPhone).map(ClientEntity::toView);
+        return Phones.parse(phone).flatMap(clients::findByPhone).map(ClientEntity::toView);
     }
 
     @Override
     public List<ClientView> search(String query, Actor actor) {
         actor.requireMaster();
-        var pattern = "%" + query.strip().toLowerCase(Locale.ROOT) + "%";
+        var fragment = query.strip();
+        var needle = Phones.prefix(fragment).orElseGet(() -> fragment.toLowerCase(Locale.ROOT));
+        var pattern = "%" + LIKE_SPECIALS.matcher(needle).replaceAll("!$0") + "%";
         return clients.search(pattern).stream().map(ClientEntity::toView).toList();
     }
 

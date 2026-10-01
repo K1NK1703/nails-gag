@@ -12,13 +12,16 @@ interface ClientRepository extends JpaRepository<ClientEntity, UUID> {
 
     Optional<ClientEntity> findByAccountId(UUID accountId);
 
-    /** {@code pattern} — уже в нижнем регистре и с {@code %} по краям. */
+    /**
+     * {@code pattern} — уже в нижнем регистре, с {@code %} по краям; {@code %}, {@code _} и {@code !}
+     * внутри экранированы {@code !}.
+     */
     @Query("""
             select c from ClientEntity c
-            where lower(c.firstName) like :pattern
-               or lower(c.lastName) like :pattern
-               or c.phone like :pattern
-            order by c.firstName, c.lastName
+            where lower(c.firstName) like :pattern escape '!'
+               or lower(c.lastName) like :pattern escape '!'
+               or c.phone like :pattern escape '!'
+            order by c.firstName, c.lastName, c.id
             """)
     List<ClientEntity> search(String pattern);
 }

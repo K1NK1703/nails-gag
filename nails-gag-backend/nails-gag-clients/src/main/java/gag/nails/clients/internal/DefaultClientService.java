@@ -8,8 +8,8 @@ import gag.nails.clients.UpdateClient;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.actor.Actor;
-import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.validation.CommandValidator;
+import java.util.Objects;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
@@ -39,11 +39,15 @@ class DefaultClientService implements ClientService {
     @Override
     public ClientView register(RegisterClient command) {
         validator.requireValid(command);
+        var own = clients.findByAccountId(command.accountId());
+        if (own.isPresent()) {
+            return own.get().toView();
+        }
         var phone = Phones.normalize(command.phone()).orElse(null);
         if (phone != null) {
-            var existing = clients.findByPhone(phone);
-            if (existing.isPresent()) {
-                return attachAccount(existing.get(), command);
+            var sameNumber = clients.findByPhone(phone);
+            if (sameNumber.isPresent()) {
+                return attachAccount(sameNumber.get(), command);
             }
         }
         return clients.save(ClientEntity.registered(command, phone)).toView();
@@ -51,7 +55,7 @@ class DefaultClientService implements ClientService {
 
     @Override
     public ClientView update(UUID clientId, UpdateClient command, Actor actor) {
-        requireMasterOrSelf(actor, clientId);
+        actor.requireMasterOrSelf(clientId);
         validator.requireValid(command);
         var client = require(clientId);
         client.apply(command);
@@ -61,9 +65,9 @@ class DefaultClientService implements ClientService {
     @Override
     public ClientView changePhone(UUID clientId, String phone, Actor actor) {
         actor.requireMaster();
+        var client = require(clientId);
         var normalized = Phones.require(phone);
         requirePhoneFree(normalized, clientId);
-        var client = require(clientId);
         client.setPhone(normalized);
         return client.toView();
     }
@@ -71,7 +75,7 @@ class DefaultClientService implements ClientService {
     @Override
     public void updateMasterNote(UUID clientId, String note, Actor actor) {
         actor.requireMaster();
-        require(clientId).setMasterNote(note.isBlank() ? null : note.strip());
+        require(clientId).setMasterNote(note);
     }
 
     /** Карточка от мастера с тем же телефоном становится аккаунтом клиента; её данные важнее данных провайдера. */
@@ -87,18 +91,14 @@ class DefaultClientService implements ClientService {
         if (phone == null) {
             return;
         }
-        clients.findByPhone(phone).filter(other -> !other.id().equals(ownerId)).ifPresent(other -> {
-            throw new PhoneTakenException(phone);
-        });
+        clients.findByPhone(phone)
+                .filter(other -> !Objects.equals(other.id(), ownerId))
+                .ifPresent(other -> {
+                    throw new PhoneTakenException(phone);
+                });
     }
 
     private ClientEntity require(UUID clientId) {
         return clients.findById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
-    }
-
-    static void requireMasterOrSelf(Actor actor, UUID clientId) {
-        if (!actor.isMaster() && !actor.isClient(clientId)) {
-            throw new AccessDeniedException();
-        }
     }
 }

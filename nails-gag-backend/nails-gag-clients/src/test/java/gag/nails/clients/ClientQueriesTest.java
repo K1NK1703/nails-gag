@@ -57,6 +57,21 @@ class ClientQueriesTest {
     }
 
     @Test
+    void searchEscapesLikeWildcards() {
+        assertThat(queries.search("%", master)).isEmpty();
+        assertThat(queries.search("_", master)).isEmpty();
+        assertThat(queries.search("!", master)).isEmpty();
+    }
+
+    @Test
+    void searchFindsPhoneTypedWithEight() {
+        assertThat(queries.search("8 (921) 987", master))
+                .extracting(ClientView::id)
+                .containsExactly(anna.id());
+        assertThat(queries.search("8921", master)).extracting(ClientView::id).containsExactly(anna.id(), maria.id());
+    }
+
+    @Test
     void searchIsForMasterOnly() {
         assertThatThrownBy(() -> queries.search("мар", Actor.client(maria.id())))
                 .isInstanceOf(AccessDeniedException.class);

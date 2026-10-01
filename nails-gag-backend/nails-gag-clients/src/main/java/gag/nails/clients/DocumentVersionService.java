@@ -1,9 +1,9 @@
 package gag.nails.clients;
 
+import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
-import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -22,6 +22,7 @@ public interface DocumentVersionService {
      * Только мастер ({@link AccessDeniedException} иначе).
      *
      * @throws DocumentVersionExistsException если такая версия уже есть
+     * @throws DocumentVersionDateTakenException если у документа уже есть редакция с этой датой начала
      */
-    DocumentVersionView addVersion(DocumentKind kind, String version, LocalDate effectiveFrom, Actor actor);
+    DocumentVersionView addVersion(AddDocumentVersion command, Actor actor);
 }

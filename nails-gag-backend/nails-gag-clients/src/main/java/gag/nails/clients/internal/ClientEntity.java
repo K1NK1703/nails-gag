@@ -99,8 +99,9 @@ class ClientEntity {
         return Optional.ofNullable(masterNote);
     }
 
-    void setMasterNote(@Nullable String masterNote) {
-        this.masterNote = masterNote;
+    /** Пустая заметка стирается, края обрезаются. */
+    void setMasterNote(String masterNote) {
+        this.masterNote = masterNote.isBlank() ? null : masterNote.strip();
     }
 
     Optional<UUID> accountId() {
@@ -119,7 +120,10 @@ class ClientEntity {
         this.prepaymentRequired = prepaymentRequired;
     }
 
-    /** Переносит на этого клиента то, чего у него нет, с удаляемого дубля. */
+    /**
+     * Переносит на этого клиента то, чего у него нет, с удаляемого дубля — кроме телефона и признака
+     * предоплаты: ими занимается объединение.
+     */
     void absorb(ClientEntity other) {
         if (lastName == null) lastName = other.lastName;
         if (patronymic == null) patronymic = other.patronymic;

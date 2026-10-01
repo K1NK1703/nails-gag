@@ -125,6 +125,58 @@ class ClientServiceTest {
     }
 
     @Test
+    void tenDigitPhoneIsNormalized() {
+        var created = clients.create(new CreateClient("Мария", null, null, "921.123.45.67", null, null), master);
+
+        assertThat(created.phone()).isEqualTo("+79211234567");
+    }
+
+    @Test
+    void repeatedRegistrationReturnsTheSameClient() {
+        var accountId = UUID.randomUUID();
+        var first = clients.register(new RegisterClient(accountId, "Мария", "+79211234567", null));
+
+        var second = clients.register(new RegisterClient(accountId, "Maria", "+79990000001", "m@example.com"));
+
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(second.phone()).isEqualTo("+79211234567");
+        assertThat(second.firstName()).isEqualTo("Мария");
+        assertThat(second.email()).isNull();
+        assertThat(queries.byPhone("+79990000001")).isEmpty();
+    }
+
+    @Test
+    void registrationWithPhoneOfRegisteredClientIsRejected() {
+        clients.register(new RegisterClient(UUID.randomUUID(), "Мария", "+79211234567", null));
+
+        assertThatThrownBy(() ->
+                        clients.register(new RegisterClient(UUID.randomUUID(), "Другая", "8 921 123-45-67", null)))
+                .isInstanceOf(PhoneTakenException.class);
+    }
+
+    @Test
+    void changePhoneToTakenNumberIsRejected() {
+        var maria = clients.create(new CreateClient("Мария", null, null, "+79211234567", null, null), master);
+        var other = clients.create(new CreateClient("Аня", null, null, null, null, null), master);
+
+        assertThatThrownBy(() -> clients.changePhone(other.id(), "8 921 123-45-67", master))
+                .isInstanceOf(PhoneTakenException.class);
+        assertThat(clients.changePhone(maria.id(), "8 921 123-45-67", master).phone())
+                .isEqualTo("+79211234567");
+    }
+
+    @Test
+    void blankNoteErasesIt() {
+        var me = clients.create(new CreateClient("Мария", null, null, null, null, null), master);
+
+        clients.updateMasterNote(me.id(), "  любит короткий квадрат  ", master);
+        assertThat(queries.masterNote(me.id(), master)).contains("любит короткий квадрат");
+
+        clients.updateMasterNote(me.id(), "   ", master);
+        assertThat(queries.masterNote(me.id(), master)).isEmpty();
+    }
+
+    @Test
     void unknownClientIsReported() {
         var missing = UUID.randomUUID();
 

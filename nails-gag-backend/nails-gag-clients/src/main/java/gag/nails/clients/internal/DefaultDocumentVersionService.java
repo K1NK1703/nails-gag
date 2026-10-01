@@ -1,14 +1,16 @@
 package gag.nails.clients.internal;
 
+import gag.nails.clients.AddDocumentVersion;
 import gag.nails.clients.DocumentKind;
 import gag.nails.clients.DocumentVersionService;
 import gag.nails.clients.DocumentVersionView;
+import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
 import gag.nails.clients.internal.error.DocumentVersionMissingException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.time.SalonTimeZone;
+import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
-import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,11 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 class DefaultDocumentVersionService implements DocumentVersionService {
 
     private final DocumentVersionRepository versions;
+    private final CommandValidator validator;
     private final Clock clock;
     private final SalonTimeZone salonTimeZone;
 
-    DefaultDocumentVersionService(DocumentVersionRepository versions, Clock clock, SalonTimeZone salonTimeZone) {
+    DefaultDocumentVersionService(
+            DocumentVersionRepository versions, CommandValidator validator, Clock clock, SalonTimeZone salonTimeZone) {
         this.versions = versions;
+        this.validator = validator;
         this.clock = clock;
         this.salonTimeZone = salonTimeZone;
     }
@@ -42,12 +47,17 @@ class DefaultDocumentVersionService implements DocumentVersionService {
     }
 
     @Override
-    public DocumentVersionView addVersion(DocumentKind kind, String version, LocalDate effectiveFrom, Actor actor) {
+    public DocumentVersionView addVersion(AddDocumentVersion command, Actor actor) {
         actor.requireMaster();
-        if (versions.existsByKindAndVersion(kind, version)) {
-            throw new DocumentVersionExistsException(kind, version);
+        validator.requireValid(command);
+        var kind = command.kind();
+        if (versions.existsByKindAndVersion(kind, command.version())) {
+            throw new DocumentVersionExistsException(kind, command.version());
         }
-        return versions.save(new DocumentVersionEntity(kind, version, effectiveFrom))
+        if (versions.existsByKindAndEffectiveFrom(kind, command.effectiveFrom())) {
+            throw new DocumentVersionDateTakenException(kind, command.effectiveFrom());
+        }
+        return versions.save(new DocumentVersionEntity(kind, command.version(), command.effectiveFrom()))
                 .toView();
     }
 
@@ -58,7 +68,7 @@ class DefaultDocumentVersionService implements DocumentVersionService {
 
     private DocumentVersionEntity currentEntity(DocumentKind kind) {
         var today = salonTimeZone.dayOf(clock.instant());
-        return versions.findFirstByKindAndEffectiveFromLessThanEqualOrderByEffectiveFromDesc(kind, today)
+        return versions.findFirstByKindAndEffectiveFromLessThanEqualOrderByEffectiveFromDescIdDesc(kind, today)
                 .orElseThrow(() -> new DocumentVersionMissingException(kind));
     }
 }
