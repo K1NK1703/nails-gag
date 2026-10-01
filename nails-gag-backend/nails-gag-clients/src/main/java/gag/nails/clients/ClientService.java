@@ -2,6 +2,7 @@ package gag.nails.clients;
 
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
+import gag.nails.clients.error.MergeTwoAccountsException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
@@ -77,4 +78,17 @@ public interface ClientService {
      * @throws ClientNotFoundException если клиента нет
      */
     void setPrepaymentRequired(UUID clientId, boolean required, @Nullable String comment, Actor actor);
+
+    /**
+     * Объединяет двух клиентов — один человек, заведённый дважды. Остаётся тот, у кого есть аккаунт
+     * (если ни у кого — {@code targetId}); к нему переходят записи журналов, заметка мастера и то из
+     * данных, чего у него не было; признак предоплаты — если был хотя бы у одного. Второй удаляется.
+     * Внутри транзакции публикуется {@link ClientMerged}, по которому другие модули переписывают ссылки.
+     * Только мастер.
+     *
+     * @throws MergeTwoAccountsException если аккаунт есть у обоих
+     * @throws ValidationException если это один и тот же клиент
+     * @throws ClientNotFoundException если одного из клиентов нет
+     */
+    MergeResult merge(UUID sourceId, UUID targetId, Actor actor);
 }

@@ -5,6 +5,7 @@ import gag.nails.clients.ClientService;
 import gag.nails.clients.ClientView;
 import gag.nails.clients.ConsentSource;
 import gag.nails.clients.CreateClient;
+import gag.nails.clients.MergeResult;
 import gag.nails.clients.PrepaymentFlagChange;
 import gag.nails.clients.PrepaymentFlagReason;
 import gag.nails.clients.RecordConsent;
@@ -38,6 +39,7 @@ class DefaultClientService implements ClientService {
     private final ConsentRepository consents;
     private final PrepaymentFlagChangeRepository flagChanges;
     private final DefaultDocumentVersionService documents;
+    private final ClientMerger merger;
     private final CommandValidator validator;
     private final Clock clock;
 
@@ -46,12 +48,14 @@ class DefaultClientService implements ClientService {
             ConsentRepository consents,
             PrepaymentFlagChangeRepository flagChanges,
             DefaultDocumentVersionService documents,
+            ClientMerger merger,
             CommandValidator validator,
             Clock clock) {
         this.clients = clients;
         this.consents = consents;
         this.flagChanges = flagChanges;
         this.documents = documents;
+        this.merger = merger;
         this.validator = validator;
         this.clock = clock;
     }
@@ -137,6 +141,15 @@ class DefaultClientService implements ClientService {
         actor.requireMaster();
         var reason = required ? PrepaymentFlagReason.MASTER_SET : PrepaymentFlagReason.MASTER_WAIVED;
         changeFlag(require(clientId), new PrepaymentFlagChange(required, reason, null, comment), ChangedBy.MASTER);
+    }
+
+    @Override
+    public MergeResult merge(UUID sourceId, UUID targetId, Actor actor) {
+        actor.requireMaster();
+        if (sourceId.equals(targetId)) {
+            throw new ValidationException("targetId", "must differ from sourceId");
+        }
+        return merger.merge(require(sourceId), require(targetId));
     }
 
     /** Каждое изменение попадает в журнал, даже если значение признака не поменялось: это история причин. */
