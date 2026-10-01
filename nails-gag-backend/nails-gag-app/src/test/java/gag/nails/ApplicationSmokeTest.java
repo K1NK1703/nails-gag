@@ -62,4 +62,13 @@ class ApplicationSmokeTest {
 
         assertThat(services).isEqualTo(3);
     }
+
+    @Test
+    void clientsSchemaIsMigrated() {
+        var versions = jdbc.sql("select count(*) from clients.document_version")
+                .query(Integer.class)
+                .single();
+
+        assertThat(versions).isEqualTo(2);
+    }
 }
