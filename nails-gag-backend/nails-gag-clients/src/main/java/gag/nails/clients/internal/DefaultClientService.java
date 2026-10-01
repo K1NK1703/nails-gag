@@ -2,13 +2,18 @@ package gag.nails.clients.internal;
 
 import gag.nails.clients.ClientService;
 import gag.nails.clients.ClientView;
+import gag.nails.clients.ConsentSource;
 import gag.nails.clients.CreateClient;
+import gag.nails.clients.RecordConsent;
 import gag.nails.clients.RegisterClient;
 import gag.nails.clients.UpdateClient;
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.validation.CommandValidator;
+import java.time.Clock;
 import java.util.Objects;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -20,11 +25,22 @@ import org.springframework.transaction.annotation.Transactional;
 class DefaultClientService implements ClientService {
 
     private final ClientRepository clients;
+    private final ConsentRepository consents;
+    private final DefaultDocumentVersionService documents;
     private final CommandValidator validator;
+    private final Clock clock;
 
-    DefaultClientService(ClientRepository clients, CommandValidator validator) {
+    DefaultClientService(
+            ClientRepository clients,
+            ConsentRepository consents,
+            DefaultDocumentVersionService documents,
+            CommandValidator validator,
+            Clock clock) {
         this.clients = clients;
+        this.consents = consents;
+        this.documents = documents;
         this.validator = validator;
+        this.clock = clock;
     }
 
     @Override
@@ -76,6 +92,22 @@ class DefaultClientService implements ClientService {
     public void updateMasterNote(UUID clientId, String note, Actor actor) {
         actor.requireMaster();
         require(clientId).setMasterNote(note);
+    }
+
+    @Override
+    public void recordConsent(UUID clientId, RecordConsent command, Actor actor) {
+        actor.requireMasterOrSelf(clientId);
+        validator.requireValid(command);
+        if (!actor.isMaster() && command.source() != ConsentSource.SITE_CHECKBOX) {
+            throw new AccessDeniedException();
+        }
+        var currentVersion = documents.currentVersion(command.kind().document());
+        if (!currentVersion.equals(command.documentVersion())) {
+            throw new ConsentVersionOutdatedException(command.kind(), currentVersion);
+        }
+        var client = require(clientId);
+        consents.save(new ConsentEntity(
+                client.id(), command.kind(), command.documentVersion(), command.source(), clock.instant()));
     }
 
     /** Карточка от мастера с тем же телефоном становится аккаунтом клиента; её данные важнее данных провайдера. */

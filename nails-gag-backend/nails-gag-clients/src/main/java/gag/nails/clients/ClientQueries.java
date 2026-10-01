@@ -4,6 +4,7 @@ import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** Чтение клиентов: мастер видит всех, клиент — только себя. */
@@ -30,4 +31,10 @@ public interface ClientQueries {
      * @throws ClientNotFoundException если клиента нет
      */
     Optional<String> masterNote(UUID clientId, Actor actor);
+
+    /** Есть ли у клиента согласия всех перечисленных видов на действующие версии документов. Без проверки прав. */
+    boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds);
+
+    /** Журнал согласий клиента, новые первыми. Мастер или сам клиент. */
+    List<ConsentView> consents(UUID clientId, Actor actor);
 }

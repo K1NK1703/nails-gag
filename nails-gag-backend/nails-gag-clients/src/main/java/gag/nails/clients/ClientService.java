@@ -1,6 +1,7 @@
 package gag.nails.clients;
 
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
@@ -49,4 +50,13 @@ public interface ClientService {
      * @throws ClientNotFoundException если клиента нет
      */
     void updateMasterNote(UUID clientId, String note, Actor actor);
+
+    /**
+     * Записывает согласие. Клиент — только своё и только {@link ConsentSource#SITE_CHECKBOX};
+     * мастер — любому клиенту и любым способом. Версия документа должна быть действующей.
+     *
+     * @throws ConsentVersionOutdatedException если версия не действующая; в параметрах — действующая
+     * @throws ClientNotFoundException если клиента нет
+     */
+    void recordConsent(UUID clientId, RecordConsent command, Actor actor);
 }

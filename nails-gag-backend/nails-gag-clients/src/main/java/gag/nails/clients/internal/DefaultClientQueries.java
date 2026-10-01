@@ -2,11 +2,14 @@ package gag.nails.clients.internal;
 
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientView;
+import gag.nails.clients.ConsentKind;
+import gag.nails.clients.ConsentView;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -20,9 +23,14 @@ class DefaultClientQueries implements ClientQueries {
     private static final Pattern LIKE_SPECIALS = Pattern.compile("[%_!]");
 
     private final ClientRepository clients;
+    private final ConsentRepository consents;
+    private final DefaultDocumentVersionService documents;
 
-    DefaultClientQueries(ClientRepository clients) {
+    DefaultClientQueries(
+            ClientRepository clients, ConsentRepository consents, DefaultDocumentVersionService documents) {
         this.clients = clients;
+        this.consents = consents;
+        this.documents = documents;
     }
 
     @Override
@@ -56,5 +64,20 @@ class DefaultClientQueries implements ClientQueries {
         return clients.findById(clientId)
                 .orElseThrow(() -> new ClientNotFoundException(clientId))
                 .masterNote();
+    }
+
+    @Override
+    public boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds) {
+        return kinds.stream()
+                .allMatch(kind -> consents.existsByClientIdAndKindAndDocumentVersion(
+                        clientId, kind, documents.currentVersion(kind.document())));
+    }
+
+    @Override
+    public List<ConsentView> consents(UUID clientId, Actor actor) {
+        actor.requireMasterOrSelf(clientId);
+        return consents.findAllByClientIdOrderByGivenAtDesc(clientId).stream()
+                .map(ConsentEntity::toView)
+                .toList();
     }
 }
