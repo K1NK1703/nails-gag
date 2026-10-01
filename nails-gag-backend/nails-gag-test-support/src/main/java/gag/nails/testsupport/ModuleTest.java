@@ -14,7 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Тест одного модуля с его прямыми зависимостями (например, {@code common} с его {@code Clock}),
  * настоящим PostgreSQL в Testcontainers, миграциями Liquibase и подставными часами. Каждый тест
- * идёт в транзакции с откатом, поэтому тесты не видят данных друг друга.
+ * идёт в транзакции с откатом, поэтому тесты не видят данных друг друга. Транзакция не
+ * фиксируется: ограничения БД срабатывают только при flush (JPQL-запрос или явный {@code
+ * flush()}), а слушатели {@code AFTER_COMMIT} не вызываются — события проверяются через {@code
+ * PublishedEvents}.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)

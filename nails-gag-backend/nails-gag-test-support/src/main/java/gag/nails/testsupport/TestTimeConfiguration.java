@@ -7,7 +7,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
-/** Подменяет {@link Clock} в тестах модулей: 1 октября 2026, 09:00 по Москве. */
+/** Подменяет {@link Clock} в тестах модулей: 1 октября 2026, 06:00 UTC (09:00 в поясе салона из профиля test). */
 @TestConfiguration(proxyBeanMethods = false)
 public class TestTimeConfiguration {
 
