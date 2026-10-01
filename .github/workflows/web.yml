@@ -1,0 +1,34 @@
+name: web
+
+on:
+  pull_request:
+    paths:
+      - "nails-gag-web/**"
+      - ".github/workflows/web.yml"
+  push:
+    branches: [main]
+    paths:
+      - "nails-gag-web/**"
+      - ".github/workflows/web.yml"
+
+defaults:
+  run:
+    working-directory: nails-gag-web
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: nails-gag-web/.nvmrc
+          cache: npm
+          cache-dependency-path: nails-gag-web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npx tsc -b
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run check-dist

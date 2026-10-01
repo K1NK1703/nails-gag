@@ -5,6 +5,7 @@
 | Папка | Что это |
 |---|---|
 | `nails-gag-web/` | лендинг: Vite + React + TypeScript, статическая сборка с пререндером |
+| `nails-gag-backend/` | бэкенд: Java 25, Spring Boot 4, модульный монолит, PostgreSQL |
 | `media/` | исходные фото (не в git) |
 | `legal/` | памятка по Роскомнадзору и шаблон договора поручения обработки |
 | `docs/` | спецификации и планы (не в git) |
@@ -80,3 +81,28 @@ nails-gag.ru {
     file_server
 }
 ```
+
+## Бэкенд
+
+```bash
+cd nails-gag-backend
+./gradlew check                                   # тесты, границы модулей, форматирование (нужен Docker)
+SPRING_PROFILES_ACTIVE=local ./gradlew :nails-gag-app:bootRun   # поднимает PostgreSQL через Compose, http://localhost:8080/actuator/health
+./gradlew spotlessApply                           # форматирование
+```
+
+Модули: `nails-gag-common` (роли, исключения, время), `nails-gag-test-support` (тестовая обвязка), `nails-gag-app` (запуск, конфигурация, миграции). Доменные модули добавляются по мере реализации.
+
+### Профили
+
+- `local` — читаемые логи, база из `compose.yaml`.
+- `observability` — экспорт трейсов, метрик и логов в `grafana/otel-lgtm`: `docker compose --profile observability up -d`, затем `SPRING_PROFILES_ACTIVE=local,observability ./gradlew :nails-gag-app:bootRun`, Grafana на http://localhost:3000 (admin/admin).
+- Без профилей — как в продакшене: логи в JSON, база из `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`.
+
+### Образ
+
+```bash
+./gradlew :nails-gag-app:bootJar && docker build -t nails-gag-backend .
+```
+
+CI (`.github/workflows/backend.yml`) собирает и публикует образ в `ghcr.io/k1nk1703/nails-gag/backend` на каждый push в `main`.

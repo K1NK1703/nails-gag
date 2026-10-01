@@ -1,0 +1,20 @@
+# Профиль observability: экспорт трейсов, метрик и логов по OTLP в grafana/otel-lgtm
+# (docker compose --profile observability up -d). Без этого профиля экспорт выключен.
+management:
+  opentelemetry:
+    resource-attributes:
+      service.name: nails-gag
+    tracing:
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces
+    logging:
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/logs
+  otlp:
+    metrics:
+      export:
+        enabled: true
+        url: http://localhost:4318/v1/metrics
+        step: 10s

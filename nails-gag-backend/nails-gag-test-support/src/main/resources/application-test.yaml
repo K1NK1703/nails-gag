@@ -1,0 +1,12 @@
+spring:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  liquibase:
+    change-log: classpath:db/changelog/master.yaml
+nails-gag:
+  time-zone: Europe/Moscow
+logging:
+  level:
+    liquibase: warn

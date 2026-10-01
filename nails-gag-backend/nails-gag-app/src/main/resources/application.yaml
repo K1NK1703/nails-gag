@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: nails-gag
+  threads:
+    virtual:
+      enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Схему ведёт Liquibase; Hibernate только сверяет сущности с ней.
+      ddl-auto: validate
+  liquibase:
+    change-log: classpath:db/changelog/master.yaml
+
+nails-gag:
+  time-zone: Europe/Moscow
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    metrics:
+      export:
+        # Иначе OtlpMeterRegistry шлёт метрики на localhost:4318 по умолчанию; включает профиль observability.
+        enabled: false
+
+logging:
+  structured:
+    format:
+      console: ecs

@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: nails_gag
+      POSTGRES_USER: nails_gag
+      POSTGRES_PASSWORD: nails_gag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nails_gag -d nails_gag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Grafana + Loki + Tempo + Prometheus + OTel-коллектор в одном контейнере, только для разработки.
+  # Запуск: docker compose --profile observability up -d
+  lgtm:
+    image: grafana/otel-lgtm:0.34.0
+    profiles: ["observability"]
+    ports:
+      - "3000:3000"   # Grafana (admin/admin)
+      - "3100:3100"   # Loki HTTP API
+      - "3200:3200"   # Tempo HTTP API
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+volumes:
+  postgres-data:
