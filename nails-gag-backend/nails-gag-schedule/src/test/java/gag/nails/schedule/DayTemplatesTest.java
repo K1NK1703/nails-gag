@@ -2,10 +2,12 @@ package gag.nails.schedule;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.schedule.error.DayTemplateNotFoundException;
 import gag.nails.schedule.error.TemplateNameTakenException;
 import gag.nails.schedule.error.TemplateOverlapException;
 import gag.nails.testsupport.ModuleTest;
@@ -169,6 +171,67 @@ class DayTemplatesTest {
                         () -> templates.createDayTemplate(new CreateDayTemplate("Обычный день", at("09:30")), client))
                 .isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> templates.dayTemplates(client)).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void deletingTheDefaultMakesTheNextCreatedTemplateDefault() {
+        var a = templates.createDayTemplate(new CreateDayTemplate("A", at("09:30")), master);
+        var b = templates.createDayTemplate(new CreateDayTemplate("B", at("10:00")), master);
+
+        templates.deleteDayTemplate(a.id(), master);
+        var c = templates.createDayTemplate(new CreateDayTemplate("C", at("11:00")), master);
+
+        assertThat(c.isDefault()).isTrue();
+        assertThat(templates.dayTemplates(master))
+                .extracting(DayTemplateView::id, DayTemplateView::isDefault)
+                .containsExactly(tuple(b.id(), false), tuple(c.id(), true));
+    }
+
+    @Test
+    void settingTheCurrentDefaultAgainIsANoOp() {
+        var usual = templates.createDayTemplate(new CreateDayTemplate("Обычный день", at("09:30")), master);
+        templates.createDayTemplate(new CreateDayTemplate("Короткий", at("10:00")), master);
+
+        var result = templates.setDefaultDayTemplate(usual.id(), master);
+
+        assertThat(result.isDefault()).isTrue();
+        assertThat(templates.dayTemplates(master))
+                .filteredOn(DayTemplateView::isDefault)
+                .extracting(DayTemplateView::id)
+                .containsExactly(usual.id());
+    }
+
+    @Test
+    void updateKeepsOwnNameButRejectsAnotherTemplatesName() {
+        var usual = templates.createDayTemplate(new CreateDayTemplate("Обычный день", at("09:30")), master);
+        templates.createDayTemplate(new CreateDayTemplate("Короткий", at("10:00")), master);
+
+        var same = templates.updateDayTemplate(usual.id(), new UpdateDayTemplate("Обычный день", at("12:00")), master);
+
+        assertThat(same.name()).isEqualTo("Обычный день");
+        assertThat(same.startTimes()).containsExactly(LocalTime.parse("12:00"));
+        assertThatThrownBy(() ->
+                        templates.updateDayTemplate(usual.id(), new UpdateDayTemplate("Короткий", at("12:00")), master))
+                .isInstanceOf(TemplateNameTakenException.class);
+    }
+
+    @Test
+    void applyCollapsesRepeatedDates() {
+        var template = templates.createDayTemplate(new CreateDayTemplate("Обычный день", at("09:30", "11:30")), master);
+
+        var result = schedule.applyDayTemplate(template.id(), List.of(MONDAY, MONDAY), master);
+
+        assertThat(result.created()).hasSize(2);
+        assertThat(result.created()).extracting(SlotView::day).containsOnly(MONDAY);
+        assertThat(result.skipped()).isEmpty();
+    }
+
+    @Test
+    void applyRequiresExistingTemplate() {
+        var missing = UUID.randomUUID();
+
+        assertThatThrownBy(() -> schedule.applyDayTemplate(missing, List.of(MONDAY), master))
+                .isInstanceOf(DayTemplateNotFoundException.class);
     }
 
     private static List<LocalTime> at(String... times) {

@@ -161,6 +161,42 @@ class WeekTemplatesTest {
         assertThatThrownBy(() -> templates.rotation(client)).isInstanceOf(AccessDeniedException.class);
     }
 
+    @Test
+    void updateWeekTemplateRequiresExistingDayTemplates() {
+        var usual = dayTemplate("Обычный день");
+        var week = templates.createWeekTemplate(new CreateWeekTemplate("Неделя А", workdays(usual, MONDAY)), master);
+
+        assertThatThrownBy(() -> templates.updateWeekTemplate(
+                        week.id(), new UpdateWeekTemplate("Неделя Б", Map.of(TUESDAY, UUID.randomUUID())), master))
+                .isInstanceOf(DayTemplateNotFoundException.class);
+        assertThat(templates.weekTemplates(master)).containsExactly(week);
+    }
+
+    @Test
+    void setRotationReplacesThePreviousOneCompletely() {
+        var usual = dayTemplate("Обычный день");
+        var a = weekTemplate("Неделя А", usual);
+        var b = weekTemplate("Неделя Б", usual);
+        templates.setRotation(new SetRotation(List.of(a, b), ANCHOR, 1), master);
+
+        var replaced = templates.setRotation(new SetRotation(List.of(b), ANCHOR.plusWeeks(1), 0), master);
+
+        assertThat(replaced).isEqualTo(new RotationView(List.of(b), ANCHOR.plusWeeks(1), 0));
+        assertThat(templates.rotation(master)).isEqualTo(replaced);
+    }
+
+    @Test
+    void deletingWeekTemplateFreesItsDayTemplate() {
+        var usual = dayTemplate("Обычный день");
+        var week = weekTemplate("Неделя А", usual);
+
+        templates.deleteWeekTemplate(week, master);
+        templates.deleteDayTemplate(usual, master);
+
+        assertThat(templates.weekTemplates(master)).isEmpty();
+        assertThat(templates.dayTemplates(master)).isEmpty();
+    }
+
     private UUID dayTemplate(String name) {
         var times = List.of(LocalTime.parse("09:30"), LocalTime.parse("11:30"));
         return templates

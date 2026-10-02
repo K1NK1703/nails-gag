@@ -9,7 +9,8 @@ import java.util.UUID;
 
 /**
  * Настройка ротации. {@code anchorMonday} — понедельник; {@code anchorIndex} — индекс шаблона из
- * {@code weekTemplateIds}, который приходится на эту неделю.
+ * {@code weekTemplateIds}, который приходится на эту неделю. Шаблон недели может повторяться в
+ * списке.
  */
 public record SetRotation(
         @NotEmpty List<@NotNull UUID> weekTemplateIds,

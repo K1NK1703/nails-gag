@@ -23,7 +23,8 @@ public interface ScheduleTemplates {
     List<DayTemplateView> dayTemplates(Actor actor);
 
     /**
-     * Создаёт шаблон дня в конце списка. Первый созданный шаблон становится шаблоном по умолчанию.
+     * Создаёт шаблон дня в конце списка. Если шаблона по умолчанию нет (список пуст или он удалён),
+     * созданный становится им.
      *
      * @throws TemplateNameTakenException если имя занято
      * @throws TemplateOverlapException если времена пересекаются при текущей длительности слота
@@ -44,7 +45,8 @@ public interface ScheduleTemplates {
     DayTemplateView updateDayTemplate(UUID templateId, UpdateDayTemplate command, Actor actor);
 
     /**
-     * Удаляет шаблон дня. Созданные по нему слоты остаются.
+     * Удаляет шаблон дня. Созданные по нему слоты остаются. Если удалён шаблон по умолчанию, по
+     * умолчанию не остаётся ни одного.
      *
      * @throws DayTemplateNotFoundException если шаблона нет
      * @throws DayTemplateInUseException если на шаблон ссылается шаблон недели

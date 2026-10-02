@@ -20,7 +20,9 @@ import gag.nails.schedule.error.WeekTemplateNotFoundException;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,8 +79,9 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
         if (dayTemplates.existsByNameAndIdNot(command.name(), templateId)) {
             throw new TemplateNameTakenException(command.name());
         }
+        var startTimes = checkedTimes(command.startTimes());
         template.rename(command.name());
-        template.setStartTimes(checkedTimes(command.startTimes()));
+        template.setStartTimes(startTimes);
         return template.toView();
     }
 
@@ -96,6 +99,9 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
     public DayTemplateView setDefaultDayTemplate(UUID templateId, Actor actor) {
         actor.requireMaster();
         var template = requireDayTemplate(templateId);
+        if (template.isDefault()) {
+            return template.toView();
+        }
         dayTemplates.findByDefaultTemplateTrue().ifPresent(current -> current.setDefault(false));
         // Частичный уникальный индекс day_template_default_key проверяется на каждом UPDATE:
         // снять флаг с прежнего шаблона надо до того, как поставить его новому.
@@ -120,9 +126,10 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
         if (weekTemplates.existsByName(command.name())) {
             throw new TemplateNameTakenException(command.name());
         }
-        requireDayTemplatesExist(command.days().values());
+        var days = byWeekday(command.days());
+        requireDayTemplatesExist(days.values());
         return weekTemplates
-                .save(WeekTemplateEntity.create(command.name(), command.days()))
+                .save(WeekTemplateEntity.create(command.name(), days))
                 .toView();
     }
 
@@ -134,9 +141,10 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
         if (weekTemplates.existsByNameAndIdNot(command.name(), templateId)) {
             throw new TemplateNameTakenException(command.name());
         }
-        requireDayTemplatesExist(command.days().values());
+        var days = byWeekday(command.days());
+        requireDayTemplatesExist(days.values());
         template.rename(command.name());
-        template.setDays(command.days());
+        template.setDays(days);
         return template.toView();
     }
 
@@ -167,12 +175,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
         if (command.anchorIndex() >= command.weekTemplateIds().size()) {
             throw new ValidationException("anchorIndex", "must point into weekTemplateIds");
         }
-        var found = weekTemplates.findByIds(command.weekTemplateIds());
-        for (var id : command.weekTemplateIds()) {
-            if (!found.containsKey(id)) {
-                throw new WeekTemplateNotFoundException(id);
-            }
-        }
+        requireWeekTemplatesExist(command.weekTemplateIds());
         var rotation = rotations.single();
         rotation.set(command.weekTemplateIds(), command.anchorMonday(), command.anchorIndex());
         return rotation.toView();
@@ -184,6 +187,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
         return sorted;
     }
 
+    /** Шаблоны дня из карты рабочих дней должны существовать; {@code ids} — в порядке дней недели. */
     private void requireDayTemplatesExist(Collection<UUID> ids) {
         var found = dayTemplates.findByIds(ids);
         for (var id : ids) {
@@ -191,6 +195,21 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
                 throw new DayTemplateNotFoundException(id);
             }
         }
+    }
+
+    /** Шаблоны недели из списка ротации должны существовать; {@code ids} — в порядке списка. */
+    private void requireWeekTemplatesExist(Collection<UUID> ids) {
+        var found = weekTemplates.findByIds(ids);
+        for (var id : ids) {
+            if (!found.containsKey(id)) {
+                throw new WeekTemplateNotFoundException(id);
+            }
+        }
+    }
+
+    /** Карта команды в порядке дней недели: так первый отсутствующий шаблон дня не зависит от реализации карты. */
+    private static Map<DayOfWeek, UUID> byWeekday(Map<DayOfWeek, UUID> days) {
+        return days.isEmpty() ? Map.of() : new EnumMap<>(days);
     }
 
     private DayTemplateEntity requireDayTemplate(UUID templateId) {

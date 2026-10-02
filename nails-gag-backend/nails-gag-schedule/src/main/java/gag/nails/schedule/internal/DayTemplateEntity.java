@@ -86,6 +86,10 @@ class DayTemplateEntity {
         return name;
     }
 
+    boolean isDefault() {
+        return defaultTemplate;
+    }
+
     int sortOrder() {
         return sortOrder;
     }
