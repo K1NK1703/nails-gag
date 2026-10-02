@@ -7,6 +7,8 @@ import gag.nails.schedule.error.DayTemplateInUseException;
 import gag.nails.schedule.error.DayTemplateNotFoundException;
 import gag.nails.schedule.error.TemplateNameTakenException;
 import gag.nails.schedule.error.TemplateOverlapException;
+import gag.nails.schedule.error.WeekTemplateInUseException;
+import gag.nails.schedule.error.WeekTemplateNotFoundException;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,4 +59,57 @@ public interface ScheduleTemplates {
      * @throws AccessDeniedException если действует не мастер
      */
     DayTemplateView setDefaultDayTemplate(UUID templateId, Actor actor);
+
+    /**
+     * Шаблоны недели по имени.
+     *
+     * @throws AccessDeniedException если действует не мастер
+     */
+    List<WeekTemplateView> weekTemplates(Actor actor);
+
+    /**
+     * Создаёт шаблон недели.
+     *
+     * @throws TemplateNameTakenException если имя занято
+     * @throws DayTemplateNotFoundException если какого-то шаблона дня из карты нет
+     * @throws ValidationException если имя пустое
+     * @throws AccessDeniedException если действует не мастер
+     */
+    WeekTemplateView createWeekTemplate(CreateWeekTemplate command, Actor actor);
+
+    /**
+     * Меняет имя и карту рабочих дней. Уже созданные слоты не меняются.
+     *
+     * @throws WeekTemplateNotFoundException если шаблона нет
+     * @throws TemplateNameTakenException если имя занято другим шаблоном
+     * @throws DayTemplateNotFoundException если какого-то шаблона дня из карты нет
+     * @throws ValidationException если имя пустое
+     * @throws AccessDeniedException если действует не мастер
+     */
+    WeekTemplateView updateWeekTemplate(UUID templateId, UpdateWeekTemplate command, Actor actor);
+
+    /**
+     * Удаляет шаблон недели.
+     *
+     * @throws WeekTemplateNotFoundException если шаблона нет
+     * @throws WeekTemplateInUseException если шаблон входит в ротацию
+     * @throws AccessDeniedException если действует не мастер
+     */
+    void deleteWeekTemplate(UUID templateId, Actor actor);
+
+    /**
+     * Текущая ротация; пустой список шаблонов — ротация не настроена.
+     *
+     * @throws AccessDeniedException если действует не мастер
+     */
+    RotationView rotation(Actor actor);
+
+    /**
+     * Задаёт ротацию целиком: порядок шаблонов недель и якорь.
+     *
+     * @throws WeekTemplateNotFoundException если какого-то шаблона недели нет
+     * @throws ValidationException если список пуст, якорь не понедельник или индекс вне списка
+     * @throws AccessDeniedException если действует не мастер
+     */
+    RotationView setRotation(SetRotation command, Actor actor);
 }

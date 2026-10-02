@@ -1,15 +1,25 @@
 package gag.nails.schedule.internal;
 
 import gag.nails.common.actor.Actor;
+import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
 import gag.nails.schedule.CreateDayTemplate;
+import gag.nails.schedule.CreateWeekTemplate;
 import gag.nails.schedule.DayTemplateView;
+import gag.nails.schedule.RotationView;
 import gag.nails.schedule.ScheduleTemplates;
+import gag.nails.schedule.SetRotation;
 import gag.nails.schedule.UpdateDayTemplate;
+import gag.nails.schedule.UpdateWeekTemplate;
+import gag.nails.schedule.WeekTemplateView;
 import gag.nails.schedule.error.DayTemplateInUseException;
 import gag.nails.schedule.error.DayTemplateNotFoundException;
 import gag.nails.schedule.error.TemplateNameTakenException;
+import gag.nails.schedule.error.WeekTemplateInUseException;
+import gag.nails.schedule.error.WeekTemplateNotFoundException;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -21,16 +31,19 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     private final DayTemplateRepository dayTemplates;
     private final WeekTemplateRepository weekTemplates;
+    private final RotationRepository rotations;
     private final SettingsRepository settings;
     private final CommandValidator validator;
 
     DefaultScheduleTemplates(
             DayTemplateRepository dayTemplates,
             WeekTemplateRepository weekTemplates,
+            RotationRepository rotations,
             SettingsRepository settings,
             CommandValidator validator) {
         this.dayTemplates = dayTemplates;
         this.weekTemplates = weekTemplates;
+        this.rotations = rotations;
         this.settings = settings;
         this.validator = validator;
     }
@@ -91,14 +104,101 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
         return template.toView();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<WeekTemplateView> weekTemplates(Actor actor) {
+        actor.requireMaster();
+        return weekTemplates.findAllByOrderByNameAsc().stream()
+                .map(WeekTemplateEntity::toView)
+                .toList();
+    }
+
+    @Override
+    public WeekTemplateView createWeekTemplate(CreateWeekTemplate command, Actor actor) {
+        actor.requireMaster();
+        validator.requireValid(command);
+        if (weekTemplates.existsByName(command.name())) {
+            throw new TemplateNameTakenException(command.name());
+        }
+        requireDayTemplatesExist(command.days().values());
+        return weekTemplates
+                .save(WeekTemplateEntity.create(command.name(), command.days()))
+                .toView();
+    }
+
+    @Override
+    public WeekTemplateView updateWeekTemplate(UUID templateId, UpdateWeekTemplate command, Actor actor) {
+        actor.requireMaster();
+        validator.requireValid(command);
+        var template = requireWeekTemplate(templateId);
+        if (weekTemplates.existsByNameAndIdNot(command.name(), templateId)) {
+            throw new TemplateNameTakenException(command.name());
+        }
+        requireDayTemplatesExist(command.days().values());
+        template.rename(command.name());
+        template.setDays(command.days());
+        return template.toView();
+    }
+
+    @Override
+    public void deleteWeekTemplate(UUID templateId, Actor actor) {
+        actor.requireMaster();
+        var template = requireWeekTemplate(templateId);
+        if (rotations.usesWeekTemplate(templateId)) {
+            throw new WeekTemplateInUseException(templateId);
+        }
+        weekTemplates.delete(template);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RotationView rotation(Actor actor) {
+        actor.requireMaster();
+        return rotations.single().toView();
+    }
+
+    @Override
+    public RotationView setRotation(SetRotation command, Actor actor) {
+        actor.requireMaster();
+        validator.requireValid(command);
+        if (command.anchorMonday().getDayOfWeek() != DayOfWeek.MONDAY) {
+            throw new ValidationException("anchorMonday", "must be a Monday");
+        }
+        if (command.anchorIndex() >= command.weekTemplateIds().size()) {
+            throw new ValidationException("anchorIndex", "must point into weekTemplateIds");
+        }
+        var found = weekTemplates.findByIds(command.weekTemplateIds());
+        for (var id : command.weekTemplateIds()) {
+            if (!found.containsKey(id)) {
+                throw new WeekTemplateNotFoundException(id);
+            }
+        }
+        var rotation = rotations.single();
+        rotation.set(command.weekTemplateIds(), command.anchorMonday(), command.anchorIndex());
+        return rotation.toView();
+    }
+
     private List<LocalTime> checkedTimes(List<LocalTime> startTimes) {
         var sorted = TemplateTimes.normalized(startTimes);
         TemplateTimes.requireNoOverlap(sorted, settings.single().slotDurationMinutes());
         return sorted;
     }
 
+    private void requireDayTemplatesExist(Collection<UUID> ids) {
+        var found = dayTemplates.findByIds(ids);
+        for (var id : ids) {
+            if (!found.containsKey(id)) {
+                throw new DayTemplateNotFoundException(id);
+            }
+        }
+    }
+
     private DayTemplateEntity requireDayTemplate(UUID templateId) {
         return dayTemplates.findById(templateId).orElseThrow(() -> new DayTemplateNotFoundException(templateId));
+    }
+
+    private WeekTemplateEntity requireWeekTemplate(UUID templateId) {
+        return weekTemplates.findById(templateId).orElseThrow(() -> new WeekTemplateNotFoundException(templateId));
     }
 
     private int nextSortOrder() {
