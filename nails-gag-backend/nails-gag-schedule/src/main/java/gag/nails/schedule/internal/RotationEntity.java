@@ -1,6 +1,7 @@
 package gag.nails.schedule.internal;
 
 import gag.nails.schedule.RotationView;
+import gag.nails.schedule.error.RotationNotConfiguredException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -30,6 +31,7 @@ class RotationEntity {
     private List<RotationWeekEntity> weeks = new ArrayList<>();
 
     // Аудит, не бизнес-время: бизнес-время берётся только из Clock.
+    // Меняется только при UPDATE самой строки: правка одной лишь коллекции его не сдвигает.
     @UpdateTimestamp
     private Instant updatedAt;
 
@@ -60,6 +62,10 @@ class RotationEntity {
 
     /** Индекс шаблона недели для недели с данным понедельником: от якоря вперёд и назад по кругу. */
     int templateIndexFor(LocalDate monday) {
+        // floorMod по нулю не должен утекать наружу ArithmeticException.
+        if (weeks.isEmpty()) {
+            throw new RotationNotConfiguredException();
+        }
         var weeksFromAnchor = ChronoUnit.WEEKS.between(anchorMonday, monday);
         return Math.floorMod(anchorIndex + weeksFromAnchor, weeks.size());
     }

@@ -9,4 +9,4 @@ import java.util.UUID;
 
 /** Правка шаблона недели: имя и полная новая карта рабочих дней. */
 public record UpdateWeekTemplate(
-        @NotBlank @Size(max = 100) String name, @NotNull Map<DayOfWeek, @NotNull UUID> days) {}
+        @NotBlank @Size(max = 100) String name, @NotNull Map<@NotNull DayOfWeek, @NotNull UUID> days) {}

@@ -7,7 +7,8 @@ dependencies {
     api(libs.spring.boot.starter.validation)
     api(libs.spring.modulith.starter.core)
 
-    // Для ConstraintViolations: имя нарушенного ограничения достаёт Hibernate. Не api: модули
-    // подключают data-jpa сами, а common не должен навязывать JPA тем, кому он не нужен.
-    implementation(libs.spring.boot.starter.data.jpa)
+    // Только для компиляции ConstraintViolations: имя нарушенного ограничения достаёт Hibernate.
+    // Модули подключают data-jpa сами, поэтому common его не распространяет.
+    compileOnly(libs.spring.boot.starter.data.jpa)
+    testImplementation(libs.spring.boot.starter.data.jpa)
 }

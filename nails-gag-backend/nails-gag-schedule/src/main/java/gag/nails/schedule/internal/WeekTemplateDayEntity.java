@@ -18,7 +18,7 @@ class WeekTemplateDayEntity {
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "template_id")
     private WeekTemplateEntity template;
 

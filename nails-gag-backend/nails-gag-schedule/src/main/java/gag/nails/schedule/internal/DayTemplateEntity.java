@@ -42,6 +42,7 @@ class DayTemplateEntity {
     @Column(updatable = false)
     private Instant createdAt;
 
+    // Меняется только при UPDATE самой строки: правка одной лишь коллекции его не сдвигает.
     @UpdateTimestamp
     private Instant updatedAt;
 

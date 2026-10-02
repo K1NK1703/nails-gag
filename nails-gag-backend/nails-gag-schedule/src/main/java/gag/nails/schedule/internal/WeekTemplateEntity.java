@@ -40,6 +40,7 @@ class WeekTemplateEntity {
     @Column(updatable = false)
     private Instant createdAt;
 
+    // Меняется только при UPDATE самой строки: правка одной лишь коллекции его не сдвигает.
     @UpdateTimestamp
     private Instant updatedAt;
 
@@ -59,12 +60,12 @@ class WeekTemplateEntity {
      * Заменяет карту рабочих дней, сохраняя строки для дней, которые остались: так не нарушается
      * уникальность {@code (template_id, weekday)} внутри одного flush.
      */
-    void setDays(Map<DayOfWeek, UUID> days) {
-        this.days.removeIf(day -> !days.containsKey(day.weekday()));
-        this.days.forEach(day -> day.setDayTemplateId(days.get(day.weekday())));
-        days.forEach((weekday, dayTemplateId) -> {
-            if (this.days.stream().noneMatch(day -> day.weekday() == weekday)) {
-                this.days.add(new WeekTemplateDayEntity(this, weekday, dayTemplateId));
+    void setDays(Map<DayOfWeek, UUID> wanted) {
+        days.removeIf(day -> !wanted.containsKey(day.weekday()));
+        days.forEach(day -> day.setDayTemplateId(wanted.get(day.weekday())));
+        wanted.forEach((weekday, dayTemplateId) -> {
+            if (days.stream().noneMatch(day -> day.weekday() == weekday)) {
+                days.add(new WeekTemplateDayEntity(this, weekday, dayTemplateId));
             }
         });
     }

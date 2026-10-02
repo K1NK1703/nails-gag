@@ -17,7 +17,7 @@ class RotationWeekEntity {
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "rotation_id")
     private RotationEntity rotation;
 

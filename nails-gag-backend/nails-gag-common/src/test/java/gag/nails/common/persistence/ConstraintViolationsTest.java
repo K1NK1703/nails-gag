@@ -28,6 +28,16 @@ class ConstraintViolationsTest {
     }
 
     @Test
+    void skipsHibernateCauseWithoutNameAndKeepsWalking() {
+        var driver = new SQLException(
+                "ERROR: conflicting key value violates exclusion constraint \"slot_no_overlap\"", "23P01");
+        var hibernate = new ConstraintViolationException("could not execute statement", driver, null);
+        var spring = new DataIntegrityViolationException("could not execute statement", hibernate);
+
+        assertThat(ConstraintViolations.constraintName(spring)).contains("slot_no_overlap");
+    }
+
+    @Test
     void isEmptyWhenCauseChainHasNoConstraintName() {
         var spring = new DataIntegrityViolationException("could not execute statement", new SQLException("boom"));
 

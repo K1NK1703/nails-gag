@@ -13,4 +13,4 @@ import java.util.UUID;
  * @param days рабочие дни недели → шаблон дня; дня нет в карте — выходной; пустая карта допустима
  */
 public record CreateWeekTemplate(
-        @NotBlank @Size(max = 100) String name, @NotNull Map<DayOfWeek, @NotNull UUID> days) {}
+        @NotBlank @Size(max = 100) String name, @NotNull Map<@NotNull DayOfWeek, @NotNull UUID> days) {}
