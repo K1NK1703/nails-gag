@@ -37,16 +37,20 @@ class ApplicationSmokeTest {
     }
 
     @Test
-    void liquibaseAppliedAppChangelog() {
-        var applied = jdbc.sql("select count(*) from databasechangelog where id = 'app-0001-btree-gist'")
+    void scheduleChangelogCreatedExtensionAndExclusionConstraint() {
+        var applied = jdbc.sql("select count(*) from databasechangelog where id = 'schedule-0001-btree-gist'")
                 .query(Integer.class)
                 .single();
         var extension = jdbc.sql("select count(*) from pg_extension where extname = 'btree_gist'")
                 .query(Integer.class)
                 .single();
+        var constraint = jdbc.sql("select count(*) from pg_constraint where conname = 'slot_no_overlap'")
+                .query(Integer.class)
+                .single();
 
         assertThat(applied).isEqualTo(1);
         assertThat(extension).isEqualTo(1);
+        assertThat(constraint).isEqualTo(1);
     }
 
     @Test
