@@ -92,7 +92,7 @@ CREATE TABLE schedule.rotation (
     singleton     boolean     NOT NULL DEFAULT true
                               CONSTRAINT rotation_singleton_check CHECK (singleton)
                               CONSTRAINT rotation_singleton_key UNIQUE,
-    anchor_monday date        NOT NULL,
+    anchor_monday date        NOT NULL CONSTRAINT rotation_anchor_monday_check CHECK (extract(isodow FROM anchor_monday) = 1),
     anchor_index  integer     NOT NULL CONSTRAINT rotation_anchor_index_check CHECK (anchor_index >= 0),
     updated_at    timestamptz NOT NULL
 );
@@ -104,4 +104,5 @@ CREATE TABLE schedule.rotation_week (
     week_template_id uuid    NOT NULL CONSTRAINT rotation_week_week_template_id_fkey REFERENCES schedule.week_template (id)
 );
 
+-- индекс не уникальный намеренно: ротация переписывается целиком (удаление старых строк и вставка новых в одном flush)
 CREATE INDEX rotation_week_rotation_id_idx ON schedule.rotation_week (rotation_id, ordinal);

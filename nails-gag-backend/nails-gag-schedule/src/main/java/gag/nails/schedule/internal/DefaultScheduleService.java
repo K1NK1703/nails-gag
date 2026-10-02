@@ -99,8 +99,12 @@ class DefaultScheduleService implements ScheduleService {
         return planner.apply(command);
     }
 
+    /**
+     * Свободный слот под блокировкой строки. Занятый слот нельзя ни сдвинуть, ни удалить (спецификация 6.2); без
+     * блокировки занятие между чтением и flush'ем перетёрлось бы сдвигом или потерялось вместе с удалённой строкой.
+     */
     private SlotEntity requireFree(UUID slotId) {
-        var slot = slots.findById(slotId).orElseThrow(() -> new SlotNotFoundException(slotId));
+        var slot = slots.findLockedById(slotId).orElseThrow(() -> new SlotNotFoundException(slotId));
         if (slot.occupied()) {
             throw new SlotOccupiedException(slotId);
         }

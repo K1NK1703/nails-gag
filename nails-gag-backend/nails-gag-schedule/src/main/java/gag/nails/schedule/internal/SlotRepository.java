@@ -1,14 +1,25 @@
 package gag.nails.schedule.internal;
 
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 interface SlotRepository extends JpaRepository<SlotEntity, UUID> {
+
+    /**
+     * Слот под блокировкой строки (SELECT … FOR UPDATE): параллельное занятие дождётся конца транзакции и увидит
+     * сдвиг или удаление.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from SlotEntity s where s.id = :slotId")
+    Optional<SlotEntity> findLockedById(UUID slotId);
 
     List<SlotEntity> findAllByDayOrderByStartsAt(LocalDate day);
 
