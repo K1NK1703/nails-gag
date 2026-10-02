@@ -46,10 +46,15 @@ class RotationEntity {
         this.anchorIndex = anchorIndex;
     }
 
-    /** Применённая неделя становится якорем: следующий предпросмотр продолжит чередование с неё. */
-    void moveAnchor(LocalDate monday, int index) {
+    /**
+     * Применённая неделя становится якорем; если шаблон не переставлен, позиция в ротации сохраняется,
+     * иначе берётся первое вхождение выбранного шаблона.
+     */
+    void moveAnchor(LocalDate monday, UUID chosenTemplateId) {
+        var expected = templateIndexFor(monday);
+        var ids = weekTemplateIds();
         this.anchorMonday = monday;
-        this.anchorIndex = index;
+        this.anchorIndex = ids.get(expected).equals(chosenTemplateId) ? expected : ids.indexOf(chosenTemplateId);
     }
 
     boolean isConfigured() {

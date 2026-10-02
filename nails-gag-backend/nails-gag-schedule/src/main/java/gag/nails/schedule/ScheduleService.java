@@ -86,7 +86,8 @@ public interface ScheduleService {
      * @throws RotationNotConfiguredException если ротация пуста
      * @throws TemplateOverlapException если времена какого-то шаблона дня пересекаются при текущей длительности
      * @throws SlotOverlapException если слот пересёкся со слотом соседнего дня (слот через полночь)
-     * @throws ValidationException если недели плана не совпадают с неделями периода или шаблон не из ротации
+     * @throws ValidationException если недели плана не совпадают с неделями периода, шаблон не из ротации
+     *     или {@code to} раньше {@code from}
      * @throws AccessDeniedException если действует не мастер
      */
     TemplateApplication applyRotation(ApplyRotation command, Actor actor);

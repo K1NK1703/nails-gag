@@ -20,6 +20,10 @@ interface SlotRepository extends JpaRepository<SlotEntity, UUID> {
     @Query("select distinct s.day from SlotEntity s where s.day in :days")
     List<LocalDate> openDays(Collection<LocalDate> days);
 
+    /** Даты периода (обе границы включительно), в которых уже есть хотя бы один слот. */
+    @Query("select distinct s.day from SlotEntity s where s.day between :from and :to")
+    List<LocalDate> openDaysBetween(LocalDate from, LocalDate to);
+
     /**
      * Условное занятие: обновляет ровно одну строку, если слот ещё свободен. Без clearAutomatically:
      * копию слота в контексте персистентности обновляет вызывающий код (см. DefaultSlotOccupation).

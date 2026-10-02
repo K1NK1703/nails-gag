@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.common.actor.Actor;
+import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.error.RotationNotConfiguredException;
 import gag.nails.schedule.error.TemplateOverlapException;
@@ -168,6 +169,70 @@ class RotationTest {
 
         assertThatThrownBy(() -> schedule.previewRotation(ANCHOR, ANCHOR.plusDays(6), master))
                 .isInstanceOf(TemplateOverlapException.class);
+    }
+
+    @Test
+    void applyKeepsRotationPositionWhenTemplateRepeats() {
+        configureRotation();
+        templates.setRotation(new SetRotation(List.of(weekA, weekA, weekB), ANCHOR, 0), master);
+        var plan = List.of(new WeekChoice(ANCHOR, weekA), new WeekChoice(ANCHOR.plusWeeks(1), weekA));
+
+        schedule.applyRotation(new ApplyRotation(ANCHOR, ANCHOR.plusDays(13), plan), master);
+
+        assertThat(templates.rotation(master).anchorIndex()).isEqualTo(1);
+        var next = schedule.previewRotation(
+                ANCHOR.plusWeeks(2), ANCHOR.plusWeeks(2).plusDays(6), master);
+        assertThat(next.weeks()).extracting(WeekPlan::weekTemplateId).containsExactly(weekB);
+    }
+
+    @Test
+    void applyRejectsRepeatedMonday() {
+        configureRotation();
+        var repeated = List.of(
+                new WeekChoice(ANCHOR, weekA),
+                new WeekChoice(ANCHOR, weekB),
+                new WeekChoice(ANCHOR.plusWeeks(1), weekA));
+
+        assertThatThrownBy(
+                        () -> schedule.applyRotation(new ApplyRotation(ANCHOR, ANCHOR.plusDays(13), repeated), master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "weeks"));
+    }
+
+    @Test
+    void rotationIsMasterOnly() {
+        configureRotation();
+        var client = Actor.client(UUID.randomUUID());
+
+        assertThatThrownBy(() -> schedule.previewRotation(ANCHOR, ANCHOR.plusDays(6), client))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> schedule.applyRotation(
+                        new ApplyRotation(ANCHOR, ANCHOR.plusDays(6), List.of(new WeekChoice(ANCHOR, weekA))), client))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void applyMovesAnchorEvenWhenNothingIsCreated() {
+        var emptyWeek = templates
+                .createWeekTemplate(new CreateWeekTemplate("Пустая", Map.of()), master)
+                .id();
+        templates.setRotation(new SetRotation(List.of(emptyWeek), ANCHOR, 0), master);
+
+        var result = schedule.applyRotation(
+                new ApplyRotation(ANCHOR, ANCHOR.plusDays(6), List.of(new WeekChoice(ANCHOR, emptyWeek))), master);
+
+        assertThat(result.created()).isEmpty();
+        assertThat(result.skipped()).isEmpty();
+        assertThat(templates.rotation(master).anchorMonday()).isEqualTo(ANCHOR);
+
+        schedule.applyRotation(
+                new ApplyRotation(
+                        ANCHOR.plusWeeks(1),
+                        ANCHOR.plusWeeks(1).plusDays(6),
+                        List.of(new WeekChoice(ANCHOR.plusWeeks(1), emptyWeek))),
+                master);
+
+        assertThat(templates.rotation(master).anchorMonday()).isEqualTo(ANCHOR.plusWeeks(1));
     }
 
     /**

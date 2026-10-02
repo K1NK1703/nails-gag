@@ -12,13 +12,12 @@ import gag.nails.schedule.error.RotationNotConfiguredException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
@@ -51,10 +50,12 @@ class RotationPlanner {
     RotationPreview preview(LocalDate from, LocalDate to) {
         Periods.requireOrdered(from, to);
         var rotation = requireConfigured();
-        var mondays = Periods.mondays(from, to);
-        Function<LocalDate, UUID> byRotation =
-                monday -> rotation.weekTemplateIds().get(rotation.templateIndexFor(monday));
-        var weeks = plan(from, to, mondays, byRotation, settings.single().slotDurationMinutes());
+        var ids = rotation.weekTemplateIds();
+        var byRotation = new TreeMap<LocalDate, UUID>();
+        for (var monday : Periods.mondays(from, to)) {
+            byRotation.put(monday, ids.get(rotation.templateIndexFor(monday)));
+        }
+        var weeks = plan(from, to, byRotation, settings.single().slotDurationMinutes());
         return new RotationPreview(from, to, weeks);
     }
 
@@ -64,24 +65,20 @@ class RotationPlanner {
         var mondays = Periods.mondays(command.from(), command.to());
         var chosen = chosenTemplates(command.weeks(), mondays, rotation.weekTemplateIds());
         var duration = settings.single().slotDurationMinutes();
-        var weeks = plan(command.from(), command.to(), mondays, chosen::get, duration);
+        var weeks = plan(command.from(), command.to(), chosen, duration);
 
+        // Пропуск уже открытых дней — правило DayOpener: он же возвращает их в skipped.
         var toOpen = new TreeMap<LocalDate, List<LocalTime>>();
-        var skipped = new ArrayList<LocalDate>();
         for (var week : weeks) {
             for (var day : week.days()) {
-                switch (day.status()) {
-                    case PLANNED -> toOpen.put(day.date(), day.startTimes());
-                    case ALREADY_OPEN -> skipped.add(day.date());
-                    case DAY_OFF -> {}
+                if (day.status() != DayPlanStatus.DAY_OFF) {
+                    toOpen.put(day.date(), day.startTimes());
                 }
             }
         }
-        var opened = opener.open(toOpen, duration);
-
-        var lastMonday = mondays.getLast();
-        rotation.moveAnchor(lastMonday, rotation.weekTemplateIds().indexOf(chosen.get(lastMonday)));
-        return new TemplateApplication(opened.created(), List.copyOf(skipped));
+        var lastMonday = chosen.lastKey();
+        rotation.moveAnchor(lastMonday, chosen.get(lastMonday));
+        return opener.open(toOpen, duration);
     }
 
     private RotationEntity requireConfigured() {
@@ -94,56 +91,48 @@ class RotationPlanner {
 
     /** План применения: каждая неделя периода с её шаблоном недели и судьбой каждого дня периода. */
     private List<WeekPlan> plan(
-            LocalDate from,
-            LocalDate to,
-            List<LocalDate> mondays,
-            Function<LocalDate, UUID> weekTemplateFor,
-            int durationMinutes) {
-        var weekIds = mondays.stream().map(weekTemplateFor).collect(Collectors.toSet());
-        var weeks = weekTemplates.findByIds(weekIds);
+            LocalDate from, LocalDate to, SortedMap<LocalDate, UUID> weekTemplateByMonday, int durationMinutes) {
+        // FK гарантирует наличие: шаблон нельзя удалить, пока он в ротации / в шаблоне недели.
+        var weeks = weekTemplates.findByIds(Set.copyOf(weekTemplateByMonday.values()));
         var dayIds = weeks.values().stream()
                 .flatMap(week -> week.days().values().stream())
                 .collect(Collectors.toSet());
         var days = dayTemplates.findByIds(dayIds);
         days.values().forEach(template -> TemplateTimes.requireNoOverlap(template.startTimes(), durationMinutes));
-        var openDays = Set.copyOf(slots.openDays(Periods.days(from, to)));
+        var openDays = Set.copyOf(slots.openDaysBetween(from, to));
 
         var result = new ArrayList<WeekPlan>();
-        for (var monday : mondays) {
-            var week = weeks.get(weekTemplateFor.apply(monday));
-            result.add(new WeekPlan(monday, week.id(), week.name(), planDays(monday, week, from, to, days, openDays)));
-        }
+        weekTemplateByMonday.forEach((monday, weekTemplateId) -> {
+            var week = weeks.get(weekTemplateId);
+            var dates = Periods.days(max(monday, from), min(monday.plusDays(6), to));
+            result.add(new WeekPlan(monday, week.id(), week.name(), planDays(dates, week, days, openDays)));
+        });
         return List.copyOf(result);
     }
 
     private static List<DayPlan> planDays(
-            LocalDate monday,
+            List<LocalDate> dates,
             WeekTemplateEntity week,
-            LocalDate from,
-            LocalDate to,
             Map<UUID, DayTemplateEntity> dayTemplates,
             Set<LocalDate> openDays) {
         var days = new ArrayList<DayPlan>();
-        for (var date = monday; date.isBefore(monday.plusWeeks(1)); date = date.plusDays(1)) {
-            if (date.isBefore(from) || date.isAfter(to)) {
-                continue;
-            }
+        for (var date : dates) {
             var dayTemplateId = week.dayTemplateFor(date.getDayOfWeek());
             if (dayTemplateId.isEmpty()) {
                 days.add(new DayPlan(date, DayPlanStatus.DAY_OFF, null, List.of()));
-                continue;
+            } else {
+                var startTimes = dayTemplates.get(dayTemplateId.get()).startTimes();
+                var status = openDays.contains(date) ? DayPlanStatus.ALREADY_OPEN : DayPlanStatus.PLANNED;
+                days.add(new DayPlan(date, status, dayTemplateId.get(), startTimes));
             }
-            var startTimes = dayTemplates.get(dayTemplateId.get()).startTimes();
-            var status = openDays.contains(date) ? DayPlanStatus.ALREADY_OPEN : DayPlanStatus.PLANNED;
-            days.add(new DayPlan(date, status, dayTemplateId.get(), startTimes));
         }
         return List.copyOf(days);
     }
 
     /** Понедельник → выбранный шаблон недели; план должен покрывать все недели периода ровно по одному разу. */
-    private static Map<LocalDate, UUID> chosenTemplates(
+    private static TreeMap<LocalDate, UUID> chosenTemplates(
             List<WeekChoice> choices, List<LocalDate> mondays, List<UUID> rotationTemplates) {
-        var chosen = new HashMap<LocalDate, UUID>();
+        var chosen = new TreeMap<LocalDate, UUID>();
         for (var choice : choices) {
             if (!rotationTemplates.contains(choice.weekTemplateId())) {
                 throw new ValidationException("weeks", "must use week templates of the rotation");
@@ -156,5 +145,13 @@ class RotationPlanner {
             throw new ValidationException("weeks", "must list every week of the period exactly once");
         }
         return chosen;
+    }
+
+    private static LocalDate max(LocalDate a, LocalDate b) {
+        return a.isAfter(b) ? a : b;
+    }
+
+    private static LocalDate min(LocalDate a, LocalDate b) {
+        return a.isBefore(b) ? a : b;
     }
 }
