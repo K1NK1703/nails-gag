@@ -1,3 +1,0 @@
-databaseChangeLog:
-  - include:
-      file: db/changelog/app/0001-extensions.sql

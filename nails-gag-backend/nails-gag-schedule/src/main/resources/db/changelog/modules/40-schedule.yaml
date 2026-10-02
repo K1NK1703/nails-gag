@@ -1,0 +1,5 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/schedule/0001-init.sql
+  - include:
+      file: db/changelog/schedule/0002-seed.sql

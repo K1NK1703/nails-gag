@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":nails-gag-common"))
     implementation(project(":nails-gag-catalog"))
     implementation(project(":nails-gag-clients"))
+    implementation(project(":nails-gag-schedule"))
 
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.data.jpa)
