@@ -2,6 +2,9 @@ package gag.nails.schedule.internal;
 
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.ValidationException;
+import gag.nails.common.validation.CommandValidator;
+import gag.nails.schedule.ApplyRotation;
+import gag.nails.schedule.RotationPreview;
 import gag.nails.schedule.ScheduleService;
 import gag.nails.schedule.SlotView;
 import gag.nails.schedule.TemplateApplication;
@@ -25,18 +28,24 @@ class DefaultScheduleService implements ScheduleService {
     private final DayTemplateRepository dayTemplates;
     private final SlotWriter writer;
     private final DayOpener opener;
+    private final RotationPlanner planner;
+    private final CommandValidator validator;
 
     DefaultScheduleService(
             SlotRepository slots,
             SettingsRepository settings,
             DayTemplateRepository dayTemplates,
             SlotWriter writer,
-            DayOpener opener) {
+            DayOpener opener,
+            RotationPlanner planner,
+            CommandValidator validator) {
         this.slots = slots;
         this.settings = settings;
         this.dayTemplates = dayTemplates;
         this.writer = writer;
         this.opener = opener;
+        this.planner = planner;
+        this.validator = validator;
     }
 
     @Override
@@ -74,6 +83,20 @@ class DefaultScheduleService implements ScheduleService {
         var plan = new TreeMap<LocalDate, List<LocalTime>>();
         dates.forEach(date -> plan.put(date, startTimes));
         return opener.open(plan, duration);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RotationPreview previewRotation(LocalDate from, LocalDate to, Actor actor) {
+        actor.requireMaster();
+        return planner.preview(from, to);
+    }
+
+    @Override
+    public TemplateApplication applyRotation(ApplyRotation command, Actor actor) {
+        actor.requireMaster();
+        validator.requireValid(command);
+        return planner.apply(command);
     }
 
     private SlotEntity requireFree(UUID slotId) {

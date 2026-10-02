@@ -4,6 +4,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.error.DayTemplateNotFoundException;
+import gag.nails.schedule.error.RotationNotConfiguredException;
 import gag.nails.schedule.error.SlotNotFoundException;
 import gag.nails.schedule.error.SlotOccupiedException;
 import gag.nails.schedule.error.SlotOverlapException;
@@ -65,4 +66,28 @@ public interface ScheduleService {
     default TemplateApplication openDay(LocalDate date, UUID templateId, Actor actor) {
         return applyDayTemplate(templateId, List.of(date), actor);
     }
+
+    /**
+     * Предпросмотр ротации для периода: для каждой недели — шаблон недели по ротации от якоря, для
+     * каждого дня периода — что будет создано или почему день пропускается. Ничего не меняет.
+     *
+     * @throws RotationNotConfiguredException если ротация пуста
+     * @throws TemplateOverlapException если времена какого-то шаблона дня пересекаются при текущей длительности
+     * @throws ValidationException если {@code to} раньше {@code from}
+     * @throws AccessDeniedException если действует не мастер
+     */
+    RotationPreview previewRotation(LocalDate from, LocalDate to, Actor actor);
+
+    /**
+     * Применяет план: создаёт слоты по выбранным для недель шаблонам (мастер мог поменять их
+     * местами), пропуская уже открытые дни, и переносит якорь ротации на последнюю неделю периода —
+     * следующий предпросмотр продолжит чередование с неё.
+     *
+     * @throws RotationNotConfiguredException если ротация пуста
+     * @throws TemplateOverlapException если времена какого-то шаблона дня пересекаются при текущей длительности
+     * @throws SlotOverlapException если слот пересёкся со слотом соседнего дня (слот через полночь)
+     * @throws ValidationException если недели плана не совпадают с неделями периода или шаблон не из ротации
+     * @throws AccessDeniedException если действует не мастер
+     */
+    TemplateApplication applyRotation(ApplyRotation command, Actor actor);
 }
