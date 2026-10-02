@@ -98,4 +98,27 @@ class SlotOccupationTest {
     void getUnknownSlotFails() {
         assertThatThrownBy(() -> occupation.get(UUID.randomUUID())).isInstanceOf(SlotNotFoundException.class);
     }
+
+    @Test
+    void bookingCannotHoldTwoSlots() {
+        var first = schedule.addSlot(FRIDAY, LocalTime.of(9, 30), master);
+        var second = schedule.addSlot(FRIDAY, LocalTime.of(12, 0), master);
+        var bookingId = UUID.randomUUID();
+        occupation.occupy(first.id(), bookingId);
+
+        assertThatThrownBy(() -> occupation.occupy(second.id(), bookingId)).isInstanceOf(InternalException.class);
+    }
+
+    @Test
+    void releasedSlotCanBeOccupiedAgain() {
+        var slot = schedule.addSlot(FRIDAY, LocalTime.of(9, 30), master);
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        occupation.occupy(slot.id(), first);
+        occupation.release(slot.id(), first);
+
+        occupation.occupy(slot.id(), second);
+
+        assertThat(occupation.get(slot.id()).bookingId()).isEqualTo(second);
+    }
 }

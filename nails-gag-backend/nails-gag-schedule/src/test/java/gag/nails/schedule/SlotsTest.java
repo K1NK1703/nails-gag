@@ -133,4 +133,30 @@ class SlotsTest {
                 .isInstanceOf(ValidationException.class)
                 .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "to"));
     }
+
+    @Test
+    void periodQueriesSpanDaysInStartOrderWithInclusiveBounds() {
+        var saturday = FRIDAY.plusDays(1);
+        var client = Actor.client(UUID.randomUUID());
+        var onSaturday = schedule.addSlot(saturday, LocalTime.of(9, 30), master);
+        var onFriday = schedule.addSlot(FRIDAY, LocalTime.of(12, 0), master);
+
+        assertThat(queries.slotsOfPeriod(FRIDAY, saturday, master))
+                .extracting(SlotView::id)
+                .containsExactly(onFriday.id(), onSaturday.id());
+        assertThat(queries.freeSlots(FRIDAY, saturday))
+                .extracting(SlotView::id)
+                .containsExactly(onFriday.id(), onSaturday.id());
+        assertThat(queries.freeSlots(FRIDAY, FRIDAY)).extracting(SlotView::id).containsExactly(onFriday.id());
+        assertThatThrownBy(() -> queries.slotsOfPeriod(saturday, FRIDAY, master))
+                .isInstanceOf(ValidationException.class);
+        assertThatThrownBy(() -> queries.slotsOfPeriod(FRIDAY, saturday, client))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void deletingUnknownSlotFails() {
+        assertThatThrownBy(() -> schedule.deleteSlot(UUID.randomUUID(), master))
+                .isInstanceOf(SlotNotFoundException.class);
+    }
 }

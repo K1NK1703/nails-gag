@@ -14,6 +14,8 @@ import java.util.UUID;
 public interface SlotOccupation {
 
     /**
+     * Слот по идентификатору, включая занятость и запись, которая его держит.
+     *
      * @throws SlotNotFoundException если слота нет
      */
     SlotView get(UUID slotId);

@@ -14,9 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class DefaultScheduleSettingsService implements ScheduleSettingsService {
 
-    static final String SLOT_DURATION_FIELD = "slot_duration_minutes";
-    private static final int MIN_DURATION = 15;
-    private static final int MAX_DURATION = 720;
+    private static final String SLOT_DURATION_FIELD = "slot_duration_minutes";
 
     private final SettingsRepository settings;
     private final SettingsChangeRepository changes;
@@ -37,8 +35,9 @@ class DefaultScheduleSettingsService implements ScheduleSettingsService {
     @Override
     public ScheduleSettingsView setSlotDuration(int minutes, Actor actor) {
         actor.requireMaster();
-        if (minutes < MIN_DURATION || minutes > MAX_DURATION) {
-            throw new ValidationException("minutes", "must be between " + MIN_DURATION + " and " + MAX_DURATION);
+        if (minutes < MIN_SLOT_DURATION_MINUTES || minutes > MAX_SLOT_DURATION_MINUTES) {
+            throw new ValidationException(
+                    "minutes", "must be between " + MIN_SLOT_DURATION_MINUTES + " and " + MAX_SLOT_DURATION_MINUTES);
         }
         var current = settings.single();
         var old = current.slotDurationMinutes();
