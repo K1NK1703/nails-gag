@@ -68,10 +68,12 @@ class DefaultBookingService implements BookingService {
     @Override
     public BookingView createByClient(CreateBooking command, Actor actor) {
         var clientId = actor.requireClientId();
-        validator.requireValid(command);
-        if (!clientId.equals(command.clientId())) {
+        // Доступ раньше валидации; команда без клиента — ошибка валидации, а не отказ в доступе.
+        var requestedClientId = command.clientId();
+        if (requestedClientId != null && !clientId.equals(requestedClientId)) {
             throw new AccessDeniedException();
         }
+        validator.requireValid(command);
         var rules = currentRules.get();
         // Блокировка клиента до подсчёта: параллельная запись того же клиента ждёт конца этой транзакции.
         locks.acquire(clientId);
@@ -103,6 +105,8 @@ class DefaultBookingService implements BookingService {
             throw new ValidationException("awaitPrepayment", "not allowed for a slot in the past");
         }
         requireClient(command.clientId());
+        // Та же блокировка, что при самозаписи: параллельная запись клиента увидит эту при подсчёте лимита.
+        locks.acquire(command.clientId());
         return create(command, slot, BookingCreator.MASTER, awaitPrepayment, rules);
     }
 

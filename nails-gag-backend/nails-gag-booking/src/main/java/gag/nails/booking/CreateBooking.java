@@ -15,5 +15,5 @@ public record CreateBooking(
         @NotNull UUID clientId,
         @NotNull UUID slotId,
         @NotNull UUID mainServiceId,
-        @NotNull List<@NotNull UUID> addonServiceIds,
+        @NotNull @Size(max = 20) List<@NotNull UUID> addonServiceIds,
         @Size(max = 500) @Nullable String comment) {}

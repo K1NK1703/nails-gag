@@ -7,9 +7,12 @@ import java.time.Instant;
 /** Временные правила записи для одного момента: настройки плюс «сейчас». Вычисления без базы. */
 record BookingRules(BookingSettingsView settings, Instant now) {
 
-    /** До начала слота меньше отсечки: клиенту запись и перенос сюда закрыты. */
+    /**
+     * До начала слота меньше отсечки: клиенту запись и перенос сюда закрыты. Слот, который уже
+     * начался или начинается прямо сейчас, закрыт при любой отсечке, в том числе нулевой.
+     */
     boolean tooLateToBook(Instant slotStartsAt) {
-        return slotStartsAt.isBefore(now.plus(cutoff()));
+        return slotStartsAt.isBefore(now.plus(cutoff())) || !slotStartsAt.isAfter(now);
     }
 
     /** Окно бесплатной отмены и переноса ещё открыто; ровно на границе — открыто. */

@@ -10,12 +10,17 @@ import gag.nails.catalog.CatalogService;
 import gag.nails.catalog.ServiceKind;
 import gag.nails.catalog.UpdateService;
 import gag.nails.catalog.error.ServiceInactiveException;
+import gag.nails.clients.ConsentKind;
+import gag.nails.clients.ConsentSource;
+import gag.nails.clients.RecordConsent;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.error.SlotOccupiedException;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -30,6 +35,12 @@ class BookingCreationTest extends BookingTestSupport {
 
     @Autowired
     CatalogService catalog;
+
+    @Autowired
+    BookingSettingsService settings;
+
+    @PersistenceContext
+    EntityManager entityManager;
 
     @Test
     void clientBooksFreeSlotAndItIsConfirmedAtOnce() {
@@ -274,5 +285,60 @@ class BookingCreationTest extends BookingTestSupport {
                         .matching(e -> e.bookingId().equals(booking.id())
                                 && e.deadline().equals(booking.prepaymentDeadline())))
                 .hasSize(1);
+    }
+
+    @Test
+    void bookingIsReadBackFromDatabase() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+
+        var created = bookings.createByClient(
+                new CreateBooking(anna, slot.id(), MANICURE, List.of(FRENCH, DESIGN), "Короткие, квадрат"),
+                Actor.client(anna));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(queries.get(created.id(), master)).isEqualTo(created);
+    }
+
+    @Test
+    void clientBooksExactlyAtCutoffButNotLater() {
+        var anna = client("Анна");
+        var maria = client("Мария");
+        var first = slot(MONDAY, "12:00");
+        var second = slot(TUESDAY, "12:00");
+
+        timeIsBefore(first, Duration.ofMinutes(120));
+        var booking = book(anna, first);
+        timeIsBefore(second, Duration.ofMinutes(119));
+
+        assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThatThrownBy(() -> book(maria, second)).isInstanceOf(TooLateToBookException.class);
+    }
+
+    @Test
+    void slotStartingNowCannotBeBookedByClientEvenWithZeroCutoff() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        settings.update(new UpdateBookingSettings(1, 0, 24, 24, 50, 15, 7), master);
+        timeIsBefore(slot, Duration.ZERO);
+
+        assertThatThrownBy(() -> book(anna, slot)).isInstanceOf(TooLateToBookException.class);
+    }
+
+    @Test
+    void bookingRequiresEveryConsent() {
+        var anna = clientWithoutConsents("Анна");
+        var maria = clientWithoutConsents("Мария");
+        clients.recordConsent(
+                anna,
+                new RecordConsent(ConsentKind.PERSONAL_DATA, "2026-09-25", ConsentSource.ENTERED_BY_MASTER),
+                master);
+        clients.recordConsent(
+                maria, new RecordConsent(ConsentKind.OFFER, "2026-09-25", ConsentSource.ENTERED_BY_MASTER), master);
+        var slot = slot(MONDAY, "12:00");
+
+        assertThatThrownBy(() -> book(anna, slot)).isInstanceOf(ConsentMissingException.class);
+        assertThatThrownBy(() -> book(maria, slot)).isInstanceOf(ConsentMissingException.class);
     }
 }
