@@ -7,6 +7,7 @@ import gag.nails.booking.BookingView;
 import gag.nails.booking.CancelReason;
 import gag.nails.booking.CreateBooking;
 import gag.nails.booking.error.ConsentMissingException;
+import gag.nails.booking.error.LateRescheduleNotAllowedException;
 import gag.nails.booking.error.LimitReachedException;
 import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.error.VisitNotStartedException;
@@ -134,6 +135,42 @@ class DefaultBookingService implements BookingService {
             throw new VisitNotStartedException(bookingId, booking.slotStartsAt());
         }
         return cancellation.cancel(booking, CancelReason.LATE_ARRIVAL, rules.now());
+    }
+
+    @Override
+    public BookingView reschedule(UUID bookingId, UUID newSlotId, Actor actor) {
+        var booking = finder.requireAccessible(bookingId, actor);
+        booking.requireActive("reschedule");
+        var rules = currentRules.get();
+        var byClient = !actor.isMaster();
+        if (byClient && !rules.freeCancellationOpen(booking.slotStartsAt())) {
+            throw new LateRescheduleNotAllowedException(
+                    bookingId, rules.settings().freeCancelWindowHours());
+        }
+        if (newSlotId.equals(booking.slotId())) {
+            throw new ValidationException("newSlotId", "must differ from the current slot");
+        }
+        var newSlot = occupation.get(newSlotId);
+        if (byClient && rules.tooLateToBook(newSlot.startsAt())) {
+            throw new TooLateToBookException(
+                    newSlot.startsAt(), rules.settings().bookingCutoffMinutes());
+        }
+        if (newSlot.occupied()) {
+            throw new SlotOccupiedException(newSlotId);
+        }
+        var oldSlotId = booking.slotId();
+        var oldSlotStartsAt = booking.slotStartsAt();
+        var currentDeadline = booking.prepaymentDeadline();
+        var deadline = currentDeadline == null
+                ? null
+                : rules.prepaymentDeadlineAfterReschedule(currentDeadline, newSlot.startsAt());
+        // Сначала освободить старый слот, потом занять новый: запись держит не больше одного слота.
+        occupation.release(oldSlotId, booking.id());
+        booking.moveTo(newSlot, deadline);
+        writer.flushMoved(booking);
+        occupation.occupy(newSlotId, booking.id());
+        events.rescheduled(booking, oldSlotId, oldSlotStartsAt, rules.now());
+        return booking.toView();
     }
 
     @Override

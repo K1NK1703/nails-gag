@@ -3,6 +3,7 @@ package gag.nails.booking;
 import gag.nails.booking.error.BookingNotFoundException;
 import gag.nails.booking.error.ConsentMissingException;
 import gag.nails.booking.error.InvalidTransitionException;
+import gag.nails.booking.error.LateRescheduleNotAllowedException;
 import gag.nails.booking.error.LimitReachedException;
 import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.error.VisitNotStartedException;
@@ -77,6 +78,24 @@ public interface BookingService {
      * @throws AccessDeniedException если действует не мастер
      */
     BookingView refuseLateArrival(UUID bookingId, Actor actor);
+
+    /**
+     * Переносит активную запись на другой свободный слот. Состояние сохраняется; согласованное более
+     * раннее время сбрасывается, ждущее ответа предложение приехать раньше отзывается; срок
+     * предоплаты не продлевается, но укладывается в отсечку перед новым слотом. Клиент переносит
+     * свою запись только в окне бесплатной отмены и только на слот не ближе отсечки; мастер — любую
+     * запись в любое время на любой слот.
+     *
+     * @throws BookingNotFoundException если записи нет
+     * @throws InvalidTransitionException если запись не активна
+     * @throws LateRescheduleNotAllowedException если клиент переносит позже окна бесплатной отмены
+     * @throws TooLateToBookException если клиент переносит на слот ближе отсечки
+     * @throws SlotOccupiedException если новый слот занят
+     * @throws SlotNotFoundException если нового слота нет
+     * @throws ValidationException если новый слот совпадает с текущим
+     * @throws AccessDeniedException если клиент переносит чужую запись
+     */
+    BookingView reschedule(UUID bookingId, UUID newSlotId, Actor actor);
 
     /**
      * Комментарий клиента к активной записи, до 500 символов; пустой стирает. Клиент правит свою
