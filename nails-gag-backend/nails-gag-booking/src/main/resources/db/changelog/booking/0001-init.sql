@@ -61,7 +61,14 @@ CREATE TABLE booking.booking (
     updated_at             timestamptz    NOT NULL,
     CONSTRAINT booking_slot_period_check CHECK (slot_ends_at > slot_starts_at),
     CONSTRAINT booking_cancelled_check CHECK ((status = 'CANCELLED') = (cancel_reason IS NOT NULL)),
-    CONSTRAINT booking_offer_check CHECK ((offer_status IS NULL) = (proposed_start IS NULL))
+    CONSTRAINT booking_cancelled_at_check CHECK ((status = 'CANCELLED') = (cancelled_at IS NOT NULL)),
+    CONSTRAINT booking_completed_check CHECK ((status = 'COMPLETED') = (completed_at IS NOT NULL)
+                                              AND (status = 'COMPLETED') = (final_amount IS NOT NULL)),
+    CONSTRAINT booking_no_show_check CHECK ((status = 'NO_SHOW') = (no_show_at IS NOT NULL)),
+    CONSTRAINT booking_prepayment_deadline_check CHECK ((status = 'AWAITING_PREPAYMENT') = (prepayment_deadline IS NOT NULL)),
+    CONSTRAINT booking_offer_check CHECK ((offer_status IS NULL) = (proposed_start IS NULL)
+                                          AND (offer_status IS NULL) = (proposed_at IS NULL)),
+    CONSTRAINT booking_agreed_start_check CHECK (agreed_start IS NULL OR offer_status = 'ACCEPTED')
 );
 
 -- второй рубеж после условного занятия слота в schedule: на один слот не больше одной активной записи

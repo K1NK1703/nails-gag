@@ -9,6 +9,7 @@ import gag.nails.booking.EarlierTimeStatus;
 import gag.nails.booking.EarlierTimeView;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.catalog.ServiceView;
+import gag.nails.common.error.InternalException;
 import gag.nails.schedule.SlotView;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
@@ -73,6 +75,7 @@ class BookingEntity {
 
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder")
+    @BatchSize(size = 50)
     private List<BookedServiceEntity> services = new ArrayList<>();
 
     // Аудит, не бизнес-время: бизнес-время берётся только из Clock.
@@ -139,15 +142,26 @@ class BookingEntity {
         }
     }
 
-    /** Перенос на другой слот: состояние сохраняется, согласованное раннее время сбрасывается. */
+    /**
+     * Перенос на другой слот: состояние сохраняется. Предложение приехать раньше относилось к
+     * прежнему слоту, поэтому отзывается и ждущее ответа, и уже принятое, а согласованное раннее
+     * время сбрасывается.
+     *
+     * @param prepaymentDeadline новый срок предоплаты: задан ровно тогда, когда запись ждёт предоплату
+     * @throws InternalException если срок не согласован с состоянием — ошибка вызывающего кода
+     */
     void moveTo(SlotView slot, @Nullable Instant prepaymentDeadline) {
         requireActive("reschedule");
+        if ((status == BookingStatus.AWAITING_PREPAYMENT) != (prepaymentDeadline != null)) {
+            throw new InternalException(
+                    "prepayment deadline must be set exactly when the booking awaits prepayment: status " + status);
+        }
         slotId = slot.id();
         slotStartsAt = slot.startsAt();
         slotEndsAt = slot.endsAt();
         agreedStart = null;
         this.prepaymentDeadline = prepaymentDeadline;
-        withdrawPendingOffer();
+        withdrawOfferOnMove();
     }
 
     void proposeEarlierTime(Instant proposedStart, Instant now) {
@@ -196,6 +210,8 @@ class BookingEntity {
     /**
      * Визит выполнен: из активной записи либо исправлением отметки «не пришла». Фактический состав
      * копируется из выбранного при записи, итог — сумма его цен; дальше мастер правит их отдельно.
+     * Отметка разрешена и записи, ждавшей предоплату (мастер решает на месте): срок предоплаты при
+     * этом снимается.
      */
     void complete(Instant now) {
         if (status == BookingStatus.COMPLETED || status == BookingStatus.CANCELLED) {
@@ -213,7 +229,10 @@ class BookingEntity {
         finalAmount = actual.stream().map(BookedServiceEntity::price).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    /** Клиент не пришёл: из активной записи либо исправлением отметки «выполнена». */
+    /**
+     * Клиент не пришёл: из активной записи либо исправлением отметки «выполнена». Отметка разрешена
+     * и записи, ждавшей предоплату (мастер решает на месте): срок предоплаты при этом снимается.
+     */
     void markNoShow(Instant now) {
         if (status == BookingStatus.NO_SHOW || status == BookingStatus.CANCELLED) {
             throw new InvalidTransitionException(id, status, "mark no-show");
@@ -240,7 +259,7 @@ class BookingEntity {
         this.comment = blankToNull(comment);
     }
 
-    void setMasterNote(String masterNote) {
+    void setMasterNote(@Nullable String masterNote) {
         this.masterNote = blankToNull(masterNote);
     }
 
@@ -355,6 +374,13 @@ class BookingEntity {
 
     private void withdrawPendingOffer() {
         if (offerStatus == EarlierTimeStatus.PENDING) {
+            offerStatus = EarlierTimeStatus.WITHDRAWN;
+        }
+    }
+
+    /** При переносе теряет смысл и ждущее ответа, и принятое предложение: оба относились к прежнему слоту. */
+    private void withdrawOfferOnMove() {
+        if (offerStatus == EarlierTimeStatus.PENDING || offerStatus == EarlierTimeStatus.ACCEPTED) {
             offerStatus = EarlierTimeStatus.WITHDRAWN;
         }
     }
