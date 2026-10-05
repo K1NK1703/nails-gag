@@ -42,7 +42,7 @@ CREATE TABLE booking.booking (
                                           CHECK (status IN ('AWAITING_PREPAYMENT', 'CONFIRMED', 'COMPLETED', 'NO_SHOW', 'CANCELLED')),
     created_by             varchar(8)     NOT NULL CONSTRAINT booking_created_by_check CHECK (created_by IN ('CLIENT', 'MASTER')),
     comment                text           CONSTRAINT booking_comment_check CHECK (char_length(comment) <= 500),
-    master_note            text,
+    master_note            text           CONSTRAINT booking_master_note_check CHECK (char_length(master_note) <= 2000),
     prepayment_required    boolean        NOT NULL,
     prepayment_received_at timestamptz,
     prepayment_deadline    timestamptz,

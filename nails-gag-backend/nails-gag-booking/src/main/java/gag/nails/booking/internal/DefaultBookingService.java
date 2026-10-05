@@ -36,6 +36,7 @@ class DefaultBookingService implements BookingService {
 
     private static final Set<ConsentKind> REQUIRED_CONSENTS = Set.of(ConsentKind.PERSONAL_DATA, ConsentKind.OFFER);
     private static final int MAX_COMMENT_LENGTH = 500;
+    private static final int MAX_MASTER_NOTE_LENGTH = 2000;
 
     private final BookingRepository bookings;
     private final BookingFinder finder;
@@ -108,9 +109,10 @@ class DefaultBookingService implements BookingService {
         var rules = currentRules.get();
         var slot = occupation.get(command.slotId());
         requireSlotAllowedForMaster(slot, awaitPrepayment, rules, "slotId", "awaitPrepayment");
-        requireClient(command.clientId());
         // Та же блокировка, что при самозаписи: параллельная запись клиента увидит эту при подсчёте лимита.
+        // Клиент проверяется под ней: параллельное объединение карточек либо уже закончилось, либо подождёт.
         locks.acquire(command.clientId());
+        requireClient(command.clientId());
         return create(command, slot, BookingCreator.MASTER, awaitPrepayment, rules);
     }
 
@@ -199,7 +201,12 @@ class DefaultBookingService implements BookingService {
     @Override
     public void updateMasterNote(UUID bookingId, String note, Actor actor) {
         actor.requireMaster();
-        finder.requireForUpdate(bookingId).setMasterNote(note);
+        var booking = finder.requireForUpdate(bookingId);
+        // Длина в символах (code points), как char_length в CHECK базы, а не в единицах UTF-16.
+        if (note.codePointCount(0, note.length()) > MAX_MASTER_NOTE_LENGTH) {
+            throw new ValidationException("note", "must be at most " + MAX_MASTER_NOTE_LENGTH + " characters");
+        }
+        booking.setMasterNote(note);
     }
 
     private BookingView create(

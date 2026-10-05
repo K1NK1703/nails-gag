@@ -202,6 +202,28 @@ class BookingCancellationTest extends BookingTestSupport {
     }
 
     @Test
+    void masterNoteOfMaximumLengthIsStored() {
+        var booking = book(client("Анна"), slot(MONDAY, "12:00"));
+        var note = "я".repeat(2000);
+
+        bookings.updateMasterNote(booking.id(), note, master);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(queries.masterNote(booking.id(), master)).contains(note);
+    }
+
+    @Test
+    void masterNoteLongerThanMaximumIsRejected() {
+        var booking = book(client("Анна"), slot(MONDAY, "12:00"));
+
+        assertThatThrownBy(() -> bookings.updateMasterNote(booking.id(), "я".repeat(2001), master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "note"));
+        assertThat(queries.masterNote(booking.id(), master)).isEmpty();
+    }
+
+    @Test
     void clientCannotCancelAfterSlotStart() {
         var anna = client("Анна");
         var slot = slot(MONDAY, "12:00");

@@ -113,9 +113,10 @@ public interface BookingService {
     BookingView updateComment(UUID bookingId, @Nullable String comment, Actor actor);
 
     /**
-     * Заметка мастера к записи в любом состоянии; пустая стирает. Клиенту не видна.
+     * Заметка мастера к записи в любом состоянии, до 2000 символов; пустая стирает. Клиенту не видна.
      *
      * @throws BookingNotFoundException если записи нет
+     * @throws ValidationException если заметка длиннее 2000 символов
      * @throws AccessDeniedException если действует не мастер
      */
     void updateMasterNote(UUID bookingId, String note, Actor actor);

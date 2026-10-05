@@ -7,7 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
 /**
- * Запуск фоновых задач раз в минуту (спецификация 7.7). Выключается свойством
+ * Запуск фоновых задач раз в минуту (спецификация 7.7). Задачи независимы: сбой одной не отменяет
+ * другую в этот же запуск. Выключается свойством
  * {@code nails-gag.booking.jobs.enabled=false} — так делают тесты, которые вызывают
  * {@link BookingMaintenance} сами.
  */
@@ -23,8 +24,12 @@ class BookingJobs {
     }
 
     @Scheduled(initialDelayString = "PT1M", fixedDelayString = "PT1M")
-    void run() {
+    void cancelOverduePrepayments() {
         maintenance.cancelOverduePrepayments();
+    }
+
+    @Scheduled(initialDelayString = "PT1M", fixedDelayString = "PT1M")
+    void expireEarlierTimeOffers() {
         maintenance.expireEarlierTimeOffers();
     }
 }

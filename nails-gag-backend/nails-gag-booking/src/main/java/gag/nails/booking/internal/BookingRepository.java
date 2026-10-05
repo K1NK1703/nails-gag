@@ -24,7 +24,13 @@ interface BookingRepository extends JpaRepository<BookingEntity, UUID> {
 
     long countByClientIdAndStatusIn(UUID clientId, Collection<BookingStatus> statuses);
 
-    List<BookingEntity> findAllByClientId(UUID clientId);
+    /**
+     * Все записи клиента под блокировкой строк, в постоянном порядке: две транзакции, берущие один и
+     * тот же набор, не блокируют друг друга накрест.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from BookingEntity b where b.clientId = :clientId order by b.id")
+    List<BookingEntity> findAllLockedByClientId(UUID clientId);
 
     /** Ближайшие первыми. */
     List<BookingEntity> findAllByClientIdAndStatusInOrderBySlotStartsAtAscIdAsc(
