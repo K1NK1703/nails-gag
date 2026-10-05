@@ -127,4 +127,19 @@ class PrepaymentFlagTest {
         assertThatThrownBy(() -> clients.setPrepaymentRequired(maria.id(), true, null, me))
                 .isInstanceOf(AccessDeniedException.class);
     }
+
+    @Test
+    void noShowCorrectionIsASystemReasonThatClearsTheFlag() {
+        clients.applySystemPrepaymentChange(
+                maria.id(), new PrepaymentFlagChange(true, PrepaymentFlagReason.NO_SHOW, null, null));
+        clock.advance(Duration.ofMinutes(1));
+
+        clients.applySystemPrepaymentChange(
+                maria.id(), new PrepaymentFlagChange(false, PrepaymentFlagReason.NO_SHOW_CORRECTED, null, null));
+
+        assertThat(queries.get(maria.id(), master).prepaymentRequired()).isFalse();
+        assertThat(queries.prepaymentHistory(maria.id(), master))
+                .extracting(PrepaymentFlagChangeView::reason)
+                .containsExactly(PrepaymentFlagReason.NO_SHOW_CORRECTED, PrepaymentFlagReason.NO_SHOW);
+    }
 }

@@ -7,6 +7,10 @@ spring:
     change-log: classpath:db/changelog/test-master.yaml
 nails-gag:
   time-zone: Europe/Moscow
+  booking:
+    jobs:
+      # Планировщик записей в тестах не работает: тесты вызывают BookingMaintenance сами.
+      enabled: false
 logging:
   level:
     liquibase: warn

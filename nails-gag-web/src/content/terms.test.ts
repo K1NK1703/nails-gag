@@ -20,6 +20,10 @@ describe('terms', () => {
     expect(fullText).toMatch(/50 ?%/)
   })
 
+  it('lets the performer waive the prepayment', () => {
+    expect(fullText).toContain('вправе не требовать предоплату')
+  })
+
   it('contains only known placeholders', () => {
     const known = new Set<string>(PLACEHOLDERS)
     for (const m of fullText.matchAll(/\{\{[^}]*\}\}/g)) expect(known).toContain(m[0])

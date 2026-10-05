@@ -75,4 +75,13 @@ class ApplicationSmokeTest {
 
         assertThat(versions).isEqualTo(2);
     }
+
+    @Test
+    void bookingSchemaIsMigrated() {
+        var settings = jdbc.sql("select count(*) from booking.settings")
+                .query(Integer.class)
+                .single();
+
+        assertThat(settings).isEqualTo(1);
+    }
 }
