@@ -1,8 +1,11 @@
 package gag.nails.booking;
 
+import gag.nails.booking.error.BookingNotFoundException;
 import gag.nails.booking.error.ConsentMissingException;
+import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.LimitReachedException;
 import gag.nails.booking.error.TooLateToBookException;
+import gag.nails.booking.error.VisitNotStartedException;
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
 import gag.nails.clients.error.ClientNotFoundException;
@@ -11,6 +14,8 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.error.SlotNotFoundException;
 import gag.nails.schedule.error.SlotOccupiedException;
+import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Записи: создание, отмена, перенос. Каждая операция — одна транзакция: занятие слота, запись и
@@ -50,4 +55,45 @@ public interface BookingService {
      * @throws AccessDeniedException если действует не мастер
      */
     BookingView createByMaster(CreateBooking command, boolean awaitPrepayment, Actor actor);
+
+    /**
+     * Отменяет активную запись и освобождает слот. Клиент отменяет свою запись: в окне бесплатной
+     * отмены — без последствий, позже — это поздняя отмена, и клиенту ставится признак обязательной
+     * предоплаты. Мастер отменяет любую запись в любое время без последствий для клиента.
+     *
+     * @throws BookingNotFoundException если записи нет
+     * @throws InvalidTransitionException если запись не активна
+     * @throws AccessDeniedException если клиент отменяет чужую запись
+     */
+    BookingView cancel(UUID bookingId, Actor actor);
+
+    /**
+     * Мастер отказывает клиенту, опоздавшему больше допустимого: запись отменяется после начала
+     * слота, клиенту ставится признак обязательной предоплаты, как при поздней отмене.
+     *
+     * @throws BookingNotFoundException если записи нет
+     * @throws InvalidTransitionException если запись не активна
+     * @throws VisitNotStartedException если слот ещё не начался
+     * @throws AccessDeniedException если действует не мастер
+     */
+    BookingView refuseLateArrival(UUID bookingId, Actor actor);
+
+    /**
+     * Комментарий клиента к активной записи, до 500 символов; пустой стирает. Клиент правит свою
+     * запись, мастер — любую.
+     *
+     * @throws BookingNotFoundException если записи нет
+     * @throws InvalidTransitionException если запись не активна
+     * @throws ValidationException если комментарий длиннее 500 символов
+     * @throws AccessDeniedException если клиент правит чужую запись
+     */
+    BookingView updateComment(UUID bookingId, @Nullable String comment, Actor actor);
+
+    /**
+     * Заметка мастера к записи в любом состоянии; пустая стирает. Клиенту не видна.
+     *
+     * @throws BookingNotFoundException если записи нет
+     * @throws AccessDeniedException если действует не мастер
+     */
+    void updateMasterNote(UUID bookingId, String note, Actor actor);
 }

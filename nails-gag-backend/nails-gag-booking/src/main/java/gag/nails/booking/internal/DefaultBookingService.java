@@ -4,10 +4,12 @@ import gag.nails.booking.BookingCreator;
 import gag.nails.booking.BookingService;
 import gag.nails.booking.BookingStatus;
 import gag.nails.booking.BookingView;
+import gag.nails.booking.CancelReason;
 import gag.nails.booking.CreateBooking;
 import gag.nails.booking.error.ConsentMissingException;
 import gag.nails.booking.error.LimitReachedException;
 import gag.nails.booking.error.TooLateToBookException;
+import gag.nails.booking.error.VisitNotStartedException;
 import gag.nails.catalog.CatalogQueries;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientView;
@@ -22,6 +24,7 @@ import gag.nails.schedule.SlotView;
 import gag.nails.schedule.error.SlotOccupiedException;
 import java.util.Set;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 class DefaultBookingService implements BookingService {
 
     private static final Set<ConsentKind> REQUIRED_CONSENTS = Set.of(ConsentKind.PERSONAL_DATA, ConsentKind.OFFER);
+    private static final int MAX_COMMENT_LENGTH = 500;
 
     private final BookingRepository bookings;
     private final BookingFinder finder;
@@ -37,6 +41,7 @@ class DefaultBookingService implements BookingService {
     private final ClientLocks locks;
     private final CurrentRules currentRules;
     private final BookingEvents events;
+    private final BookingCancellation cancellation;
     private final CatalogQueries catalog;
     private final ClientQueries clientQueries;
     private final SlotOccupation occupation;
@@ -49,6 +54,7 @@ class DefaultBookingService implements BookingService {
             ClientLocks locks,
             CurrentRules currentRules,
             BookingEvents events,
+            BookingCancellation cancellation,
             CatalogQueries catalog,
             ClientQueries clientQueries,
             SlotOccupation occupation,
@@ -59,6 +65,7 @@ class DefaultBookingService implements BookingService {
         this.locks = locks;
         this.currentRules = currentRules;
         this.events = events;
+        this.cancellation = cancellation;
         this.catalog = catalog;
         this.clientQueries = clientQueries;
         this.occupation = occupation;
@@ -110,6 +117,42 @@ class DefaultBookingService implements BookingService {
         return create(command, slot, BookingCreator.MASTER, awaitPrepayment, rules);
     }
 
+    @Override
+    public BookingView cancel(UUID bookingId, Actor actor) {
+        var booking = finder.requireAccessible(bookingId, actor);
+        var rules = currentRules.get();
+        return cancellation.cancel(booking, cancelReason(actor, rules, booking), rules.now());
+    }
+
+    @Override
+    public BookingView refuseLateArrival(UUID bookingId, Actor actor) {
+        actor.requireMaster();
+        var booking = finder.require(bookingId);
+        booking.requireActive("refuse late arrival");
+        var rules = currentRules.get();
+        if (!rules.visitStarted(booking.slotStartsAt())) {
+            throw new VisitNotStartedException(bookingId, booking.slotStartsAt());
+        }
+        return cancellation.cancel(booking, CancelReason.LATE_ARRIVAL, rules.now());
+    }
+
+    @Override
+    public BookingView updateComment(UUID bookingId, @Nullable String comment, Actor actor) {
+        var booking = finder.requireAccessible(bookingId, actor);
+        if (comment != null && comment.length() > MAX_COMMENT_LENGTH) {
+            throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
+        }
+        booking.requireActive("update comment");
+        booking.setComment(comment);
+        return booking.toView();
+    }
+
+    @Override
+    public void updateMasterNote(UUID bookingId, String note, Actor actor) {
+        actor.requireMaster();
+        finder.require(bookingId).setMasterNote(note);
+    }
+
     private BookingView create(
             CreateBooking command, SlotView slot, BookingCreator creator, boolean awaitPrepayment, BookingRules rules) {
         if (slot.occupied()) {
@@ -128,5 +171,13 @@ class DefaultBookingService implements BookingService {
 
     private ClientView requireClient(UUID clientId) {
         return clientQueries.byId(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
+    }
+
+    /** Мастер отменяет без последствий; клиент — бесплатно в окне, позже это поздняя отмена. */
+    private static CancelReason cancelReason(Actor actor, BookingRules rules, BookingEntity booking) {
+        if (actor.isMaster()) {
+            return CancelReason.MASTER;
+        }
+        return rules.freeCancellationOpen(booking.slotStartsAt()) ? CancelReason.CLIENT : CancelReason.CLIENT_LATE;
     }
 }
