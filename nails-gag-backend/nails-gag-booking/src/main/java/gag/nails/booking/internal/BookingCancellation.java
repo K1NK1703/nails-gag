@@ -29,12 +29,13 @@ class BookingCancellation {
 
     BookingView cancel(BookingEntity booking, CancelReason reason, Instant now) {
         booking.cancel(reason, now);
-        occupation.release(booking.slotId(), booking.id());
+        // Порядок блокировок во всём модуле: запись → клиент → слот.
         switch (reason) {
             case CLIENT_LATE -> requirePrepayment(booking, PrepaymentFlagReason.LATE_CANCELLATION);
             case LATE_ARRIVAL -> requirePrepayment(booking, PrepaymentFlagReason.LATE_ARRIVAL);
             case CLIENT, MASTER, PREPAYMENT_TIMEOUT -> {}
         }
+        occupation.release(booking.slotId(), booking.id());
         events.cancelled(booking, now);
         return booking.toView();
     }

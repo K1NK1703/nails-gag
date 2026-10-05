@@ -80,4 +80,17 @@ class PrepaymentTest extends BookingTestSupport {
                         .matching(e -> e.bookingId().equals(booking.id()) && e.prepaymentReceived()))
                 .hasSize(1);
     }
+
+    @Test
+    void confirmationWithoutPrepaymentLeavesJournalOfClientWithoutFlagUntouched() {
+        var anna = client("Анна");
+        var booking = bookings.createByMaster(manicure(anna, slot(MONDAY, "12:00")), true, master);
+        assertThat(booking.status()).isEqualTo(BookingStatus.AWAITING_PREPAYMENT);
+
+        var confirmed = prepayments.confirmWithoutPrepayment(booking.id(), master);
+
+        assertThat(confirmed.status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(owesPrepayment(anna)).isFalse();
+        assertThat(clientQueries.prepaymentHistory(anna, master)).isEmpty();
+    }
 }

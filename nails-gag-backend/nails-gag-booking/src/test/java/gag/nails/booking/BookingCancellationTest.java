@@ -14,6 +14,8 @@ import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,9 @@ import org.springframework.modulith.test.PublishedEvents;
 
 @ModuleTest
 class BookingCancellationTest extends BookingTestSupport {
+
+    @PersistenceContext
+    EntityManager entityManager;
 
     @Test
     void clientCancelsInFreeWindowWithoutConsequences() {
@@ -194,5 +199,94 @@ class BookingCancellationTest extends BookingTestSupport {
                 .isInstanceOf(AccessDeniedException.class);
         bookings.updateMasterNote(booking.id(), " ", master);
         assertThat(queries.masterNote(booking.id(), master)).isEmpty();
+    }
+
+    @Test
+    void clientCannotCancelAfterSlotStart() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        timeIsAfterStartOf(slot, Duration.ofMinutes(1));
+
+        assertThatThrownBy(() -> bookings.cancel(booking.id(), Actor.client(anna)))
+                .isInstanceOf(InvalidTransitionException.class)
+                .satisfies(e -> assertThat(((InvalidTransitionException) e).params())
+                        .containsEntry("status", "CONFIRMED")
+                        .containsEntry("action", "cancel a started visit"));
+        assertThat(queries.get(booking.id(), master).status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(owesPrepayment(anna)).isFalse();
+        assertThat(scheduleQueries.slotsOfDay(MONDAY, master))
+                .singleElement()
+                .matches(taken -> taken.occupied() && booking.id().equals(taken.bookingId()));
+    }
+
+    @Test
+    void cancelledBookingAwaitingPrepaymentIsStoredWithoutDeadlineAndFreesSlot() {
+        var anna = clientOwingPrepayment("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        assertThat(booking.status()).isEqualTo(BookingStatus.AWAITING_PREPAYMENT);
+        assertThat(booking.prepaymentDeadline()).isNotNull();
+
+        bookings.cancel(booking.id(), Actor.client(anna));
+        entityManager.flush();
+        entityManager.clear();
+
+        var stored = queries.get(booking.id(), master);
+        assertThat(stored.status()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(stored.cancelReason()).isEqualTo(CancelReason.CLIENT);
+        assertThat(stored.prepaymentDeadline()).isNull();
+        assertThat(scheduleQueries.freeSlots(MONDAY, MONDAY))
+                .extracting(SlotView::id)
+                .containsExactly(slot.id());
+    }
+
+    @Test
+    void lateCancellationPublishesEventWithLateReason(PublishedEvents events) {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        timeIsBefore(slot, Duration.ofHours(23));
+
+        bookings.cancel(booking.id(), Actor.client(anna));
+
+        assertThat(events.ofType(BookingCancelled.class)
+                        .matching(e -> e.bookingId().equals(booking.id()) && e.reason() == CancelReason.CLIENT_LATE))
+                .hasSize(1);
+    }
+
+    @Test
+    void lateArrivalIsRefusedExactlyAtSlotStartButNotTwice() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        timeIsAfterStartOf(slot, Duration.ZERO);
+
+        var refused = bookings.refuseLateArrival(booking.id(), master);
+
+        assertThat(refused.status()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(refused.cancelReason()).isEqualTo(CancelReason.LATE_ARRIVAL);
+        assertThat(refused.cancelledAt()).isEqualTo(slot.startsAt());
+        assertThatThrownBy(() -> bookings.refuseLateArrival(booking.id(), master))
+                .isInstanceOf(InvalidTransitionException.class)
+                .satisfies(e ->
+                        assertThat(((InvalidTransitionException) e).params()).containsEntry("status", "CANCELLED"));
+    }
+
+    @Test
+    void commentLengthIsCountedInCharactersNotUtf16Units() {
+        var anna = client("Анна");
+        var actor = Actor.client(anna);
+        var booking = book(anna, slot(MONDAY, "12:00"));
+        var emoji = "💅".repeat(500);
+
+        bookings.updateComment(booking.id(), emoji, actor);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(queries.get(booking.id(), master).comment()).isEqualTo(emoji);
+        assertThatThrownBy(() -> bookings.updateComment(booking.id(), "💅".repeat(501), actor))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "comment"));
     }
 }

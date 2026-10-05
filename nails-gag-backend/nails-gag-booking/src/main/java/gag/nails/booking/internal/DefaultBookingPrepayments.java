@@ -2,7 +2,9 @@ package gag.nails.booking.internal;
 
 import gag.nails.booking.BookingPrepayments;
 import gag.nails.booking.BookingView;
+import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
+import gag.nails.clients.ClientView;
 import gag.nails.common.actor.Actor;
 import java.time.Clock;
 import java.util.UUID;
@@ -16,19 +18,26 @@ class DefaultBookingPrepayments implements BookingPrepayments {
     private final BookingFinder finder;
     private final BookingEvents events;
     private final ClientService clients;
+    private final ClientQueries clientQueries;
     private final Clock clock;
 
-    DefaultBookingPrepayments(BookingFinder finder, BookingEvents events, ClientService clients, Clock clock) {
+    DefaultBookingPrepayments(
+            BookingFinder finder,
+            BookingEvents events,
+            ClientService clients,
+            ClientQueries clientQueries,
+            Clock clock) {
         this.finder = finder;
         this.events = events;
         this.clients = clients;
+        this.clientQueries = clientQueries;
         this.clock = clock;
     }
 
     @Override
     public BookingView markReceived(UUID bookingId, Actor actor) {
         actor.requireMaster();
-        var booking = finder.require(bookingId);
+        var booking = finder.requireForUpdate(bookingId);
         var now = clock.instant();
         booking.confirm(now, true);
         events.confirmed(booking, now);
@@ -38,12 +47,19 @@ class DefaultBookingPrepayments implements BookingPrepayments {
     @Override
     public BookingView confirmWithoutPrepayment(UUID bookingId, Actor actor) {
         actor.requireMaster();
-        var booking = finder.require(bookingId);
+        var booking = finder.requireForUpdate(bookingId);
         var now = clock.instant();
         booking.confirm(now, false);
-        // Мастер решила не требовать предоплату: признак снимается с причиной MASTER_WAIVED.
-        clients.setPrepaymentRequired(booking.clientId(), false, null, actor);
+        // Мастер решила не требовать предоплату: признак снимается с причиной MASTER_WAIVED. Если его
+        // и не было (мастер сама запросила предоплату при записи), журнал признака не трогаем.
+        if (owesPrepayment(booking.clientId())) {
+            clients.setPrepaymentRequired(booking.clientId(), false, null, actor);
+        }
         events.confirmed(booking, now);
         return booking.toView();
+    }
+
+    private boolean owesPrepayment(UUID clientId) {
+        return clientQueries.byId(clientId).map(ClientView::prepaymentRequired).orElse(false);
     }
 }

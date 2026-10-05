@@ -14,6 +14,7 @@ import gag.nails.schedule.error.SlotOccupiedException;
 import gag.nails.testsupport.ModuleTest;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.test.PublishedEvents;
 
@@ -152,5 +153,73 @@ class BookingRescheduleTest extends BookingTestSupport {
                                 && e.newSlotId().equals(to.id())
                                 && e.slotStartsAt().equals(to.startsAt())))
                 .hasSize(1);
+    }
+
+    @Test
+    void clientCannotRescheduleAfterSlotStart() {
+        var anna = client("Анна");
+        var from = slot(MONDAY, "12:00");
+        var to = slot(TUESDAY, "15:00");
+        var booking = book(anna, from);
+        timeIsAfterStartOf(from, Duration.ofMinutes(1));
+
+        assertThatThrownBy(() -> bookings.reschedule(booking.id(), to.id(), Actor.client(anna)))
+                .isInstanceOf(InvalidTransitionException.class)
+                .satisfies(e -> assertThat(((InvalidTransitionException) e).params())
+                        .containsEntry("status", "CONFIRMED")
+                        .containsEntry("action", "reschedule a started visit"));
+        assertThat(queries.get(booking.id(), master).slotId()).isEqualTo(from.id());
+    }
+
+    @Test
+    void rescheduleToLaterSlotKeepsPrepaymentDeadline() {
+        var anna = clientOwingPrepayment("Анна");
+        var booking = book(anna, slot(MONDAY, "12:00"));
+        var later = slot(TUESDAY, "15:00");
+
+        var moved = bookings.reschedule(booking.id(), later.id(), Actor.client(anna));
+
+        assertThat(moved.status()).isEqualTo(BookingStatus.AWAITING_PREPAYMENT);
+        assertThat(moved.slotId()).isEqualTo(later.id());
+        assertThat(booking.prepaymentDeadline()).isNotNull();
+        assertThat(moved.prepaymentDeadline()).isEqualTo(booking.prepaymentDeadline());
+    }
+
+    @Test
+    void clientCannotRescheduleBookingWithOverduePrepayment() {
+        var anna = clientOwingPrepayment("Анна");
+        var from = slot(MONDAY, "12:00");
+        var to = slot(TUESDAY, "15:00");
+        var booking = book(anna, from);
+        clock.set(booking.prepaymentDeadline().plusSeconds(1));
+
+        assertThatThrownBy(() -> bookings.reschedule(booking.id(), to.id(), Actor.client(anna)))
+                .isInstanceOf(InvalidTransitionException.class)
+                .satisfies(e -> assertThat(((InvalidTransitionException) e).params())
+                        .containsEntry("status", "AWAITING_PREPAYMENT")
+                        .containsEntry("action", "reschedule with overdue prepayment"));
+        var unchanged = queries.get(booking.id(), master);
+        assertThat(unchanged.slotId()).isEqualTo(from.id());
+        assertThat(unchanged.prepaymentDeadline()).isEqualTo(booking.prepaymentDeadline());
+    }
+
+    @Test
+    void masterCannotRescheduleIntoSlotOlderThanCorrectionWindow() {
+        var booking = book(client("Анна"), slot(MONDAY, "12:00"));
+        var tooOld = slot(LocalDate.of(2026, 9, 20), "12:00");
+
+        assertThatThrownBy(() -> bookings.reschedule(booking.id(), tooOld.id(), master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "newSlotId"));
+    }
+
+    @Test
+    void masterCannotRescheduleBookingAwaitingPrepaymentIntoStartedSlot() {
+        var booking = book(clientOwingPrepayment("Анна"), slot(MONDAY, "12:00"));
+        var past = slot(LocalDate.of(2026, 9, 28), "12:00");
+
+        assertThatThrownBy(() -> bookings.reschedule(booking.id(), past.id(), master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "newSlotId"));
     }
 }

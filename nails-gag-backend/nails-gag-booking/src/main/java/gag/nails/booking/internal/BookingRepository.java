@@ -2,14 +2,25 @@ package gag.nails.booking.internal;
 
 import gag.nails.booking.BookingStatus;
 import gag.nails.booking.EarlierTimeStatus;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 interface BookingRepository extends JpaRepository<BookingEntity, UUID> {
+
+    /**
+     * Запись под блокировкой строки (SELECT … FOR UPDATE): параллельное изменение той же записи дождётся конца
+     * транзакции и увидит её новое состояние.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from BookingEntity b where b.id = :bookingId")
+    Optional<BookingEntity> findLockedById(UUID bookingId);
 
     long countByClientIdAndStatusIn(UUID clientId, Collection<BookingStatus> statuses);
 
