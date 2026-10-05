@@ -233,4 +233,30 @@ class EarlierTimeTest extends BookingTestSupport {
         assertThat(proposed.agreedStart()).isNull();
         assertThat(proposed.visitStart()).isEqualTo(slot.startsAt());
     }
+
+    @Test
+    void proposalExactlyNowOrExactlyAtSlotStartIsRejected() {
+        assertThatThrownBy(() -> offers.propose(booking.id(), slot.startsAt(), master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "proposedStart"));
+
+        clock.set(earlier);
+        assertThatThrownBy(() -> offers.propose(booking.id(), earlier, master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "proposedStart"));
+    }
+
+    @Test
+    void acceptanceIsRejectedExactlyAtProposedTimeAndAllowedSecondBefore() {
+        offers.propose(booking.id(), earlier, master);
+
+        clock.set(earlier);
+        assertThatThrownBy(() -> offers.respond(booking.id(), true, Actor.client(anna)))
+                .isInstanceOf(InvalidTransitionException.class);
+
+        clock.set(earlier.minusSeconds(1));
+        var accepted = offers.respond(booking.id(), true, Actor.client(anna));
+        assertThat(accepted.earlierTime().status()).isEqualTo(EarlierTimeStatus.ACCEPTED);
+        assertThat(accepted.agreedStart()).isEqualTo(earlier);
+    }
 }

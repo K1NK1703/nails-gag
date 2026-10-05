@@ -226,6 +226,7 @@ class BookingEntity {
         completedAt = now;
         noShowAt = null;
         prepaymentDeadline = null;
+        expirePendingOffer();
         var actual = services.stream()
                 .filter(service -> service.phase() == ServicePhase.PLANNED)
                 .map(service -> service.copyAs(ServicePhase.ACTUAL))
@@ -246,6 +247,7 @@ class BookingEntity {
         noShowAt = now;
         completedAt = null;
         prepaymentDeadline = null;
+        expirePendingOffer();
         services.removeIf(service -> service.phase() == ServicePhase.ACTUAL);
         finalAmount = null;
     }
@@ -380,6 +382,13 @@ class BookingEntity {
     private void withdrawPendingOffer() {
         if (offerStatus == EarlierTimeStatus.PENDING) {
             offerStatus = EarlierTimeStatus.WITHDRAWN;
+        }
+    }
+
+    /** Визит отмечен: отвечать на предложение, ждавшее ответа, уже не на что. */
+    private void expirePendingOffer() {
+        if (offerStatus == EarlierTimeStatus.PENDING) {
+            offerStatus = EarlierTimeStatus.EXPIRED;
         }
     }
 

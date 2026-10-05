@@ -7,7 +7,9 @@ import gag.nails.booking.VisitMarks;
 import gag.nails.booking.error.CorrectionWindowClosedException;
 import gag.nails.booking.error.VisitNotStartedException;
 import gag.nails.catalog.CatalogQueries;
+import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
+import gag.nails.clients.ClientView;
 import gag.nails.clients.PrepaymentFlagChange;
 import gag.nails.clients.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
@@ -24,6 +26,7 @@ class DefaultVisitMarks implements VisitMarks {
     private final CurrentRules currentRules;
     private final BookingEvents events;
     private final ClientService clients;
+    private final ClientQueries clientQueries;
     private final CatalogQueries catalog;
     private final CommandValidator validator;
 
@@ -32,12 +35,14 @@ class DefaultVisitMarks implements VisitMarks {
             CurrentRules currentRules,
             BookingEvents events,
             ClientService clients,
+            ClientQueries clientQueries,
             CatalogQueries catalog,
             CommandValidator validator) {
         this.finder = finder;
         this.currentRules = currentRules;
         this.events = events;
         this.clients = clients;
+        this.clientQueries = clientQueries;
         this.catalog = catalog;
         this.validator = validator;
     }
@@ -51,8 +56,8 @@ class DefaultVisitMarks implements VisitMarks {
         var correctsNoShow = booking.status() == BookingStatus.NO_SHOW;
         booking.complete(rules.now());
         if (correctsNoShow) {
-            setPrepaymentFlag(booking, false, PrepaymentFlagReason.NO_SHOW_CORRECTED);
-        } else if (booking.prepaymentReceivedAt() != null) {
+            clearFlagSetByNoShowOf(booking, actor);
+        } else if (booking.prepaymentReceivedAt() != null && owesPrepayment(booking.clientId())) {
             setPrepaymentFlag(booking, false, PrepaymentFlagReason.VISIT_WITH_PREPAYMENT_COMPLETED);
         }
         events.completed(booking, rules.now());
@@ -66,7 +71,10 @@ class DefaultVisitMarks implements VisitMarks {
         var rules = currentRules.get();
         requireMarkAllowed(booking, rules);
         booking.markNoShow(rules.now());
-        setPrepaymentFlag(booking, true, PrepaymentFlagReason.NO_SHOW);
+        // Признак уже стоит по другой причине: журнал признака не трогаем.
+        if (!owesPrepayment(booking.clientId())) {
+            setPrepaymentFlag(booking, true, PrepaymentFlagReason.NO_SHOW);
+        }
         events.noShow(booking, rules.now());
         return booking.toView();
     }
@@ -112,6 +120,30 @@ class DefaultVisitMarks implements VisitMarks {
         }
     }
 
+    /**
+     * Исправление «не пришла» снимает признак, только если он стоит именно за эту неявку: последняя
+     * строка журнала признака — NO_SHOW по этой записи. Поставленный по другой причине остаётся.
+     */
+    private void clearFlagSetByNoShowOf(BookingEntity booking, Actor master) {
+        if (!owesPrepayment(booking.clientId())) {
+            return;
+        }
+        var setByThisNoShow = clientQueries.prepaymentHistory(booking.clientId(), master).stream()
+                .findFirst()
+                .filter(last -> last.required()
+                        && last.reason() == PrepaymentFlagReason.NO_SHOW
+                        && booking.id().equals(last.bookingId()))
+                .isPresent();
+        if (setByThisNoShow) {
+            setPrepaymentFlag(booking, false, PrepaymentFlagReason.NO_SHOW_CORRECTED);
+        }
+    }
+
+    private boolean owesPrepayment(UUID clientId) {
+        return clientQueries.byId(clientId).map(ClientView::prepaymentRequired).orElse(false);
+    }
+
+    /** Вызывается, только когда значение действительно меняется: пустых строк в журнале клиента нет. */
     private void setPrepaymentFlag(BookingEntity booking, boolean required, PrepaymentFlagReason reason) {
         clients.applySystemPrepaymentChange(
                 booking.clientId(), new PrepaymentFlagChange(required, reason, booking.id(), null));

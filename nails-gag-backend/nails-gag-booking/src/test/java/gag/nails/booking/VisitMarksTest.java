@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import gag.nails.booking.error.CorrectionWindowClosedException;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.VisitNotStartedException;
+import gag.nails.catalog.CatalogService;
+import gag.nails.clients.PrepaymentFlagChangeView;
 import gag.nails.clients.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
@@ -32,6 +34,12 @@ class VisitMarksTest extends BookingTestSupport {
 
     @PersistenceContext
     EntityManager entityManager;
+
+    @Autowired
+    EarlierTimeOffers offers;
+
+    @Autowired
+    CatalogService catalog;
 
     @Test
     void masterCompletesVisitAfterSlotStartAndActualCopiesPlanned() {
@@ -312,5 +320,179 @@ class VisitMarksTest extends BookingTestSupport {
         assertThat(corrected.plannedServices())
                 .extracting(BookedServiceView::serviceId)
                 .containsExactly(MANICURE, FRENCH);
+    }
+
+    @Test
+    void noShowCorrectionKeepsFlagSetBeforeTheNoShow() {
+        var anna = clientOwingPrepayment("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = bookings.createByMaster(manicure(anna, slot), false, master);
+        timeIsAfterStartOf(slot, Duration.ofMinutes(30));
+        marks.markNoShow(booking.id(), master);
+        clock.advance(Duration.ofHours(1));
+
+        var corrected = marks.complete(booking.id(), master);
+
+        assertThat(corrected.status()).isEqualTo(BookingStatus.COMPLETED);
+        assertThat(owesPrepayment(anna)).isTrue();
+        assertThat(clientQueries.prepaymentHistory(anna, master))
+                .extracting(PrepaymentFlagChangeView::reason)
+                .containsExactly(PrepaymentFlagReason.MASTER_SET);
+    }
+
+    @Test
+    void noShowCorrectionKeepsFlagReassertedByMasterAfterTheNoShow() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        timeIsAfterStartOf(slot, Duration.ofMinutes(30));
+        marks.markNoShow(booking.id(), master);
+        clock.advance(Duration.ofMinutes(10));
+        clients.setPrepaymentRequired(anna, true, "Опаздывает не первый раз", master);
+        clock.advance(Duration.ofHours(1));
+
+        var corrected = marks.complete(booking.id(), master);
+
+        assertThat(corrected.status()).isEqualTo(BookingStatus.COMPLETED);
+        assertThat(owesPrepayment(anna)).isTrue();
+        assertThat(clientQueries.prepaymentHistory(anna, master))
+                .extracting(PrepaymentFlagChangeView::reason)
+                .containsExactly(PrepaymentFlagReason.MASTER_SET, PrepaymentFlagReason.NO_SHOW);
+    }
+
+    @Test
+    void noShowOfClientAlreadyOwingPrepaymentAddsNoJournalRow() {
+        var anna = clientOwingPrepayment("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = bookings.createByMaster(manicure(anna, slot), false, master);
+        timeIsAfterStartOf(slot, Duration.ofMinutes(30));
+
+        marks.markNoShow(booking.id(), master);
+
+        assertThat(owesPrepayment(anna)).isTrue();
+        assertThat(clientQueries.prepaymentHistory(anna, master))
+                .extracting(PrepaymentFlagChangeView::reason)
+                .containsExactly(PrepaymentFlagReason.MASTER_SET);
+    }
+
+    @Test
+    void markIsAllowedExactlyAtSlotStartAndCorrectionExactlyAtWindowEnd() {
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(client("Анна"), slot);
+
+        timeIsAfterStartOf(slot, Duration.ZERO);
+        assertThat(marks.complete(booking.id(), master).status()).isEqualTo(BookingStatus.COMPLETED);
+
+        timeIsAfterStartOf(slot, Duration.ofDays(7));
+        assertThat(marks.markNoShow(booking.id(), master).status()).isEqualTo(BookingStatus.NO_SHOW);
+
+        timeIsAfterStartOf(slot, Duration.ofDays(7).plusSeconds(1));
+        assertThatThrownBy(() -> marks.complete(booking.id(), master))
+                .isInstanceOf(CorrectionWindowClosedException.class);
+    }
+
+    @Test
+    void actualServicesCannotBeChangedAfterCorrectionWindow() {
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(client("Анна"), slot);
+        timeIsAfterStartOf(slot, Duration.ofHours(2));
+        marks.complete(booking.id(), master);
+        timeIsAfterStartOf(slot, Duration.ofDays(7).plusSeconds(1));
+
+        assertThatThrownBy(() -> marks.updateActualServices(
+                        booking.id(),
+                        new UpdateActualServices(MANICURE, List.of(DESIGN), new BigDecimal("2700.00")),
+                        master))
+                .isInstanceOf(CorrectionWindowClosedException.class);
+    }
+
+    @Test
+    void actualServicesMayIncludeServiceHiddenAfterTheVisit() {
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(client("Анна"), slot);
+        timeIsAfterStartOf(slot, Duration.ofHours(2));
+        marks.complete(booking.id(), master);
+        catalog.deactivate(DESIGN, master);
+
+        var adjusted = marks.updateActualServices(
+                booking.id(), new UpdateActualServices(MANICURE, List.of(DESIGN), new BigDecimal("2700.00")), master);
+
+        assertThat(adjusted.actualServices())
+                .extracting(BookedServiceView::serviceId)
+                .containsExactly(MANICURE, DESIGN);
+    }
+
+    @Test
+    void bookingAwaitingPrepaymentCanBeCompleted() {
+        var anna = clientOwingPrepayment("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        assertThat(booking.status()).isEqualTo(BookingStatus.AWAITING_PREPAYMENT);
+        timeIsAfterStartOf(slot, Duration.ofHours(2));
+
+        marks.complete(booking.id(), master);
+        entityManager.flush();
+        entityManager.clear();
+
+        var stored = queries.get(booking.id(), master);
+        assertThat(stored.status()).isEqualTo(BookingStatus.COMPLETED);
+        assertThat(stored.prepaymentDeadline()).isNull();
+        assertThat(stored.finalAmount()).isEqualByComparingTo("2500.00");
+        // предоплаты не было — признак остаётся
+        assertThat(owesPrepayment(anna)).isTrue();
+    }
+
+    @Test
+    void bookingAwaitingPrepaymentCanBeMarkedNoShow() {
+        var anna = clientOwingPrepayment("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        assertThat(booking.status()).isEqualTo(BookingStatus.AWAITING_PREPAYMENT);
+        timeIsAfterStartOf(slot, Duration.ofMinutes(30));
+
+        marks.markNoShow(booking.id(), master);
+        entityManager.flush();
+        entityManager.clear();
+
+        var stored = queries.get(booking.id(), master);
+        assertThat(stored.status()).isEqualTo(BookingStatus.NO_SHOW);
+        assertThat(stored.prepaymentDeadline()).isNull();
+        assertThat(stored.noShowAt()).isEqualTo(clock.instant());
+    }
+
+    @Test
+    void markExpiresPendingEarlierTimeOffer() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        offers.propose(booking.id(), slot.startsAt().minus(Duration.ofMinutes(90)), master);
+        timeIsAfterStartOf(slot, Duration.ofHours(2));
+
+        marks.complete(booking.id(), master);
+        entityManager.flush();
+        entityManager.clear();
+
+        var stored = queries.get(booking.id(), master);
+        assertThat(stored.earlierTime().status()).isEqualTo(EarlierTimeStatus.EXPIRED);
+        assertThat(stored.agreedStart()).isNull();
+        assertThatThrownBy(() -> offers.respond(booking.id(), false, Actor.client(anna)))
+                .isInstanceOf(InvalidTransitionException.class);
+    }
+
+    @Test
+    void noShowExpiresPendingEarlierTimeOffer() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        offers.propose(booking.id(), slot.startsAt().minus(Duration.ofMinutes(90)), master);
+        timeIsAfterStartOf(slot, Duration.ofMinutes(30));
+
+        marks.markNoShow(booking.id(), master);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(queries.get(booking.id(), master).earlierTime().status()).isEqualTo(EarlierTimeStatus.EXPIRED);
+        assertThatThrownBy(() -> offers.respond(booking.id(), false, Actor.client(anna)))
+                .isInstanceOf(InvalidTransitionException.class);
     }
 }
