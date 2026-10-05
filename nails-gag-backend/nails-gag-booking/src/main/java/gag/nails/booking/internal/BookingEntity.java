@@ -164,10 +164,15 @@ class BookingEntity {
         withdrawOfferOnMove();
     }
 
+    /**
+     * Новое предложение заменяет прежнее. Если прежнее было принято, согласованное раннее время
+     * сбрасывается: до ответа на новое предложение визит начинается в начале слота.
+     */
     void proposeEarlierTime(Instant proposedStart, Instant now) {
         if (status != BookingStatus.CONFIRMED || offerStatus == EarlierTimeStatus.PENDING) {
             throw new InvalidTransitionException(id, status, "propose earlier time");
         }
+        agreedStart = null;
         this.proposedStart = proposedStart;
         this.proposedAt = now;
         this.offerStatus = EarlierTimeStatus.PENDING;
