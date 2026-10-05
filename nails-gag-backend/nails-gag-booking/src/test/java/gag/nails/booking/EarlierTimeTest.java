@@ -29,6 +29,9 @@ class EarlierTimeTest extends BookingTestSupport {
     @PersistenceContext
     EntityManager entityManager;
 
+    @Autowired
+    BookingMaintenance maintenance;
+
     private UUID anna;
     private SlotView slot;
     private BookingView booking;
@@ -218,20 +221,87 @@ class EarlierTimeTest extends BookingTestSupport {
     }
 
     @Test
-    void newProposalAfterAcceptedOneDropsAgreedTimeUntilAnswered() {
-        offers.propose(booking.id(), earlier, master);
-        offers.respond(booking.id(), true, Actor.client(anna));
-        var evenEarlier = earlier.minus(Duration.ofMinutes(30));
-
-        offers.propose(booking.id(), evenEarlier, master);
-        entityManager.flush();
-        entityManager.clear();
+    void agreedTimeStaysWhileNewProposalAwaitsAnswer() {
+        var evenEarlier = acceptFirstAndProposeSecond();
 
         var proposed = queries.get(booking.id(), master);
         assertThat(proposed.earlierTime().status()).isEqualTo(EarlierTimeStatus.PENDING);
         assertThat(proposed.earlierTime().proposedStart()).isEqualTo(evenEarlier);
-        assertThat(proposed.agreedStart()).isNull();
-        assertThat(proposed.visitStart()).isEqualTo(slot.startsAt());
+        assertThat(proposed.agreedStart()).isEqualTo(earlier);
+        assertThat(proposed.visitStart()).isEqualTo(earlier);
+    }
+
+    @Test
+    void agreedTimeStaysWhenNewProposalIsDeclined() {
+        acceptFirstAndProposeSecond();
+
+        offers.respond(booking.id(), false, Actor.client(anna));
+        flushAndClear();
+
+        var declined = queries.get(booking.id(), master);
+        assertThat(declined.earlierTime().status()).isEqualTo(EarlierTimeStatus.DECLINED);
+        assertThat(declined.agreedStart()).isEqualTo(earlier);
+        assertThat(declined.visitStart()).isEqualTo(earlier);
+    }
+
+    @Test
+    void agreedTimeIsReplacedWhenNewProposalIsAccepted(PublishedEvents events) {
+        var evenEarlier = acceptFirstAndProposeSecond();
+
+        offers.respond(booking.id(), true, Actor.client(anna));
+        flushAndClear();
+
+        var accepted = queries.get(booking.id(), master);
+        assertThat(accepted.earlierTime().status()).isEqualTo(EarlierTimeStatus.ACCEPTED);
+        assertThat(accepted.agreedStart()).isEqualTo(evenEarlier);
+        assertThat(accepted.visitStart()).isEqualTo(evenEarlier);
+        assertThat(events.ofType(EarlierTimeAccepted.class)
+                        .matching(e -> e.bookingId().equals(booking.id())
+                                && e.agreedStart().equals(evenEarlier)))
+                .hasSize(1);
+    }
+
+    @Test
+    void agreedTimeStaysWhenNewProposalIsWithdrawn() {
+        acceptFirstAndProposeSecond();
+
+        offers.withdraw(booking.id(), master);
+        flushAndClear();
+
+        var withdrawn = queries.get(booking.id(), master);
+        assertThat(withdrawn.earlierTime().status()).isEqualTo(EarlierTimeStatus.WITHDRAWN);
+        assertThat(withdrawn.agreedStart()).isEqualTo(earlier);
+        assertThat(withdrawn.visitStart()).isEqualTo(earlier);
+    }
+
+    @Test
+    void agreedTimeStaysWhenNewProposalExpires() {
+        acceptFirstAndProposeSecond();
+        clock.set(slot.startsAt());
+
+        assertThat(maintenance.expireEarlierTimeOffers()).isEqualTo(1);
+        flushAndClear();
+
+        var expired = queries.get(booking.id(), master);
+        assertThat(expired.earlierTime().status()).isEqualTo(EarlierTimeStatus.EXPIRED);
+        assertThat(expired.agreedStart()).isEqualTo(earlier);
+        assertThat(expired.visitStart()).isEqualTo(earlier);
+    }
+
+    /** Первое предложение принято, второе (ещё на полчаса раньше) ждёт ответа; всё записано в БД. */
+    private Instant acceptFirstAndProposeSecond() {
+        offers.propose(booking.id(), earlier, master);
+        offers.respond(booking.id(), true, Actor.client(anna));
+        flushAndClear();
+        var evenEarlier = earlier.minus(Duration.ofMinutes(30));
+        offers.propose(booking.id(), evenEarlier, master);
+        flushAndClear();
+        return evenEarlier;
+    }
+
+    private void flushAndClear() {
+        entityManager.flush();
+        entityManager.clear();
     }
 
     @Test

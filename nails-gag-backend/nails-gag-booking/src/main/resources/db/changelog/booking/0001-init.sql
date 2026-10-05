@@ -68,7 +68,9 @@ CREATE TABLE booking.booking (
     CONSTRAINT booking_prepayment_deadline_check CHECK ((status = 'AWAITING_PREPAYMENT') = (prepayment_deadline IS NOT NULL)),
     CONSTRAINT booking_offer_check CHECK ((offer_status IS NULL) = (proposed_start IS NULL)
                                           AND (offer_status IS NULL) = (proposed_at IS NULL)),
-    CONSTRAINT booking_agreed_start_check CHECK (agreed_start IS NULL OR offer_status = 'ACCEPTED')
+    -- согласованное время появляется только через предложение и переживает следующие предложения, пока одно из них не принято
+    CONSTRAINT booking_agreed_start_check CHECK (agreed_start IS NULL OR offer_status IS NOT NULL),
+    CONSTRAINT booking_agreed_start_before_slot_check CHECK (agreed_start < slot_starts_at)
 );
 
 -- второй рубеж после условного занятия слота в schedule: на один слот не больше одной активной записи
