@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Ведение каталога. Все операции — только для мастера ({@link AccessDeniedException} иначе).
- * Команды проверяются Bean Validation и правилом «длительность только у основных услуг»
+ * Ведение каталога. Все операции требуют уровня изменения раздела «Прайс» ({@link AccessDeniedException}
+ * иначе). Команды проверяются Bean Validation и правилом «длительность только у основных услуг»
  * ({@link ValidationException}).
  */
 public interface CatalogService {

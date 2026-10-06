@@ -1,6 +1,7 @@
 package gag.nails.schedule.internal;
 
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
 import gag.nails.schedule.CreateDayTemplate;
@@ -53,7 +54,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
     @Override
     @Transactional(readOnly = true)
     public List<DayTemplateView> dayTemplates(Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.SCHEDULE);
         return dayTemplates.findAllByOrderBySortOrderAscNameAsc().stream()
                 .map(DayTemplateEntity::toView)
                 .toList();
@@ -61,7 +62,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     @Override
     public DayTemplateView createDayTemplate(CreateDayTemplate command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         validator.requireValid(command);
         if (dayTemplates.existsByName(command.name())) {
             throw new TemplateNameTakenException(command.name());
@@ -73,7 +74,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     @Override
     public DayTemplateView updateDayTemplate(UUID templateId, UpdateDayTemplate command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         validator.requireValid(command);
         var template = requireDayTemplate(templateId);
         if (dayTemplates.existsByNameAndIdNot(command.name(), templateId)) {
@@ -87,7 +88,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     @Override
     public void deleteDayTemplate(UUID templateId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         var template = requireDayTemplate(templateId);
         if (weekTemplates.usesDayTemplate(templateId)) {
             throw new DayTemplateInUseException(templateId);
@@ -97,7 +98,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     @Override
     public DayTemplateView setDefaultDayTemplate(UUID templateId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         var template = requireDayTemplate(templateId);
         if (template.isDefault()) {
             return template.toView();
@@ -113,7 +114,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
     @Override
     @Transactional(readOnly = true)
     public List<WeekTemplateView> weekTemplates(Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.SCHEDULE);
         return weekTemplates.findAllByOrderByNameAsc().stream()
                 .map(WeekTemplateEntity::toView)
                 .toList();
@@ -121,7 +122,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     @Override
     public WeekTemplateView createWeekTemplate(CreateWeekTemplate command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         validator.requireValid(command);
         if (weekTemplates.existsByName(command.name())) {
             throw new TemplateNameTakenException(command.name());
@@ -135,7 +136,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     @Override
     public WeekTemplateView updateWeekTemplate(UUID templateId, UpdateWeekTemplate command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         validator.requireValid(command);
         var template = requireWeekTemplate(templateId);
         if (weekTemplates.existsByNameAndIdNot(command.name(), templateId)) {
@@ -150,7 +151,7 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
 
     @Override
     public void deleteWeekTemplate(UUID templateId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         var template = requireWeekTemplate(templateId);
         if (rotations.usesWeekTemplate(templateId)) {
             throw new WeekTemplateInUseException(templateId);
@@ -161,13 +162,13 @@ class DefaultScheduleTemplates implements ScheduleTemplates {
     @Override
     @Transactional(readOnly = true)
     public RotationView rotation(Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.SCHEDULE);
         return rotations.single().toView();
     }
 
     @Override
     public RotationView setRotation(SetRotation command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         validator.requireValid(command);
         if (command.anchorMonday().getDayOfWeek() != DayOfWeek.MONDAY) {
             throw new ValidationException("anchorMonday", "must be a Monday");

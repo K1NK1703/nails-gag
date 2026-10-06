@@ -20,17 +20,17 @@ public interface ScheduleQueries {
     List<SlotView> freeSlots(LocalDate from, LocalDate to);
 
     /**
-     * Все слоты дня, включая занятые с идентификатором записи. Только мастер.
+     * Все слоты дня, включая занятые с идентификатором записи. Нужен уровень чтения раздела «Расписание».
      *
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет чтения раздела «Расписание»
      */
     List<SlotView> slotsOfDay(LocalDate date, Actor actor);
 
     /**
-     * Все слоты периода, включая занятые. Только мастер.
+     * Все слоты периода, включая занятые. Нужен уровень чтения раздела «Расписание».
      *
      * @throws ValidationException если {@code to} раньше {@code from}
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет чтения раздела «Расписание»
      */
     List<SlotView> slotsOfPeriod(LocalDate from, LocalDate to, Actor actor);
 }

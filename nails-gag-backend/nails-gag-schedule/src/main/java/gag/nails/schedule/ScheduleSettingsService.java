@@ -5,7 +5,10 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import java.util.List;
 
-/** Настройки расписания. Чтение открыто (длительность слота показывается при записи), изменение — только мастер. */
+/**
+ * Настройки расписания. Текущая длительность открыта (показывается при записи), изменение требует
+ * уровня изменения раздела «Расписание», журнал — уровня чтения.
+ */
 public interface ScheduleSettingsService {
 
     /** Наименьшая допустимая длительность слота в минутах. */
@@ -23,14 +26,14 @@ public interface ScheduleSettingsService {
      * журнал; повторная установка того же значения ничего не делает.
      *
      * @throws ValidationException если значение вне диапазона
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Расписание»
      */
     ScheduleSettingsView setSlotDuration(int minutes, Actor actor);
 
     /**
-     * Журнал изменений настроек, новые первыми. Только мастер.
+     * Журнал изменений настроек, новые первыми. Нужен уровень чтения раздела «Расписание».
      *
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет чтения раздела «Расписание»
      */
     List<SettingsChangeView> history(Actor actor);
 }

@@ -6,6 +6,7 @@ import gag.nails.catalog.ServiceView;
 import gag.nails.catalog.UpdateService;
 import gag.nails.catalog.error.ServiceNotFoundException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
 import java.util.List;
@@ -28,7 +29,7 @@ class DefaultCatalogService implements CatalogService {
 
     @Override
     public ServiceView create(CreateService command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CATALOG);
         validator.requireValid(command);
         var entity = new ServiceEntity(command, nextSortOrder());
         return services.save(entity).toView();
@@ -36,7 +37,7 @@ class DefaultCatalogService implements CatalogService {
 
     @Override
     public ServiceView update(UUID serviceId, UpdateService command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CATALOG);
         validator.requireValid(command);
         var entity = require(serviceId);
         entity.apply(command);
@@ -45,19 +46,19 @@ class DefaultCatalogService implements CatalogService {
 
     @Override
     public void activate(UUID serviceId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CATALOG);
         require(serviceId).setActive(true);
     }
 
     @Override
     public void deactivate(UUID serviceId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CATALOG);
         require(serviceId).setActive(false);
     }
 
     @Override
     public void reorder(List<UUID> orderedServiceIds, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CATALOG);
         if (Set.copyOf(orderedServiceIds).size() != orderedServiceIds.size()) {
             throw new ValidationException("orderedServiceIds", "must not contain duplicates");
         }

@@ -1,6 +1,7 @@
 package gag.nails.schedule.internal;
 
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.ScheduleSettingsService;
 import gag.nails.schedule.ScheduleSettingsView;
@@ -34,7 +35,7 @@ class DefaultScheduleSettingsService implements ScheduleSettingsService {
 
     @Override
     public ScheduleSettingsView setSlotDuration(int minutes, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         if (minutes < MIN_SLOT_DURATION_MINUTES || minutes > MAX_SLOT_DURATION_MINUTES) {
             throw new ValidationException(
                     "minutes", "must be between " + MIN_SLOT_DURATION_MINUTES + " and " + MAX_SLOT_DURATION_MINUTES);
@@ -52,7 +53,7 @@ class DefaultScheduleSettingsService implements ScheduleSettingsService {
     @Override
     @Transactional(readOnly = true)
     public List<SettingsChangeView> history(Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.SCHEDULE);
         return changes.findAllByOrderByChangedAtDescIdDesc().stream()
                 .map(SettingsChangeEntity::toView)
                 .toList();
