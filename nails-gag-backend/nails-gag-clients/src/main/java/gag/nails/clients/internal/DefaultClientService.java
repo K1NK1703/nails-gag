@@ -15,6 +15,7 @@ import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
@@ -65,7 +66,7 @@ class DefaultClientService implements ClientService {
 
     @Override
     public ClientView create(CreateClient command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CLIENTS);
         validator.requireValid(command);
         var phone = Phones.normalize(command.phone()).orElse(null);
         requirePhoneFree(phone, null);
@@ -91,7 +92,7 @@ class DefaultClientService implements ClientService {
 
     @Override
     public ClientView update(UUID clientId, UpdateClient command, Actor actor) {
-        actor.requireMasterOrSelf(clientId);
+        actor.requireWriteOrSelf(Section.CLIENTS, clientId);
         validator.requireValid(command);
         var client = require(clientId);
         client.apply(command);
@@ -100,7 +101,7 @@ class DefaultClientService implements ClientService {
 
     @Override
     public ClientView changePhone(UUID clientId, String phone, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CLIENTS);
         var normalized = Phones.require(phone);
         var client = require(clientId);
         requirePhoneFree(normalized, clientId);
@@ -110,15 +111,15 @@ class DefaultClientService implements ClientService {
 
     @Override
     public void updateMasterNote(UUID clientId, String note, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CLIENTS);
         require(clientId).setMasterNote(note);
     }
 
     @Override
     public void recordConsent(UUID clientId, RecordConsent command, Actor actor) {
-        actor.requireMasterOrSelf(clientId);
+        actor.requireWriteOrSelf(Section.CLIENTS, clientId);
         validator.requireValid(command);
-        if (!actor.isMaster() && command.source() != ConsentSource.SITE_CHECKBOX) {
+        if (!actor.canWrite(Section.CLIENTS) && command.source() != ConsentSource.SITE_CHECKBOX) {
             throw new AccessDeniedException();
         }
         var currentVersion = documents.currentVersion(command.kind().document());
@@ -147,7 +148,7 @@ class DefaultClientService implements ClientService {
 
     @Override
     public void setPrepaymentRequired(UUID clientId, boolean required, @Nullable String comment, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CLIENTS);
         if (comment != null && comment.length() > MAX_COMMENT_LENGTH) {
             throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
         }
@@ -157,7 +158,7 @@ class DefaultClientService implements ClientService {
 
     @Override
     public MergeResult merge(UUID sourceId, UUID targetId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.CLIENTS);
         if (sourceId.equals(targetId)) {
             throw new ValidationException("targetId", "must differ from sourceId");
         }

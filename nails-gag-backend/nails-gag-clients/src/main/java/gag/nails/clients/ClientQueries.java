@@ -2,15 +2,23 @@ package gag.nails.clients;
 
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.error.AccessDeniedException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/** Чтение клиентов: мастер видит всех, клиент — только себя. */
+/**
+ * Чтение клиентов. Сотрудник с уровнем чтения раздела «Клиенты» видит всех, клиент — только себя
+ * ({@link AccessDeniedException}).
+ */
 public interface ClientQueries {
 
-    /** @throws ClientNotFoundException если клиента нет */
+    /**
+     * Чтение раздела «Клиенты» или сам клиент.
+     *
+     * @throws ClientNotFoundException если клиента нет
+     */
     ClientView get(UUID clientId, Actor actor);
 
     /** Для других модулей: без проверки прав, они проверяют их сами; наружу по HTTP как есть не отдавать. */
@@ -22,11 +30,11 @@ public interface ClientQueries {
      */
     Optional<ClientView> byPhone(String phone);
 
-    /** Только мастер. Пустой запрос — все клиенты по алфавиту. */
+    /** Нужен уровень чтения раздела «Клиенты». Пустой запрос — все клиенты по алфавиту. */
     List<ClientView> search(String query, Actor actor);
 
     /**
-     * Только мастер.
+     * Нужен уровень чтения раздела «Клиенты».
      *
      * @throws ClientNotFoundException если клиента нет
      */
@@ -38,9 +46,15 @@ public interface ClientQueries {
      */
     boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds);
 
-    /** Журнал согласий клиента, новые первыми. Мастер или сам клиент. */
+    /** Журнал согласий клиента, новые первыми. Чтение раздела «Клиенты» или сам клиент. */
     List<ConsentView> consents(UUID clientId, Actor actor);
 
-    /** Журнал изменений признака предоплаты, новые первыми. Только мастер. */
+    /** Журнал изменений признака предоплаты, новые первыми. Нужен уровень чтения раздела «Клиенты». */
     List<PrepaymentFlagChangeView> prepaymentHistory(UUID clientId, Actor actor);
+
+    /**
+     * Последнее изменение признака предоплаты. Для других модулей: без проверки прав, наружу по HTTP как
+     * есть не отдавать.
+     */
+    Optional<PrepaymentFlagChangeView> lastPrepaymentChange(UUID clientId);
 }

@@ -35,7 +35,7 @@ class DocumentVersionServiceTest {
     void futureVersionBecomesCurrentOnItsEffectiveDate() {
         // часы теста стоят на 1 октября 2026
         documents.addVersion(
-                new AddDocumentVersion(DocumentKind.OFFER, "2026-10-02", LocalDate.of(2026, 10, 2)), Actor.master());
+                new AddDocumentVersion(DocumentKind.OFFER, "2026-10-02", LocalDate.of(2026, 10, 2)), Actor.developer());
         assertThat(documents.current(DocumentKind.OFFER).version()).isEqualTo("2026-09-25");
 
         clock.advance(Duration.ofDays(1));
@@ -46,7 +46,8 @@ class DocumentVersionServiceTest {
     @Test
     void historyListsNewestFirst() {
         documents.addVersion(
-                new AddDocumentVersion(DocumentKind.POLICY, "2026-10-01", LocalDate.of(2026, 10, 1)), Actor.master());
+                new AddDocumentVersion(DocumentKind.POLICY, "2026-10-01", LocalDate.of(2026, 10, 1)),
+                Actor.developer());
 
         assertThat(documents.history(DocumentKind.POLICY))
                 .extracting(DocumentVersionView::version)
@@ -57,7 +58,7 @@ class DocumentVersionServiceTest {
     void duplicateVersionIsRejected() {
         assertThatThrownBy(() -> documents.addVersion(
                         new AddDocumentVersion(DocumentKind.POLICY, "2026-09-25", LocalDate.of(2026, 10, 1)),
-                        Actor.master()))
+                        Actor.developer()))
                 .isInstanceOf(DocumentVersionExistsException.class);
     }
 
@@ -73,14 +74,14 @@ class DocumentVersionServiceTest {
     void secondVersionOnTheSameDateIsRejected() {
         assertThatThrownBy(() -> documents.addVersion(
                         new AddDocumentVersion(DocumentKind.POLICY, "2026-09-25-b", LocalDate.of(2026, 9, 25)),
-                        Actor.master()))
+                        Actor.developer()))
                 .isInstanceOf(DocumentVersionDateTakenException.class);
     }
 
     @Test
     void blankVersionIsRejected() {
         assertThatThrownBy(() -> documents.addVersion(
-                        new AddDocumentVersion(DocumentKind.POLICY, " ", LocalDate.of(2026, 10, 1)), Actor.master()))
+                        new AddDocumentVersion(DocumentKind.POLICY, " ", LocalDate.of(2026, 10, 1)), Actor.developer()))
                 .isInstanceOf(ValidationException.class)
                 .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "version"));
     }
