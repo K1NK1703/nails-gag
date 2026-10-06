@@ -3,6 +3,7 @@ package gag.nails.booking.internal;
 import gag.nails.booking.BookingView;
 import gag.nails.booking.EarlierTimeOffers;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.time.SalonTimeZone;
 import java.time.Clock;
@@ -29,7 +30,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
 
     @Override
     public BookingView propose(UUID bookingId, Instant proposedStart, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         var now = clock.instant();
         var slotStartsAt = booking.slotStartsAt();
@@ -46,7 +47,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
 
     @Override
     public BookingView withdraw(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         booking.withdrawEarlierTime();
         return booking.toView();

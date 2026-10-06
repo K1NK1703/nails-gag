@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/booking/0001-init.sql
   - include:
       file: db/changelog/booking/0002-seed.sql
+  - include:
+      file: db/changelog/booking/0003-account-deleted.sql

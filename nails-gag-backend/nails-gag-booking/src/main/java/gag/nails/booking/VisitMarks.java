@@ -11,9 +11,9 @@ import gag.nails.common.error.ValidationException;
 import java.util.UUID;
 
 /**
- * Отметки визита, только мастер. Первая отметка ставится активной записи после начала слота;
- * ошибочную отметку можно сменить на противоположную в пределах срока исправления, считая от начала
- * слота. Слот прошедшего визита остаётся занятым.
+ * Отметки визита; нужен уровень изменения раздела «Записи». Первая отметка ставится активной
+ * записи после начала слота; ошибочную отметку можно сменить на противоположную в пределах срока
+ * исправления, считая от начала слота. Слот прошедшего визита остаётся занятым.
  */
 public interface VisitMarks {
 
@@ -28,7 +28,7 @@ public interface VisitMarks {
      * @throws VisitNotStartedException если слот активной записи ещё не начался
      * @throws CorrectionWindowClosedException если срок исправления отметки истёк
      * @throws InvalidTransitionException если запись отменена или уже отмечена выполненной
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      */
     BookingView complete(UUID bookingId, Actor actor);
 
@@ -41,7 +41,7 @@ public interface VisitMarks {
      * @throws VisitNotStartedException если слот активной записи ещё не начался
      * @throws CorrectionWindowClosedException если срок исправления отметки истёк
      * @throws InvalidTransitionException если запись отменена или уже отмечена неявкой
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      */
     BookingView markNoShow(UUID bookingId, Actor actor);
 
@@ -54,7 +54,7 @@ public interface VisitMarks {
      * @throws CorrectionWindowClosedException если срок исправления истёк
      * @throws ServiceNotFoundException если какой-то услуги нет
      * @throws ValidationException если состав неверен или сумма отрицательна
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      */
     BookingView updateActualServices(UUID bookingId, UpdateActualServices command, Actor actor);
 }

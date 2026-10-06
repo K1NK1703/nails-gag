@@ -2,6 +2,7 @@ package gag.nails.booking.internal;
 
 import gag.nails.booking.error.BookingNotFoundException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -22,10 +23,10 @@ class BookingFinder {
         return bookings.findById(bookingId).orElseThrow(() -> new BookingNotFoundException(bookingId));
     }
 
-    /** Мастер — любую запись, клиент — только свою. */
+    /** Сотрудник с чтением «Записей» — любую запись, клиент — только свою. */
     BookingEntity requireAccessible(UUID bookingId, Actor actor) {
         var booking = require(bookingId);
-        actor.requireMasterOrSelf(booking.clientId());
+        actor.requireReadOrSelf(Section.BOOKINGS, booking.clientId());
         return booking;
     }
 
@@ -34,10 +35,10 @@ class BookingFinder {
         return bookings.findLockedById(bookingId).orElseThrow(() -> new BookingNotFoundException(bookingId));
     }
 
-    /** Как {@link #requireForUpdate}, с той же проверкой доступа, что в {@link #requireAccessible}. */
+    /** Как {@link #requireForUpdate}; сотруднику нужен уровень изменения «Записей», клиент меняет только свою. */
     BookingEntity requireAccessibleForUpdate(UUID bookingId, Actor actor) {
         var booking = requireForUpdate(bookingId);
-        actor.requireMasterOrSelf(booking.clientId());
+        actor.requireWriteOrSelf(Section.BOOKINGS, booking.clientId());
         return booking;
     }
 }

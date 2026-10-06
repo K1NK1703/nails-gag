@@ -3,8 +3,8 @@ package gag.nails.clients;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientNotFoundException;
-import gag.nails.clients.error.MergeTwoAccountsException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
@@ -119,12 +119,133 @@ class ClientMergeTest {
     }
 
     @Test
-    void twoAccountsCannotBeMerged() {
-        var first = clients.register(new RegisterClient(UUID.randomUUID(), "Мария", null, null));
-        var second = clients.register(new RegisterClient(UUID.randomUUID(), "Маша", null, null));
+    void twoRegisteredClientsAreMergedIntoTarget(PublishedEvents events) {
+        var sourceAccount = UUID.randomUUID();
+        var targetAccount = UUID.randomUUID();
+        var source = clients.register(new RegisterClient(sourceAccount, "Мария", "+79211234567", null));
+        var target = clients.register(new RegisterClient(targetAccount, "Маша", null, "m@example.com"));
 
-        assertThatThrownBy(() -> clients.merge(first.id(), second.id(), master))
-                .isInstanceOf(MergeTwoAccountsException.class);
+        var result = clients.merge(source.id(), target.id(), master);
+
+        assertThat(result).isEqualTo(new MergeResult(target.id(), source.id()));
+        var survivor = queries.get(target.id(), master);
+        assertThat(survivor.accountId()).isEqualTo(targetAccount);
+        assertThat(survivor.phone()).isEqualTo("+79211234567");
+        assertThat(queries.byId(source.id())).isEmpty();
+        assertThat(events.ofType(ClientMerged.class)
+                        .matching(e -> e.removedClientId().equals(source.id())
+                                && e.survivorClientId().equals(target.id())
+                                && sourceAccount.equals(e.removedAccountId())
+                                && targetAccount.equals(e.survivorAccountId())))
+                .hasSize(1);
+    }
+
+    @Test
+    void mergeEventCarriesAccountsWhenOnlySurvivorHasOne(PublishedEvents events) {
+        var account = UUID.randomUUID();
+        var registered = clients.register(new RegisterClient(account, "Мария", null, null));
+        var card = clients.create(new CreateClient("Маша", null, null, "+79211234567", null, null), master);
+
+        clients.merge(card.id(), registered.id(), master);
+
+        assertThat(events.ofType(ClientMerged.class)
+                        .matching(e -> e.removedClientId().equals(card.id())
+                                && e.survivorClientId().equals(registered.id())
+                                && e.removedAccountId() == null
+                                && account.equals(e.survivorAccountId())))
+                .hasSize(1);
+    }
+
+    @Test
+    void mergedClientIsBlockedIfEitherWas() {
+        var target = clients.create(new CreateClient("Мария", null, null, "+79211234567", null, null), master);
+        var source = clients.create(new CreateClient("Маша", null, null, "+79219876543", null, null), master);
+        clients.block(source.id(), "не платит", master);
+
+        clients.merge(source.id(), target.id(), master);
+
+        assertThat(queries.get(target.id(), master).blocked()).isTrue();
+        assertThat(queries.blockReason(target.id(), master)).contains("не платит");
+
+        var blockedTarget = clients.create(new CreateClient("Аня", null, null, null, null, null), master);
+        var blockedSource = clients.create(new CreateClient("Анна", null, null, null, null, null), master);
+        clients.block(blockedTarget.id(), "своя причина", master);
+        clients.block(blockedSource.id(), "чужая причина", master);
+
+        clients.merge(blockedSource.id(), blockedTarget.id(), master);
+
+        assertThat(queries.get(blockedTarget.id(), master).blocked()).isTrue();
+        assertThat(queries.blockReason(blockedTarget.id(), master)).contains("своя причина");
+    }
+
+    @Test
+    void mergeBlockingSurvivorPublishesClientBlocked(PublishedEvents events) {
+        var account = UUID.randomUUID();
+        var registered = clients.register(new RegisterClient(account, "Мария", null, null));
+        var card = clients.create(new CreateClient("Маша", null, null, "+79211234567", null, null), master);
+        clients.block(card.id(), "не платит", master);
+        clock.advance(Duration.ofMinutes(1));
+
+        clients.merge(card.id(), registered.id(), master);
+
+        assertThat(queries.get(registered.id(), master).blocked()).isTrue();
+        assertThat(events.ofType(ClientBlocked.class)
+                        .matching(e -> e.clientId().equals(registered.id())
+                                && account.equals(e.accountId())
+                                && e.occurredAt().equals(clock.instant())))
+                .hasSize(1);
+    }
+
+    @Test
+    void mergeOfAlreadyBlockedSurvivorPublishesNothing(PublishedEvents events) {
+        var target = clients.create(new CreateClient("Мария", null, null, null, null, null), master);
+        var source = clients.create(new CreateClient("Маша", null, null, null, null, null), master);
+        clients.block(target.id(), "своя причина", master);
+        clients.block(source.id(), "чужая причина", master);
+        var unblockedSource = clients.create(new CreateClient("Аня", null, null, null, null, null), master);
+        clock.advance(Duration.ofMinutes(1));
+
+        clients.merge(source.id(), target.id(), master);
+        clients.merge(unblockedSource.id(), target.id(), master);
+
+        assertThat(queries.get(target.id(), master).blocked()).isTrue();
+        assertThat(events.ofType(ClientBlocked.class)
+                        .matching(e -> e.occurredAt().equals(clock.instant())))
+                .isEmpty();
+    }
+
+    @Test
+    void clientMergesOwnSecondCard(PublishedEvents events) {
+        var ownAccount = UUID.randomUUID();
+        var otherAccount = UUID.randomUUID();
+        var own = clients.register(new RegisterClient(ownAccount, "Мария", null, null));
+        var other = clients.register(new RegisterClient(otherAccount, "Маша", "+79211234567", null));
+        var me = Actor.client(own.id());
+
+        var result = clients.mergeOwn(other.id(), me);
+
+        assertThat(result).isEqualTo(new MergeResult(own.id(), other.id()));
+        var survivor = queries.get(own.id(), me);
+        assertThat(survivor.accountId()).isEqualTo(ownAccount);
+        assertThat(survivor.phone()).isEqualTo("+79211234567");
+        assertThat(queries.byId(other.id())).isEmpty();
+        assertThat(events.ofType(ClientMerged.class)
+                        .matching(e -> e.removedClientId().equals(other.id())
+                                && e.survivorClientId().equals(own.id())
+                                && otherAccount.equals(e.removedAccountId())
+                                && ownAccount.equals(e.survivorAccountId())))
+                .hasSize(1);
+
+        var card = clients.create(new CreateClient("Аня", null, null, null, null, null), master);
+        assertThatThrownBy(() -> clients.mergeOwn(card.id(), master)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> clients.mergeOwn(own.id(), me)).isInstanceOf(ValidationException.class);
+
+        clients.block(card.id(), null, master);
+        assertThatThrownBy(() -> clients.mergeOwn(card.id(), me)).isInstanceOf(ClientBlockedException.class);
+        clients.unblock(card.id(), master);
+        clients.block(own.id(), null, master);
+        assertThatThrownBy(() -> clients.mergeOwn(card.id(), me)).isInstanceOf(ClientBlockedException.class);
+        assertThat(queries.byId(card.id())).isPresent();
     }
 
     @Test

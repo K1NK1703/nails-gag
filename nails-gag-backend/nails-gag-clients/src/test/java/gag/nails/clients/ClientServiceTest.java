@@ -177,6 +177,57 @@ class ClientServiceTest {
     }
 
     @Test
+    void registrationAttachesToCardWithSameEmail() {
+        var card = clients.create(new CreateClient("Мария", "Иванова", null, null, "Maria@Example.com", null), master);
+        var accountId = UUID.randomUUID();
+
+        var registered = clients.register(new RegisterClient(accountId, "Maria", null, "maria@example.com"));
+
+        assertThat(registered.id()).isEqualTo(card.id());
+        assertThat(registered.accountId()).isEqualTo(accountId);
+        assertThat(registered.firstName()).isEqualTo("Мария");
+        assertThat(registered.email()).isEqualTo("Maria@Example.com");
+    }
+
+    @Test
+    void registrationDoesNotGuessBetweenTwoCardsWithSameEmail() {
+        var first = clients.create(new CreateClient("Мария", null, null, null, "maria@example.com", null), master);
+        var second = clients.create(new CreateClient("Маша", null, null, null, "MARIA@example.com", null), master);
+        var accountId = UUID.randomUUID();
+
+        var registered = clients.register(new RegisterClient(accountId, "Maria", null, "maria@example.com"));
+
+        assertThat(registered.id()).isNotIn(first.id(), second.id());
+        assertThat(registered.accountId()).isEqualTo(accountId);
+        assertThat(queries.get(first.id(), master).accountId()).isNull();
+        assertThat(queries.get(second.id(), master).accountId()).isNull();
+    }
+
+    @Test
+    void registrationSkipsCardsWithSameEmailThatAlreadyHaveAnAccount() {
+        var registered = clients.register(new RegisterClient(UUID.randomUUID(), "Мария", null, "maria@example.com"));
+        var accountId = UUID.randomUUID();
+
+        var second = clients.register(new RegisterClient(accountId, "Maria", null, "maria@example.com"));
+
+        assertThat(second.id()).isNotEqualTo(registered.id());
+        assertThat(second.accountId()).isEqualTo(accountId);
+    }
+
+    @Test
+    void phoneMatchWinsOverEmailMatch() {
+        var byPhone = clients.create(new CreateClient("Мария", null, null, "+79211234567", null, null), master);
+        var byEmail = clients.create(new CreateClient("Маша", null, null, null, "maria@example.com", null), master);
+        var accountId = UUID.randomUUID();
+
+        var registered = clients.register(new RegisterClient(accountId, "Maria", "+79211234567", "maria@example.com"));
+
+        assertThat(registered.id()).isEqualTo(byPhone.id());
+        assertThat(registered.accountId()).isEqualTo(accountId);
+        assertThat(queries.get(byEmail.id(), master).accountId()).isNull();
+    }
+
+    @Test
     void unknownClientIsReported() {
         var missing = UUID.randomUUID();
 

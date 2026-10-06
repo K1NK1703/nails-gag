@@ -8,8 +8,8 @@ import java.util.UUID;
 
 /**
  * Предоплата по записи. Сайт денег не принимает и реквизитов не показывает: предоплата вносится вне
- * сайта, мастер отмечает её получение. Обе операции — только мастер и только для записи, ждущей
- * предоплату.
+ * сайта, сотрудник отмечает её получение. Обе операции требуют уровня изменения раздела «Записи» и
+ * применимы только к записи, ждущей предоплату.
  */
 public interface BookingPrepayments {
 
@@ -19,16 +19,18 @@ public interface BookingPrepayments {
      *
      * @throws BookingNotFoundException если записи нет
      * @throws InvalidTransitionException если запись не ждёт предоплату
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      */
     BookingView markReceived(UUID bookingId, Actor actor);
 
     /**
-     * Мастер подтверждает запись без предоплаты и снимает с клиента признак обязательной предоплаты.
+     * Подтверждает запись без предоплаты и снимает с клиента признак обязательной предоплаты. Признак
+     * меняется от имени сотрудника, поэтому кроме изменения «Записей» нужен уровень изменения раздела
+     * «Клиенты»; оба проверяются до изменений.
      *
      * @throws BookingNotFoundException если записи нет
      * @throws InvalidTransitionException если запись не ждёт предоплату
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения «Записей» или «Клиентов»
      */
     BookingView confirmWithoutPrepayment(UUID bookingId, Actor actor);
 }

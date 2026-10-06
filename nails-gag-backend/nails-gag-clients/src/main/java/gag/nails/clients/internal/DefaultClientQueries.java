@@ -7,6 +7,7 @@ import gag.nails.clients.ConsentView;
 import gag.nails.clients.PrepaymentFlagChangeView;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -41,7 +42,7 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public ClientView get(UUID clientId, Actor actor) {
-        actor.requireMasterOrSelf(clientId);
+        actor.requireReadOrSelf(Section.CLIENTS, clientId);
         return byId(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
     }
 
@@ -57,7 +58,7 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public List<ClientView> search(String query, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.CLIENTS);
         var fragment = query.strip();
         var needle = Phones.prefix(fragment).orElseGet(() -> fragment.toLowerCase(Locale.ROOT));
         var pattern = "%" + LIKE_SPECIALS.matcher(needle).replaceAll("!$0") + "%";
@@ -66,10 +67,14 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public Optional<String> masterNote(UUID clientId, Actor actor) {
-        actor.requireMaster();
-        return clients.findById(clientId)
-                .orElseThrow(() -> new ClientNotFoundException(clientId))
-                .masterNote();
+        actor.requireRead(Section.CLIENTS);
+        return require(clientId).masterNote();
+    }
+
+    @Override
+    public Optional<String> blockReason(UUID clientId, Actor actor) {
+        actor.requireRead(Section.CLIENTS);
+        return require(clientId).blockReason();
     }
 
     @Override
@@ -81,7 +86,7 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public List<ConsentView> consents(UUID clientId, Actor actor) {
-        actor.requireMasterOrSelf(clientId);
+        actor.requireReadOrSelf(Section.CLIENTS, clientId);
         return consents.findAllByClientIdOrderByGivenAtDescIdDesc(clientId).stream()
                 .map(ConsentEntity::toView)
                 .toList();
@@ -89,9 +94,20 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public List<PrepaymentFlagChangeView> prepaymentHistory(UUID clientId, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.CLIENTS);
         return flagChanges.findAllByClientIdOrderByChangedAtDescIdDesc(clientId).stream()
                 .map(PrepaymentFlagChangeEntity::toView)
                 .toList();
+    }
+
+    @Override
+    public Optional<PrepaymentFlagChangeView> lastPrepaymentChange(UUID clientId) {
+        return flagChanges
+                .findFirstByClientIdOrderByChangedAtDescIdDesc(clientId)
+                .map(PrepaymentFlagChangeEntity::toView);
+    }
+
+    private ClientEntity require(UUID clientId) {
+        return clients.findById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
     }
 }

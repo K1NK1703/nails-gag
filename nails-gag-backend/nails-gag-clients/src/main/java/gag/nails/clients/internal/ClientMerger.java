@@ -1,15 +1,19 @@
 package gag.nails.clients.internal;
 
 import gag.nails.clients.ChangedBy;
+import gag.nails.clients.ClientBlocked;
 import gag.nails.clients.ClientMerged;
 import gag.nails.clients.MergeResult;
 import gag.nails.clients.PrepaymentFlagReason;
-import gag.nails.clients.error.MergeTwoAccountsException;
+import gag.nails.clients.error.ClientErasedException;
 import java.time.Clock;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
-/** Объединение двух клиентов в одного. Порядок шагов важен: телефон уникален, а журналы ссылаются на клиента. */
+/**
+ * Объединение двух клиентов в одного. Порядок шагов важен: телефон и аккаунт уникальны, а журналы
+ * ссылаются на клиента.
+ */
 @Component
 class ClientMerger {
 
@@ -36,33 +40,59 @@ class ClientMerger {
     }
 
     /**
-     * Остаётся клиент с аккаунтом; если аккаунта нет ни у кого — {@code target}.
+     * Остаётся клиент с аккаунтом; если аккаунт у обоих или ни у кого — {@code target}.
      *
-     * @throws MergeTwoAccountsException если аккаунт есть у обоих
+     * @throws ClientErasedException если одна из карточек обезличена
      */
     MergeResult merge(ClientEntity source, ClientEntity target) {
-        if (source.accountId().isPresent() && target.accountId().isPresent()) {
-            throw new MergeTwoAccountsException();
-        }
-        var survivor = source.accountId().isPresent() ? source : target;
-        var removed = survivor == source ? target : source;
+        var onlySourceRegistered =
+                source.accountId().isPresent() && target.accountId().isEmpty();
+        return onlySourceRegistered ? mergeInto(source, target) : mergeInto(target, source);
+    }
 
+    /**
+     * Остаётся {@code survivor}, кем бы ни были аккаунты. Если аккаунт только у удаляемого, он переходит
+     * оставшемуся; если у обоих — модуль входа сливает их по {@link ClientMerged}.
+     *
+     * @throws ClientErasedException если одна из карточек обезличена
+     */
+    MergeResult mergeInto(ClientEntity survivor, ClientEntity removed) {
+        requireNotErased(survivor);
+        requireNotErased(removed);
         var removedPhone = removed.phone().orElse(null);
+        var removedAccountId = removed.accountId().orElse(null);
+        var survivorAccountId = survivor.accountId().orElse(null);
         var flagToCarry = removed.prepaymentRequired() && !survivor.prepaymentRequired();
+        var blockToCarry = removed.isBlocked() && !survivor.isBlocked();
 
         consents.reassign(removed.id(), survivor.id());
         flagChanges.reassign(removed.id(), survivor.id());
         survivor.absorb(removed);
-        // удаляем до переноса телефона: иначе уникальный индекс увидит два одинаковых номера
+        // удаляем до переноса телефона и аккаунта: иначе уникальные индексы увидят два одинаковых значения
         clients.delete(removed);
         clients.flush();
         if (survivor.phone().isEmpty() && removedPhone != null) {
             survivor.setPhone(removedPhone);
         }
+        if (survivorAccountId == null && removedAccountId != null) {
+            survivor.attachAccount(removedAccountId);
+        }
         if (flagToCarry) {
             flagJournal.record(survivor, true, PrepaymentFlagReason.MERGED, ChangedBy.MASTER, null, null);
         }
-        events.publishEvent(new ClientMerged(removed.id(), survivor.id(), clock.instant()));
+        var now = clock.instant();
+        events.publishEvent(new ClientMerged(removed.id(), survivor.id(), removedAccountId, survivorAccountId, now));
+        // Оставшийся стал заблокированным из-за объединения: модулю входа пора закрыть его сессии.
+        if (blockToCarry) {
+            events.publishEvent(
+                    new ClientBlocked(survivor.id(), survivor.accountId().orElse(null), now));
+        }
         return new MergeResult(survivor.id(), removed.id());
+    }
+
+    private static void requireNotErased(ClientEntity client) {
+        if (client.isErased()) {
+            throw new ClientErasedException(client.id());
+        }
     }
 }

@@ -15,7 +15,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Операции мастера с графиком: слоты и применение шаблонов. Существующий слот открыт для записи,
+ * Операции с графиком: слоты и применение шаблонов. Изменения требуют уровня изменения раздела
+ * «Расписание», предпросмотр ротации — уровня чтения. Существующий слот открыт для записи,
  * закрыть слот — удалить его. Клиентские операции слотов не касаются: запись занимает слот через
  * {@link SlotOccupation}.
  */
@@ -26,7 +27,7 @@ public interface ScheduleService {
      * прошлом допустим: так мастер вносит визит, прошедший без записи.
      *
      * @throws SlotOverlapException если интервал пересекается с существующим слотом
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Расписание»
      */
     SlotView addSlot(LocalDate date, LocalTime startTime, Actor actor);
 
@@ -36,7 +37,7 @@ public interface ScheduleService {
      * @throws SlotNotFoundException если слота нет
      * @throws SlotOccupiedException если слот занят записью: сначала отмена или перенос записи
      * @throws SlotOverlapException если новый интервал пересекается с другим слотом
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Расписание»
      */
     SlotView moveSlot(UUID slotId, LocalTime newStartTime, Actor actor);
 
@@ -45,7 +46,7 @@ public interface ScheduleService {
      *
      * @throws SlotNotFoundException если слота нет
      * @throws SlotOccupiedException если слот занят записью
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Расписание»
      */
     void deleteSlot(UUID slotId, Actor actor);
 
@@ -58,7 +59,7 @@ public interface ScheduleService {
      * @throws TemplateOverlapException если времена шаблона пересекаются при текущей длительности
      * @throws SlotOverlapException если слот пересёкся со слотом соседнего дня (слот через полночь)
      * @throws ValidationException если список дат пуст
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Расписание»
      */
     TemplateApplication applyDayTemplate(UUID templateId, List<LocalDate> dates, Actor actor);
 
@@ -74,7 +75,7 @@ public interface ScheduleService {
      * @throws RotationNotConfiguredException если ротация пуста
      * @throws TemplateOverlapException если времена какого-то шаблона дня пересекаются при текущей длительности
      * @throws ValidationException если {@code to} раньше {@code from}
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет чтения раздела «Расписание»
      */
     RotationPreview previewRotation(LocalDate from, LocalDate to, Actor actor);
 
@@ -88,7 +89,7 @@ public interface ScheduleService {
      * @throws SlotOverlapException если слот пересёкся со слотом соседнего дня (слот через полночь)
      * @throws ValidationException если недели плана не совпадают с неделями периода, шаблон не из ротации
      *     или {@code to} раньше {@code from}
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Расписание»
      */
     TemplateApplication applyRotation(ApplyRotation command, Actor actor);
 }

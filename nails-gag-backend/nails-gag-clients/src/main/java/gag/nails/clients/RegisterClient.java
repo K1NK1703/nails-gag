@@ -12,6 +12,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param phone только подтверждённый провайдером входа (Яндекс ID / VK ID); телефон, введённый
  *     пользователем, сюда не передавать ({@code null})
+ * @param email только подтверждённая провайдером входа; почта, введённая пользователем, сюда не
+ *     передавать ({@code null}): по ней карточка без аккаунта привязывается к аккаунту
  */
 public record RegisterClient(
         @NotNull UUID accountId,

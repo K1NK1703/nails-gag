@@ -8,7 +8,8 @@ import java.util.List;
 
 /**
  * Редакции политики и оферты. Действующая — последняя, чья дата начала не позже сегодняшнего дня
- * по часам салона. Новую редакцию добавляет мастер, когда меняется текст документа на сайте.
+ * по часам салона. Новую редакцию добавляет сотрудник с уровнем изменения раздела «Документы»,
+ * когда меняется текст документа на сайте; у мастера там только чтение.
  */
 public interface DocumentVersionService {
 
@@ -19,7 +20,7 @@ public interface DocumentVersionService {
     List<DocumentVersionView> history(DocumentKind kind);
 
     /**
-     * Только мастер ({@link AccessDeniedException} иначе).
+     * Нужен уровень изменения раздела «Документы» ({@link AccessDeniedException} иначе).
      *
      * @throws DocumentVersionExistsException если такая версия уже есть
      * @throws DocumentVersionDateTakenException если у документа уже есть редакция с этой датой начала

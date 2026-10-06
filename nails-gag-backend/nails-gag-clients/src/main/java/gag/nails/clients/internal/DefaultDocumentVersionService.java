@@ -8,6 +8,7 @@ import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
 import gag.nails.clients.internal.error.DocumentVersionMissingException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.time.SalonTimeZone;
 import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
@@ -48,7 +49,7 @@ class DefaultDocumentVersionService implements DocumentVersionService {
 
     @Override
     public DocumentVersionView addVersion(AddDocumentVersion command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.DOCUMENTS);
         validator.requireValid(command);
         var kind = command.kind();
         if (versions.existsByKindAndVersion(kind, command.version())) {

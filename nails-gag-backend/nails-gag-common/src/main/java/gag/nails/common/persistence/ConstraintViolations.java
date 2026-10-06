@@ -17,7 +17,10 @@ import org.springframework.dao.DataIntegrityViolationException;
  */
 public final class ConstraintViolations {
 
-    /** PostgreSQL: {@code ... violates unique constraint "client_phone_key"}, {@code ... violates exclusion constraint "slot_no_overlap"}. */
+    /**
+     * PostgreSQL: {@code ... violates unique constraint "client_phone_key"},
+     * {@code ... violates exclusion constraint "slot_no_overlap"}.
+     */
     private static final Pattern CONSTRAINT_IN_MESSAGE = Pattern.compile("constraint \"([^\"]+)\"");
 
     private ConstraintViolations() {}

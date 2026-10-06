@@ -6,7 +6,10 @@ import jakarta.validation.constraints.Size;
 import java.time.MonthDay;
 import org.jspecify.annotations.Nullable;
 
-/** Правка данных клиента им самим или мастером. Телефон меняет только мастер ({@link ClientService#changePhone}). */
+/**
+ * Правка данных клиента им самим или сотрудником с изменением раздела «Клиенты». Телефон меняет
+ * только такой сотрудник ({@link ClientService#changePhone}).
+ */
 public record UpdateClient(
         @NotBlank @Size(max = 100) String firstName,
         @Size(max = 100) @Nullable String lastName,

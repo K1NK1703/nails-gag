@@ -16,8 +16,11 @@ import gag.nails.catalog.CatalogQueries;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientView;
 import gag.nails.clients.ConsentKind;
+import gag.nails.clients.error.ClientBlockedException;
+import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
@@ -86,7 +89,9 @@ class DefaultBookingService implements BookingService {
         validator.requireValid(command);
         var rules = currentRules.get();
         // Блокировка клиента до подсчёта: параллельная запись того же клиента ждёт конца этой транзакции.
+        // Карточка читается под ней же: параллельная блокировка или обезличивание либо уже видны, либо подождут.
         locks.acquire(clientId);
+        var client = requireClientMayBookSelf(clientId);
         var limit = rules.settings().maxActiveBookings();
         if (bookings.countByClientIdAndStatusIn(clientId, BookingStatus.active()) >= limit) {
             throw new LimitReachedException(limit);
@@ -98,13 +103,12 @@ class DefaultBookingService implements BookingService {
         if (rules.tooLateToBook(slot.startsAt())) {
             throw new TooLateToBookException(slot.startsAt(), rules.settings().bookingCutoffMinutes());
         }
-        var awaitPrepayment = requireClient(clientId).prepaymentRequired();
-        return create(command, slot, BookingCreator.CLIENT, awaitPrepayment, rules);
+        return create(command, slot, BookingCreator.CLIENT, client.prepaymentRequired(), rules);
     }
 
     @Override
     public BookingView createByMaster(CreateBooking command, boolean awaitPrepayment, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         validator.requireValid(command);
         var rules = currentRules.get();
         var slot = occupation.get(command.slotId());
@@ -112,7 +116,8 @@ class DefaultBookingService implements BookingService {
         // Та же блокировка, что при самозаписи: параллельная запись клиента увидит эту при подсчёте лимита.
         // Клиент проверяется под ней: параллельное объединение карточек либо уже закончилось, либо подождёт.
         locks.acquire(command.clientId());
-        requireClient(command.clientId());
+        // Заблокированного мастер записать может, обезличенного — нет: записывать больше некого.
+        requireNotErased(requireClient(command.clientId()));
         return create(command, slot, BookingCreator.MASTER, awaitPrepayment, rules);
     }
 
@@ -121,7 +126,7 @@ class DefaultBookingService implements BookingService {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
         booking.requireActive("cancel");
         var rules = currentRules.get();
-        if (!actor.isMaster() && rules.visitStarted(booking.slotStartsAt())) {
+        if (!actor.canWrite(Section.BOOKINGS) && rules.visitStarted(booking.slotStartsAt())) {
             throw new InvalidTransitionException(bookingId, booking.status(), "cancel a started visit");
         }
         return cancellation.cancel(booking, cancelReason(actor, rules, booking), rules.now());
@@ -129,7 +134,7 @@ class DefaultBookingService implements BookingService {
 
     @Override
     public BookingView refuseLateArrival(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         booking.requireActive("refuse late arrival");
         var rules = currentRules.get();
@@ -144,7 +149,12 @@ class DefaultBookingService implements BookingService {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
         booking.requireActive("reschedule");
         var rules = currentRules.get();
-        var byClient = !actor.isMaster();
+        var byClient = !actor.canWrite(Section.BOOKINGS);
+        if (byClient) {
+            // Порядок блокировок: запись уже взята, теперь клиент — как при создании записи.
+            locks.acquire(booking.clientId());
+            requireClientMayBookSelf(booking.clientId());
+        }
         if (byClient && rules.visitStarted(booking.slotStartsAt())) {
             throw new InvalidTransitionException(bookingId, booking.status(), "reschedule a started visit");
         }
@@ -200,7 +210,7 @@ class DefaultBookingService implements BookingService {
 
     @Override
     public void updateMasterNote(UUID bookingId, String note, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         // Длина в символах (code points), как char_length в CHECK базы, а не в единицах UTF-16.
         if (note.codePointCount(0, note.length()) > MAX_MASTER_NOTE_LENGTH) {
@@ -229,6 +239,22 @@ class DefaultBookingService implements BookingService {
         return clientQueries.byId(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
     }
 
+    /** Сам записывается и переносит только клиент, которого не заблокировали и не обезличили. */
+    private ClientView requireClientMayBookSelf(UUID clientId) {
+        var client = requireNotErased(requireClient(clientId));
+        if (client.blocked()) {
+            throw new ClientBlockedException(clientId);
+        }
+        return client;
+    }
+
+    private static ClientView requireNotErased(ClientView client) {
+        if (client.erased()) {
+            throw new ClientErasedException(client.id());
+        }
+        return client;
+    }
+
     /**
      * Мастеру доступен и слот в прошлом, но не старше срока исправления отметок; запись, ждущая
      * предоплату, на уже начавшийся слот не ставится.
@@ -245,7 +271,7 @@ class DefaultBookingService implements BookingService {
 
     /** Мастер отменяет без последствий; клиент — бесплатно в окне, позже это поздняя отмена. */
     private static CancelReason cancelReason(Actor actor, BookingRules rules, BookingEntity booking) {
-        if (actor.isMaster()) {
+        if (actor.canWrite(Section.BOOKINGS)) {
             return CancelReason.MASTER;
         }
         return rules.freeCancellationOpen(booking.slotStartsAt()) ? CancelReason.CLIENT : CancelReason.CLIENT_LATE;

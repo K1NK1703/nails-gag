@@ -1,6 +1,7 @@
 package gag.nails.schedule.internal;
 
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.schedule.ScheduleQueries;
 import gag.nails.schedule.SlotView;
 import java.time.LocalDate;
@@ -26,13 +27,13 @@ class DefaultScheduleQueries implements ScheduleQueries {
 
     @Override
     public List<SlotView> slotsOfDay(LocalDate date, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.SCHEDULE);
         return views(slots.findAllByDayOrderByStartsAt(date));
     }
 
     @Override
     public List<SlotView> slotsOfPeriod(LocalDate from, LocalDate to, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.SCHEDULE);
         Periods.requireOrdered(from, to);
         return views(slots.findAllByDayBetweenOrderByStartsAt(from, to));
     }

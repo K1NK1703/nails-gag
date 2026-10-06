@@ -12,12 +12,15 @@ import gag.nails.booking.CancelReason;
 import gag.nails.booking.CreateBooking;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.LimitReachedException;
+import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.ConsentKind;
 import gag.nails.clients.ConsentSource;
 import gag.nails.clients.CreateClient;
 import gag.nails.clients.RecordConsent;
 import gag.nails.clients.RegisterClient;
+import gag.nails.clients.error.ClientBlockedException;
+import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.time.SalonTimeZone;
@@ -73,6 +76,9 @@ class BookingConcurrencyTest {
 
     @Autowired
     ClientService clients;
+
+    @Autowired
+    ClientQueries clientQueries;
 
     @Autowired
     ScheduleService schedule;
@@ -359,17 +365,167 @@ class BookingConcurrencyTest {
         }
     }
 
-    /** Ждёт, пока какая-нибудь другая транзакция не встанет в очередь за блокировкой строки. */
+    @Test
+    void eraseRacingWithClientBookingNeverLeavesActiveBookingOfErasedClient() throws Exception {
+        var day = daysFromNow(15);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        var outcomes = race(
+                () -> {
+                    clients.erase(anna);
+                    return anna;
+                },
+                () -> book(anna, slot));
+
+        // Запись либо успела раньше и отменена обезличиванием, либо дождалась его и получила отказ по карточке.
+        var erased = outcomes.get(0);
+        var created = outcomes.get(1);
+        assertThat(erased.failure()).isNull();
+        assertThat(clientQueries.get(anna, master).erased()).isTrue();
+        assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
+        assertThat(scheduleQueries.slotsOfDay(day, master))
+                .singleElement()
+                .matches(free -> free.id().equals(slot.id()) && !free.occupied());
+        if (created.succeeded()) {
+            assertThat(bookingQueries.ofDay(day, master)).singleElement().satisfies(booking -> {
+                assertThat(booking.clientId()).isEqualTo(anna);
+                assertThat(booking.status()).isEqualTo(BookingStatus.CANCELLED);
+                assertThat(booking.cancelReason()).isEqualTo(CancelReason.ACCOUNT_DELETED);
+                assertThat(booking.comment()).isNull();
+            });
+        } else {
+            assertThat(created.failure()).isInstanceOf(ClientErasedException.class);
+            assertThat(bookingQueries.ofDay(day, master)).isEmpty();
+        }
+    }
+
+    /**
+     * Не гонка, а заданный порядок: самозапись ждёт блокировку клиента, которую держит ещё не
+     * зафиксированное обезличивание, и после фиксации видит обезличенную карточку. В гонке выше
+     * самозапись почти всегда берёт блокировку первой, поэтому эта ветка проверяется отдельно.
+     */
+    @Test
+    void clientBookingThatWaitedForEraseGetsClientErased() throws Exception {
+        var day = daysFromNow(17);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        Outcome created;
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var waiting = transactions.execute(status -> {
+                clients.erase(anna);
+                var attempt = executor.submit(() -> {
+                    try {
+                        book(anna, slot);
+                        return new Outcome(null);
+                    } catch (Exception e) {
+                        return new Outcome(e);
+                    }
+                });
+                assertThat(anotherTransactionWaitsForLock()).isTrue();
+                return attempt;
+            });
+            created = waiting.get(30, TimeUnit.SECONDS);
+        }
+
+        assertThat(created.failure()).isInstanceOf(ClientErasedException.class);
+        assertThat(clientQueries.get(anna, master).erased()).isTrue();
+        assertThat(bookingQueries.ofDay(day, master)).isEmpty();
+        assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
+        assertThat(scheduleQueries.slotsOfDay(day, master)).singleElement().matches(free -> !free.occupied());
+    }
+
+    /**
+     * Не гонка, а заданный порядок: блокировка клиента ещё не зафиксирована, когда клиент записывается
+     * сам. Блокировка не держит ничего, чего ждала бы запись (она меняет только карточку клиента, а
+     * запись читает карточку без блокировки строки), поэтому запись проходит и остаётся после
+     * фиксации блокировки — как любая запись, созданная до неё. Отказ по блокировке запись получает,
+     * только если блокировка зафиксирована раньше её проверки (см. гонку ниже).
+     */
+    @Test
+    void clientBookingDoesNotWaitForPendingBlockAndSurvivesIt() throws Exception {
+        var day = daysFromNow(18);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        Outcome created;
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            created = transactions.execute(status -> {
+                clients.block(anna, "грубит", master);
+                var attempt = executor.submit(() -> {
+                    try {
+                        book(anna, slot);
+                        return new Outcome(null);
+                    } catch (Exception e) {
+                        return new Outcome(e);
+                    }
+                });
+                try {
+                    // Завершается, пока блокировка ещё не зафиксирована: ждать ей нечего.
+                    return attempt.get(30, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    return new Outcome(e);
+                }
+            });
+        }
+
+        assertThat(created).isNotNull();
+        assertThat(created.failure()).isNull();
+        assertThat(clientQueries.get(anna, master).blocked()).isTrue();
+        assertThat(bookingQueries.activeOfClient(anna, master)).singleElement().satisfies(booking -> {
+            assertThat(booking.slotId()).isEqualTo(slot.id());
+            assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
+        });
+        assertThat(scheduleQueries.slotsOfDay(day, master)).singleElement().matches(SlotView::occupied);
+    }
+
+    @Test
+    void blockRacingWithClientBookingIsConsistent() throws Exception {
+        var day = daysFromNow(16);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        var outcomes = race(() -> clients.block(anna, "грубит", master), () -> book(anna, slot));
+
+        // Блокировка проходит всегда; запись либо успела раньше неё и остаётся, либо получила отказ.
+        var blocked = outcomes.get(0);
+        var created = outcomes.get(1);
+        assertThat(blocked.failure()).isNull();
+        assertThat(clientQueries.get(anna, master).blocked()).isTrue();
+        var slotAfter = scheduleQueries.slotsOfDay(day, master);
+        if (created.succeeded()) {
+            assertThat(bookingQueries.activeOfClient(anna, master))
+                    .singleElement()
+                    .satisfies(booking -> {
+                        assertThat(booking.slotId()).isEqualTo(slot.id());
+                        assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
+                    });
+            assertThat(slotAfter).singleElement().matches(SlotView::occupied);
+        } else {
+            assertThat(created.failure()).isInstanceOf(ClientBlockedException.class);
+            assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
+            assertThat(slotAfter).singleElement().matches(free -> !free.occupied());
+        }
+    }
+
+    /** Ждёт, пока другая сессия этой же базы не встанет в очередь за блокировкой строки. */
     private boolean anotherTransactionWaitsForLock() {
         var giveUpAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
         while (System.nanoTime() < giveUpAt) {
-            var waiting = jdbc.sql("select count(*) from pg_stat_activity where wait_event_type = 'Lock'")
-                    .query(Integer.class)
-                    .single();
+            var waiting = jdbc.sql("""
+                            select count(*) from pg_stat_activity
+                            where wait_event_type = 'Lock' and datname = current_database() and pid <> pg_backend_pid()
+                            """).query(Integer.class).single();
             if (waiting > 0) {
                 return true;
             }
-            Thread.onSpinWait();
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
         return false;
     }

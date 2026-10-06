@@ -7,13 +7,13 @@ import gag.nails.common.error.AccessDeniedException;
 import java.util.List;
 import java.util.UUID;
 
-/** Чтение каталога. Прайс публичный: доступно без ограничений по ролям, кроме отмеченных методов. */
+/** Чтение каталога. Прайс публичный: доступно всем, кроме отмеченных методов. */
 public interface CatalogQueries {
 
     /**
-     * Все услуги, включая скрытые, в порядке прайса. Только мастер.
+     * Все услуги, включая скрытые, в порядке прайса. Нужен уровень чтения раздела «Прайс».
      *
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет чтения раздела «Прайс»
      */
     List<ServiceView> all(Actor actor);
 

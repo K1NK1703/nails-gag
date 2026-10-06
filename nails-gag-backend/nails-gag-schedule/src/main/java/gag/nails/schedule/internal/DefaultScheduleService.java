@@ -1,6 +1,7 @@
 package gag.nails.schedule.internal;
 
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
 import gag.nails.schedule.ApplyRotation;
@@ -50,14 +51,14 @@ class DefaultScheduleService implements ScheduleService {
 
     @Override
     public SlotView addSlot(LocalDate date, LocalTime startTime, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         return writer.create(date, startTime, settings.single().slotDurationMinutes())
                 .toView();
     }
 
     @Override
     public SlotView moveSlot(UUID slotId, LocalTime newStartTime, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         var slot = requireFree(slotId);
         writer.move(slot, newStartTime);
         return slot.toView();
@@ -65,13 +66,13 @@ class DefaultScheduleService implements ScheduleService {
 
     @Override
     public void deleteSlot(UUID slotId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         slots.delete(requireFree(slotId));
     }
 
     @Override
     public TemplateApplication applyDayTemplate(UUID templateId, List<LocalDate> dates, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         if (dates.isEmpty()) {
             throw new ValidationException("dates", "must not be empty");
         }
@@ -88,13 +89,13 @@ class DefaultScheduleService implements ScheduleService {
     @Override
     @Transactional(readOnly = true)
     public RotationPreview previewRotation(LocalDate from, LocalDate to, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.SCHEDULE);
         return planner.preview(from, to);
     }
 
     @Override
     public TemplateApplication applyRotation(ApplyRotation command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.SCHEDULE);
         validator.requireValid(command);
         return planner.apply(command);
     }
