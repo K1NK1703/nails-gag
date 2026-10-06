@@ -1,6 +1,7 @@
 package gag.nails.clients.internal;
 
 import gag.nails.clients.ChangedBy;
+import gag.nails.clients.ClientBlocked;
 import gag.nails.clients.ClientMerged;
 import gag.nails.clients.MergeResult;
 import gag.nails.clients.PrepaymentFlagReason;
@@ -62,6 +63,7 @@ class ClientMerger {
         var removedAccountId = removed.accountId().orElse(null);
         var survivorAccountId = survivor.accountId().orElse(null);
         var flagToCarry = removed.prepaymentRequired() && !survivor.prepaymentRequired();
+        var blockToCarry = removed.isBlocked() && !survivor.isBlocked();
 
         consents.reassign(removed.id(), survivor.id());
         flagChanges.reassign(removed.id(), survivor.id());
@@ -78,8 +80,13 @@ class ClientMerger {
         if (flagToCarry) {
             flagJournal.record(survivor, true, PrepaymentFlagReason.MERGED, ChangedBy.MASTER, null, null);
         }
-        events.publishEvent(
-                new ClientMerged(removed.id(), survivor.id(), removedAccountId, survivorAccountId, clock.instant()));
+        var now = clock.instant();
+        events.publishEvent(new ClientMerged(removed.id(), survivor.id(), removedAccountId, survivorAccountId, now));
+        // Оставшийся стал заблокированным из-за объединения: модулю входа пора закрыть его сессии.
+        if (blockToCarry) {
+            events.publishEvent(
+                    new ClientBlocked(survivor.id(), survivor.accountId().orElse(null), now));
+        }
         return new MergeResult(survivor.id(), removed.id());
     }
 

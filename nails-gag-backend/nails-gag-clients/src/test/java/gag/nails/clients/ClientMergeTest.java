@@ -179,6 +179,42 @@ class ClientMergeTest {
     }
 
     @Test
+    void mergeBlockingSurvivorPublishesClientBlocked(PublishedEvents events) {
+        var account = UUID.randomUUID();
+        var registered = clients.register(new RegisterClient(account, "Мария", null, null));
+        var card = clients.create(new CreateClient("Маша", null, null, "+79211234567", null, null), master);
+        clients.block(card.id(), "не платит", master);
+        clock.advance(Duration.ofMinutes(1));
+
+        clients.merge(card.id(), registered.id(), master);
+
+        assertThat(queries.get(registered.id(), master).blocked()).isTrue();
+        assertThat(events.ofType(ClientBlocked.class)
+                        .matching(e -> e.clientId().equals(registered.id())
+                                && account.equals(e.accountId())
+                                && e.occurredAt().equals(clock.instant())))
+                .hasSize(1);
+    }
+
+    @Test
+    void mergeOfAlreadyBlockedSurvivorPublishesNothing(PublishedEvents events) {
+        var target = clients.create(new CreateClient("Мария", null, null, null, null, null), master);
+        var source = clients.create(new CreateClient("Маша", null, null, null, null, null), master);
+        clients.block(target.id(), "своя причина", master);
+        clients.block(source.id(), "чужая причина", master);
+        var unblockedSource = clients.create(new CreateClient("Аня", null, null, null, null, null), master);
+        clock.advance(Duration.ofMinutes(1));
+
+        clients.merge(source.id(), target.id(), master);
+        clients.merge(unblockedSource.id(), target.id(), master);
+
+        assertThat(queries.get(target.id(), master).blocked()).isTrue();
+        assertThat(events.ofType(ClientBlocked.class)
+                        .matching(e -> e.occurredAt().equals(clock.instant())))
+                .isEmpty();
+    }
+
+    @Test
     void clientMergesOwnSecondCard(PublishedEvents events) {
         var ownAccount = UUID.randomUUID();
         var otherAccount = UUID.randomUUID();

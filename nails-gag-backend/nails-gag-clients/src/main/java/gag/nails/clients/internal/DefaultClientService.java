@@ -21,7 +21,9 @@ import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.common.error.InternalException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.common.persistence.ConstraintViolations;
 import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
 import java.util.EnumSet;
@@ -30,6 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +49,9 @@ class DefaultClientService implements ClientService {
 
     /** Та же граница, что в ограничении {@code client_block_reason_check}. */
     private static final int MAX_BLOCK_REASON_LENGTH = 500;
+
+    /** Уникальный индекс телефона из миграции {@code 0001-init}. */
+    private static final String PHONE_KEY = "client_phone_key";
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
@@ -145,6 +151,7 @@ class DefaultClientService implements ClientService {
             return false;
         }
         client.setPhone(normalized);
+        flushConfirmedPhone(client, normalized);
         return true;
     }
 
@@ -263,6 +270,24 @@ class DefaultClientService implements ClientService {
         }
         existing.attachAccount(command.accountId());
         return existing.toView();
+    }
+
+    /**
+     * Два входа с одним подтверждённым номером одновременно: проверка выше у обоих прошла, уникальный
+     * индекс пропустит одного. Flush здесь, чтобы нарушение всплыло в этом модуле и стало его исключением,
+     * а не исключением фреймворка у модуля входа. После него транзакция PostgreSQL прервана, поэтому
+     * «номер занят» нельзя вернуть как {@code false}: исключению дают всплыть.
+     */
+    private void flushConfirmedPhone(ClientEntity client, String phone) {
+        try {
+            clients.saveAndFlush(client);
+        } catch (DataIntegrityViolationException e) {
+            var name = ConstraintViolations.constraintName(e);
+            if (name.filter(PHONE_KEY::equals).isPresent()) {
+                throw new PhoneTakenException(phone);
+            }
+            throw new InternalException("client write violated constraint " + name.orElse("<unknown>"), e);
+        }
     }
 
     private static void requireNotBlocked(ClientEntity client) {
