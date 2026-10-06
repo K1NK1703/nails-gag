@@ -61,6 +61,21 @@ class ClientQueriesTest {
     }
 
     @Test
+    void byEmailFindsTheOnlyCardIgnoringCaseAndStaysSilentOnDuplicates() {
+        var card = clients.create(new CreateClient("Ольга", null, null, null, "Olga@Example.com", null), master);
+        var registered = clients.register(new RegisterClient(UUID.randomUUID(), "Ира", null, "ira@example.com"));
+
+        assertThat(queries.byEmail("olga@example.COM")).map(ClientView::id).contains(card.id());
+        assertThat(queries.byEmail("IRA@example.com")).map(ClientView::id).contains(registered.id());
+        assertThat(queries.byEmail("nobody@example.com")).isEmpty();
+        assertThat(queries.byEmail(" ")).isEmpty();
+
+        clients.create(new CreateClient("Оля", null, null, null, "OLGA@example.com", null), master);
+
+        assertThat(queries.byEmail("olga@example.com")).isEmpty();
+    }
+
+    @Test
     void searchMatchesNameOrPhoneFragmentCaseInsensitively() {
         assertThat(queries.search("мар", master)).extracting(ClientView::id).containsExactly(maria.id());
         assertThat(queries.search("ПЕТРОВА", master)).extracting(ClientView::id).containsExactly(anna.id());

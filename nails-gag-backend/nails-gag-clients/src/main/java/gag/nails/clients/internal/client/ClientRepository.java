@@ -12,6 +12,9 @@ interface ClientRepository extends JpaRepository<ClientEntity, UUID> {
 
     Optional<ClientEntity> findByAccountId(UUID accountId);
 
+    /** Все карточки с такой почтой без учёта регистра, с аккаунтом и без. */
+    List<ClientEntity> findAllByEmailIgnoreCase(String email);
+
     /** Карточки без аккаунта с такой почтой без учёта регистра: кандидаты на привязку при регистрации. */
     @Query("select c from ClientEntity c where lower(c.email) = lower(:email) and c.accountId is null")
     List<ClientEntity> findAllUnregisteredByEmail(String email);

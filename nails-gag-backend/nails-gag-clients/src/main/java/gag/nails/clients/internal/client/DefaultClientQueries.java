@@ -63,6 +63,15 @@ class DefaultClientQueries implements ClientQueries {
     }
 
     @Override
+    public Optional<ClientView> byEmail(String email) {
+        if (email.isBlank()) {
+            return Optional.empty();
+        }
+        var found = clients.findAllByEmailIgnoreCase(email.strip());
+        return found.size() == 1 ? Optional.of(found.getFirst().toView()) : Optional.empty();
+    }
+
+    @Override
     public Optional<ClientView> byAccountId(UUID accountId) {
         return clients.findByAccountId(accountId).map(ClientEntity::toView);
     }
