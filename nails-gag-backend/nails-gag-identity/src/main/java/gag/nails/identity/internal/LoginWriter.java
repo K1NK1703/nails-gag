@@ -200,7 +200,9 @@ class LoginWriter {
      * Гонка входа с блокировкой: карточка перечитывается уже после фиксации сессии, в своей транзакции и
      * под блокировкой строки аккаунта — той же, что берёт слушатель {@code ClientBlocked}. Либо блокировка
      * уже зафиксирована и видна здесь (сессии закрываются, вход отклоняется), либо слушатель ждёт этой
-     * транзакции и затем видит сессию сам. Аккаунта уже нет — проверять нечего.
+     * транзакции и затем видит сессию сам. Аккаунта уже нет — проверять нечего. В журнале входов при отказе
+     * остаются обе строки: {@code SIGNED_IN} (или {@code REGISTERED}) от зафиксированного входа и {@code
+     * BLOCKED} от этой проверки.
      */
     @Transactional(noRollbackFor = AccountBlockedException.class)
     void rejectIfBlocked(SignedIn signedIn, Provider provider, ClientInfo client) {
@@ -258,12 +260,14 @@ class LoginWriter {
         return new LinkConfirmationRequired(pendings.issueLink(provider, profile, accountId, ownerId));
     }
 
-    /** Вход в найденный аккаунт: способ входа создаётся или обновляется, открывается сессия. */
+    /**
+     * Вход в найденный аккаунт: способ входа создаётся или обновляется, открывается сессия. Аккаунта уже
+     * нет (удалён параллельно; способ входа или карточка ещё ссылались на него в момент сопоставления) —
+     * вход не удался, повтор пройдёт как первый вход.
+     */
     private SignedIn signIn(KnownAccount known, Provider provider, ProviderProfile profile, ClientInfo client) {
         var accountId = known.accountId();
-        var account = accounts.findById(accountId)
-                .orElseThrow(() -> new InternalException(
-                        "account " + accountId + " referenced by a login method or card is missing"));
+        var account = accounts.findById(accountId).orElseThrow(() -> failed(provider, null, client));
         var card = clientQueries.byAccountId(accountId);
         card.ifPresent(c -> requireNotBlocked(c, accountId, provider, client));
         var now = clock.instant();

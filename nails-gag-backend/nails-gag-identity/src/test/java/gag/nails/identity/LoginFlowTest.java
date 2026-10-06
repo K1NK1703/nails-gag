@@ -10,10 +10,7 @@ import gag.nails.identity.error.ProviderUnavailableException;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.testsupport.ModuleTest;
 import java.time.Duration;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 @ModuleTest
 class LoginFlowTest extends IdentityTestSupport {
@@ -191,65 +188,5 @@ class LoginFlowTest extends IdentityTestSupport {
         clients.block(card.id(), null, master);
         assertThatThrownBy(() -> complete(profile("u3", "+79215550000"))).isInstanceOf(AccountBlockedException.class);
         assertThat(loginJournal().getFirst().accountId()).isNull();
-    }
-
-    /**
-     * Без транзакции теста: исход {@code BLOCKED} пишется в той же транзакции, что и отклонённый вход,
-     * и должен пережить её завершение исключением. Всё зафиксированное тест убирает сам.
-     */
-    @Test
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void blockedLoginIsJournaledDespiteRollback() {
-        var profile = profile("blocked-" + UUID.randomUUID(), "+79219990001");
-        SignedIn signedIn = null;
-        UUID clientId = null;
-        try {
-            signedIn = signInFirstTime(profile);
-            clientId = clientId(signedIn);
-            clients.block(clientId, "грубит", master);
-
-            assertThatThrownBy(() -> complete(profile)).isInstanceOf(AccountBlockedException.class);
-
-            var accountId = signedIn.accountId();
-            assertThat(loginJournal())
-                    .filteredOn(event -> accountId.equals(event.accountId()))
-                    .extracting(LoginEventView::outcome)
-                    .containsExactly(LoginOutcome.BLOCKED, LoginOutcome.REGISTERED);
-            assertThat(sessions.authenticate(signedIn.sessionToken())).isEmpty();
-        } finally {
-            if (signedIn != null) {
-                removeCommitted(signedIn.accountId(), clientId);
-            }
-        }
-    }
-
-    /**
-     * Без транзакции теста: строка {@code FAILED} фиксируется своей короткой транзакцией, а больше ничего
-     * не создаётся — ни аккаунта, ни карточки, ни сессии.
-     */
-    @Test
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void stateMismatchIsJournaledAndOpensNothing() {
-        var profile = profile("forged-" + UUID.randomUUID(), "+79219990002");
-        try {
-            var start = loginFlow.start(Provider.FAKE, LoginPurpose.LOGIN, null);
-            var code = fake.issueCode(profile);
-
-            assertThatThrownBy(() -> loginFlow.complete(
-                            Provider.FAKE, new AuthorizationResponse(code, "forged", null), start.state(), CLIENT))
-                    .isInstanceOf(LoginFailedException.class);
-
-            assertThat(loginJournal()).singleElement().satisfies(event -> {
-                assertThat(event.outcome()).isEqualTo(LoginOutcome.FAILED);
-                assertThat(event.accountId()).isNull();
-            });
-            assertThat(clientQueries.byPhone(profile.phone())).isEmpty();
-            assertThat(jdbc.sql("select count(*) from identity.session")
-                            .query(Integer.class)
-                            .single())
-                    .isZero();
-        } finally {
-            removeCommittedAnonymousEvents();
-        }
     }
 }

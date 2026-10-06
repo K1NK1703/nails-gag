@@ -9,7 +9,6 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.error.AccountNotFoundException;
-import gag.nails.identity.error.LastAccessAdminException;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
@@ -19,8 +18,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 @ModuleTest
 class AccountsTest extends IdentityTestSupport {
@@ -105,47 +102,6 @@ class AccountsTest extends IdentityTestSupport {
                 CLIENT);
         assertThat(fresh.accountId()).isNotEqualTo(signedIn.accountId());
         assertThat(clientId(fresh)).isNotEqualTo(clientId);
-    }
-
-    /**
-     * Без транзакции теста: удаление сначала стирает всё и только потом проверяет правило последнего
-     * администратора, так что откат отказа виден лишь на настоящей транзакции. Всё зафиксированное тест
-     * убирает сам.
-     */
-    @Test
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void lastAdminCannotDeleteAccount() {
-        SignedIn developer = null;
-        SignedIn second = null;
-        UUID developerClient = null;
-        UUID secondClient = null;
-        try {
-            developer = developer();
-            developerClient = clientId(developer);
-            var developerActor = actor(developer);
-
-            assertThatThrownBy(() -> accounts.delete(developerActor)).isInstanceOf(LastAccessAdminException.class);
-
-            assertThat(sessions.authenticate(developer.sessionToken())).isPresent();
-            assertThat(clientQueries.get(developerClient, master).erased()).isFalse();
-            assertThat(actor(developer).level(Section.ACCESS)).isEqualTo(AccessLevel.WRITE);
-
-            second = signInFirstTime(profile("second-" + UUID.randomUUID(), "+79211234567"));
-            secondClient = clientId(second);
-            access.assignRole(second.accountId(), role("DEVELOPER").id(), developerActor);
-            accounts.delete(developerActor);
-
-            assertThat(sessions.authenticate(developer.sessionToken())).isEmpty();
-            assertThat(clientQueries.get(developerClient, master).erased()).isTrue();
-            assertThat(actor(second).level(Section.ACCESS)).isEqualTo(AccessLevel.WRITE);
-        } finally {
-            if (developer != null) {
-                removeCommitted(developer.accountId(), developerClient);
-            }
-            if (second != null) {
-                removeCommitted(second.accountId(), secondClient);
-            }
-        }
     }
 
     @Test

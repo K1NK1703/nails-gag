@@ -16,15 +16,9 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.simple.JdbcClient;
 
 @ModuleTest
 class SessionsTest extends IdentityTestSupport {
-
-    /** {@code last_used_at} сессии наружу не отдаётся: читается прямо из таблицы, как сид в {@code IdentitySeedTest}. */
-    @Autowired
-    JdbcClient jdbc;
 
     @PersistenceContext
     EntityManager entityManager;
@@ -146,6 +140,7 @@ class SessionsTest extends IdentityTestSupport {
         assertThat(actor(signedIn).isStaff()).isFalse();
     }
 
+    /** {@code last_used_at} сессии наружу не отдаётся: читается прямо из таблицы, как сид в {@code IdentitySeedTest}. */
     private Instant lastUsedAt(SignedIn signedIn) {
         entityManager.flush();
         return jdbc.sql("select last_used_at from identity.session where account_id = :accountId")

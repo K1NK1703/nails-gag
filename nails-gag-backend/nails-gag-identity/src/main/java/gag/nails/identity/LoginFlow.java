@@ -39,10 +39,14 @@ public interface LoginFlow {
      * с билетом на 30 минут. При привязке: ничей способ входа добавляется ({@link Linked}), свой —
      * {@link Linked} без изменений, чужой — {@link LinkConfirmationRequired}.
      *
+     * <p>Обмен кода у провайдера идёт без транзакции с базой, запись — короткими транзакциями; вызывать
+     * без внешней транзакции. После фиксации сессии карточка перечитывается отдельной транзакцией: вход,
+     * совпавший по времени с блокировкой карточки, закрывает сессию сразу — токен наружу не уходит.
+     *
      * @throws LoginFailedException state не совпал или просрочен, провайдер отказал, код не принят
      * @throws ProviderUnavailableException провайдер недоступен
-     * @throws AccountBlockedException карточка найденного аккаунта или карточки заблокирована; сессия не
-     *     открывается
+     * @throws AccountBlockedException карточка найденного аккаунта или карточки заблокирована (в том числе
+     *     параллельно с входом); сессии у заблокированного не остаётся
      */
     LoginResult complete(Provider provider, AuthorizationResponse response, LoginState state, ClientInfo client);
 
@@ -50,10 +54,16 @@ public interface LoginFlow {
      * Завершение регистрации по билету из {@link RegistrationRequired}. В одной транзакции: аккаунт и
      * способ входа создаются, карточка привязывается или создаётся, записывается согласие
      * {@code PERSONAL_DATA} на указанную версию политики, применяется начальная выдача прав, открывается
-     * сессия. Билет одноразовый.
+     * сессия. Билет одноразовый. Профиль сопоставляется заново: если за время заполнения формы появился
+     * аккаунт с тем же способом входа, телефоном или почтой (параллельная регистрация, вход другим
+     * способом), регистрация завершается входом в него. После фиксации карточка перечитывается
+     * отдельной транзакцией, как у {@link #complete}.
      *
      * @throws RegistrationExpiredException билет просрочен или использован
-     * @throws ConsentVersionOutdatedException версия политики не действующая (из {@code clients})
+     * @throws ConsentVersionOutdatedException версия политики не действующая (из {@code clients}); билет
+     *     остаётся годным
+     * @throws AccountBlockedException карточка, к которой привязалась бы регистрация, или карточка
+     *     найденного аккаунта заблокирована; билет потреблён
      */
     SignedIn completeRegistration(String ticket, CompleteRegistration command, ClientInfo client);
 
@@ -62,8 +72,11 @@ public interface LoginFlow {
      * ({@code clients.mergeOwn}), аккаунт {@code actor} остаётся, способы входа, роли и переопределения
      * другого аккаунта переходят ему, его сессии закрываются.
      *
-     * @throws RegistrationExpiredException билет просрочен, использован или выдан другому аккаунту
+     * @throws RegistrationExpiredException билет просрочен, использован, выдан другому аккаунту или способ
+     *     входа уже сменил владельца
      * @throws AccountBlockedException любая из двух карточек заблокирована
+     * @throws LoginFailedException у вошедшего нет карточки, а у другого аккаунта есть: объединять нечего, а
+     *     карточка другого осталась бы без аккаунта
      */
     Linked confirmLink(String ticket, Actor actor, ClientInfo client);
 }

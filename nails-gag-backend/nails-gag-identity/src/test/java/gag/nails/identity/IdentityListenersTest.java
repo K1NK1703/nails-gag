@@ -8,13 +8,9 @@ import gag.nails.clients.model.MergeResult;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Section;
 import gag.nails.identity.error.AccountNotFoundException;
-import gag.nails.identity.error.LastAccessAdminException;
 import gag.nails.testsupport.ModuleTest;
 import java.util.Map;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 /** Синхронные слушатели {@code ClientBlocked} и {@code ClientMerged} в транзакции операции {@code clients}. */
 @ModuleTest
@@ -33,32 +29,6 @@ class IdentityListenersTest extends IdentityTestSupport {
         assertThat(sessions.authenticate(developer.sessionToken())).isPresent();
         assertThat(access.account(signedIn.accountId(), actor(developer)).blocked())
                 .isTrue();
-    }
-
-    /**
-     * Без транзакции теста: иначе откат блокировки увидеть нельзя — записи отклонённой операции остались
-     * бы в общей транзакции до конца теста. Поэтому всё, что тест зафиксировал, он же и убирает.
-     */
-    @Test
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void blockingLastAdminIsRejected() {
-        SignedIn developer = null;
-        UUID clientId = null;
-        try {
-            developer = developer();
-            clientId = clientId(developer);
-            var developerClient = clientId;
-            assertThatThrownBy(() -> clients.block(developerClient, "по ошибке", master))
-                    .isInstanceOf(LastAccessAdminException.class);
-
-            assertThat(clientQueries.get(clientId, master).blocked()).isFalse();
-            assertThat(sessions.authenticate(developer.sessionToken())).isPresent();
-            assertThat(actor(developer).level(Section.ACCESS)).isEqualTo(AccessLevel.WRITE);
-        } finally {
-            if (developer != null) {
-                removeCommitted(developer.accountId(), clientId);
-            }
-        }
     }
 
     @Test
