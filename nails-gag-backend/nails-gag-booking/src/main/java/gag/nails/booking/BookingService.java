@@ -9,6 +9,8 @@ import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.error.VisitNotStartedException;
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.clients.error.ClientBlockedException;
+import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
@@ -21,14 +23,21 @@ import org.jspecify.annotations.Nullable;
 /**
  * Записи: создание, отмена, перенос. Каждая операция — одна транзакция: занятие слота, запись и
  * изменение признака предоплаты у клиента либо происходят вместе, либо не происходят вовсе.
+ *
+ * <p>Обезличивание клиента ({@code ClientErased}) модуль обрабатывает сам, в той же транзакции: активные
+ * записи на ещё не начавшиеся слоты отменяются с причиной {@link CancelReason#ACCOUNT_DELETED}, слоты
+ * освобождаются, комментарии клиента стираются; записи с начавшимся слотом остаются мастеру на отметку.
  */
 public interface BookingService {
 
     /**
      * Клиент записывается сам. Запись подтверждается сразу; если у клиента признак обязательной
      * предоплаты — ждёт её до срока. Проверяются лимит активных записей, согласия на действующие
-     * политику и оферту и отсечка перед началом слота.
+     * политику и оферту и отсечка перед началом слота. Заблокированный клиент записаться не может,
+     * уже созданные записи у него остаются (и отменить их он может).
      *
+     * @throws ClientBlockedException если клиент заблокирован
+     * @throws ClientErasedException если карточка клиента обезличена
      * @throws LimitReachedException если у клиента уже предельное число активных записей
      * @throws ConsentMissingException если нет согласий на действующие редакции документов
      * @throws TooLateToBookException если до начала слота меньше отсечки
@@ -42,12 +51,13 @@ public interface BookingService {
     BookingView createByClient(CreateBooking command, Actor actor);
 
     /**
-     * Сотрудник с изменением раздела «Записи» записывает клиента: без лимита, согласий и отсечки.
-     * Слот может быть в прошлом в пределах срока исправления отметок — так вносится визит,
-     * прошедший без записи. {@code awaitPrepayment} решает, ждёт ли запись предоплату; признак
-     * клиента при этом не меняется.
+     * Сотрудник с изменением раздела «Записи» записывает клиента: без лимита, согласий и отсечки, в
+     * том числе заблокированного. Слот может быть в прошлом в пределах срока исправления отметок — так
+     * вносится визит, прошедший без записи. {@code awaitPrepayment} решает, ждёт ли запись
+     * предоплату; признак клиента при этом не меняется.
      *
      * @throws ClientNotFoundException если клиента нет
+     * @throws ClientErasedException если карточка клиента обезличена
      * @throws SlotOccupiedException если слот уже занят
      * @throws SlotNotFoundException если слота нет
      * @throws ServiceNotFoundException если какой-то услуги нет
@@ -87,11 +97,12 @@ public interface BookingService {
      * раннее время сбрасывается, ждущее ответа предложение приехать раньше отзывается; срок
      * предоплаты не продлевается, но укладывается в отсечку перед новым слотом. Клиент переносит
      * свою запись только в окне бесплатной отмены и только на слот не ближе отсечки, а запись с
-     * истёкшим сроком предоплаты не переносит вовсе; сотрудник с изменением «Записей» — любую запись в
-     * любое время, но на слот не старше срока исправления отметок, а запись, ждущую предоплату, —
-     * только на ещё не начавшийся.
+     * истёкшим сроком предоплаты не переносит вовсе, а заблокированный клиент — ничего; сотрудник с
+     * изменением «Записей» — любую запись в любое время, но на слот не старше срока исправления
+     * отметок, а запись, ждущую предоплату, — только на ещё не начавшийся.
      *
      * @throws BookingNotFoundException если записи нет
+     * @throws ClientBlockedException если клиент переносит, будучи заблокированным
      * @throws InvalidTransitionException если запись не активна, либо клиент переносит после начала
      *     слота или с истёкшим сроком предоплаты
      * @throws LateRescheduleNotAllowedException если клиент переносит позже окна бесплатной отмены

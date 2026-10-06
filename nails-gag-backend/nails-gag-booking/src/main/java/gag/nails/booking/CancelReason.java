@@ -11,5 +11,7 @@ public enum CancelReason {
     /** Мастер отказал из-за опоздания; приравнивается к поздней отмене. */
     LATE_ARRIVAL,
     /** Предоплата не получена к сроку. */
-    PREPAYMENT_TIMEOUT
+    PREPAYMENT_TIMEOUT,
+    /** Клиент удалил аккаунт; без последствий. */
+    ACCOUNT_DELETED
 }

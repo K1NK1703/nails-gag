@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 /**
  * Отмена записи целиком: состояние, освобождение слота, последствия для клиента, событие. Поздняя
  * отмена клиентом и отказ из-за опоздания ставят клиенту признак обязательной предоплаты; отмена
- * мастером, отмена в окне и истёкший срок предоплаты — нет.
+ * мастером, отмена в окне, истёкший срок предоплаты и удаление аккаунта — нет.
  */
 @Component
 class BookingCancellation {
@@ -33,7 +33,7 @@ class BookingCancellation {
         switch (reason) {
             case CLIENT_LATE -> requirePrepayment(booking, PrepaymentFlagReason.LATE_CANCELLATION);
             case LATE_ARRIVAL -> requirePrepayment(booking, PrepaymentFlagReason.LATE_ARRIVAL);
-            case CLIENT, MASTER, PREPAYMENT_TIMEOUT -> {}
+            case CLIENT, MASTER, PREPAYMENT_TIMEOUT, ACCOUNT_DELETED -> {}
         }
         occupation.release(booking.slotId(), booking.id());
         events.cancelled(booking, now);

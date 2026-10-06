@@ -268,6 +268,11 @@ class BookingEntity {
         this.comment = blankToNull(comment);
     }
 
+    /** Обезличивание клиента: его комментарий стирается у записи в любом состоянии. */
+    void wipeComment() {
+        this.comment = null;
+    }
+
     void setMasterNote(@Nullable String masterNote) {
         this.masterNote = blankToNull(masterNote);
     }

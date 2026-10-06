@@ -16,6 +16,8 @@ import gag.nails.catalog.CatalogQueries;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientView;
 import gag.nails.clients.ConsentKind;
+import gag.nails.clients.error.ClientBlockedException;
+import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
@@ -87,7 +89,9 @@ class DefaultBookingService implements BookingService {
         validator.requireValid(command);
         var rules = currentRules.get();
         // Блокировка клиента до подсчёта: параллельная запись того же клиента ждёт конца этой транзакции.
+        // Карточка читается под ней же: параллельная блокировка или обезличивание либо уже видны, либо подождут.
         locks.acquire(clientId);
+        var client = requireClientMayBookSelf(clientId);
         var limit = rules.settings().maxActiveBookings();
         if (bookings.countByClientIdAndStatusIn(clientId, BookingStatus.active()) >= limit) {
             throw new LimitReachedException(limit);
@@ -99,8 +103,7 @@ class DefaultBookingService implements BookingService {
         if (rules.tooLateToBook(slot.startsAt())) {
             throw new TooLateToBookException(slot.startsAt(), rules.settings().bookingCutoffMinutes());
         }
-        var awaitPrepayment = requireClient(clientId).prepaymentRequired();
-        return create(command, slot, BookingCreator.CLIENT, awaitPrepayment, rules);
+        return create(command, slot, BookingCreator.CLIENT, client.prepaymentRequired(), rules);
     }
 
     @Override
@@ -113,7 +116,8 @@ class DefaultBookingService implements BookingService {
         // Та же блокировка, что при самозаписи: параллельная запись клиента увидит эту при подсчёте лимита.
         // Клиент проверяется под ней: параллельное объединение карточек либо уже закончилось, либо подождёт.
         locks.acquire(command.clientId());
-        requireClient(command.clientId());
+        // Заблокированного мастер записать может, обезличенного — нет: записывать больше некого.
+        requireNotErased(requireClient(command.clientId()));
         return create(command, slot, BookingCreator.MASTER, awaitPrepayment, rules);
     }
 
@@ -146,6 +150,11 @@ class DefaultBookingService implements BookingService {
         booking.requireActive("reschedule");
         var rules = currentRules.get();
         var byClient = !actor.canWrite(Section.BOOKINGS);
+        if (byClient) {
+            // Порядок блокировок: запись уже взята, теперь клиент — как при создании записи.
+            locks.acquire(booking.clientId());
+            requireClientMayBookSelf(booking.clientId());
+        }
         if (byClient && rules.visitStarted(booking.slotStartsAt())) {
             throw new InvalidTransitionException(bookingId, booking.status(), "reschedule a started visit");
         }
@@ -228,6 +237,22 @@ class DefaultBookingService implements BookingService {
 
     private ClientView requireClient(UUID clientId) {
         return clientQueries.byId(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
+    }
+
+    /** Сам записывается и переносит только клиент, которого не заблокировали и не обезличили. */
+    private ClientView requireClientMayBookSelf(UUID clientId) {
+        var client = requireNotErased(requireClient(clientId));
+        if (client.blocked()) {
+            throw new ClientBlockedException(clientId);
+        }
+        return client;
+    }
+
+    private static ClientView requireNotErased(ClientView client) {
+        if (client.erased()) {
+            throw new ClientErasedException(client.id());
+        }
+        return client;
     }
 
     /**
