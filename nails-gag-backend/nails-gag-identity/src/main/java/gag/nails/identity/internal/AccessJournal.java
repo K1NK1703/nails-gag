@@ -1,0 +1,49 @@
+package gag.nails.identity.internal;
+
+import gag.nails.common.actor.AccessLevel;
+import gag.nails.common.actor.Section;
+import gag.nails.identity.AccessChangeKind;
+import gag.nails.identity.AccessChangeView;
+import java.time.Clock;
+import java.util.List;
+import java.util.UUID;
+import org.jspecify.annotations.Nullable;
+import org.springframework.data.domain.Limit;
+import org.springframework.stereotype.Component;
+
+/** Журнал прав: только добавление, по строке на каждое результативное изменение. */
+@Component
+class AccessJournal {
+
+    private final AccessChangeRepository changes;
+    private final Clock clock;
+
+    AccessJournal(AccessChangeRepository changes, Clock clock) {
+        this.changes = changes;
+        this.clock = clock;
+    }
+
+    /**
+     * @param actorAccountId кто изменил; пусто у {@link AccessChangeKind#BOOTSTRAP}
+     * @param targetAccountId чей доступ изменён; пусто у операций над самой ролью
+     * @param section раздел и его старый и новый уровни, если изменился уровень раздела
+     */
+    void record(
+            @Nullable UUID actorAccountId,
+            @Nullable UUID targetAccountId,
+            @Nullable UUID roleId,
+            AccessChangeKind kind,
+            @Nullable Section section,
+            @Nullable AccessLevel oldLevel,
+            @Nullable AccessLevel newLevel) {
+        changes.save(new AccessChangeEntity(
+                actorAccountId, targetAccountId, roleId, kind, section, oldLevel, newLevel, clock.instant()));
+    }
+
+    /** Новые первыми. */
+    List<AccessChangeView> latest(int limit) {
+        return changes.findAllByOrderByChangedAtDescIdDesc(Limit.of(limit)).stream()
+                .map(AccessChangeEntity::toView)
+                .toList();
+    }
+}
