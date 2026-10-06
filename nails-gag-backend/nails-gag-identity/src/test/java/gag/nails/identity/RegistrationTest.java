@@ -16,7 +16,10 @@ import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
 import java.time.Duration;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @ModuleTest
 class RegistrationTest extends IdentityTestSupport {
@@ -155,7 +158,7 @@ class RegistrationTest extends IdentityTestSupport {
     }
 
     @Test
-    void parallelRegistrationOfTheSameSubjectEndsAsSignIn() {
+    void registrationRepeatsMatchingAndSignsIntoExistingAccount() {
         var first = registrationRequired(profile("u1", "+79211234567"));
         var second = registrationRequired(profile("u1", "+79211234567"));
         var command = new CompleteRegistration("Анна", "+79211234567", POLICY_VERSION);
@@ -169,5 +172,38 @@ class RegistrationTest extends IdentityTestSupport {
         assertThat(loginJournal())
                 .extracting(LoginEventView::outcome)
                 .containsExactly(LoginOutcome.SIGNED_IN, LoginOutcome.REGISTERED);
+    }
+
+    /**
+     * Без транзакции теста: отказ из-за устаревшей версии политики откатывает и потребление билета, так
+     * что тот же билет с действующей версией завершает регистрацию. Всё зафиксированное тест убирает сам.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void failedRegistrationKeepsTicketUsable() {
+        var profile = profile("retry-" + UUID.randomUUID(), "+79219990003");
+        SignedIn signedIn = null;
+        try {
+            var required = registrationRequired(profile);
+            var ticket = required.ticket();
+
+            assertThatThrownBy(() -> loginFlow.completeRegistration(
+                            ticket, new CompleteRegistration("Анна", profile.phone(), "2020-01-01"), CLIENT))
+                    .isInstanceOf(ConsentVersionOutdatedException.class);
+            assertThat(clientQueries.byPhone(profile.phone())).isEmpty();
+
+            signedIn = loginFlow.completeRegistration(
+                    ticket, new CompleteRegistration("Анна", profile.phone(), POLICY_VERSION), CLIENT);
+
+            assertThat(sessions.authenticate(signedIn.sessionToken())).isPresent();
+            assertThat(clientQueries.byPhone(profile.phone()))
+                    .map(c -> c.accountId())
+                    .contains(signedIn.accountId());
+        } finally {
+            if (signedIn != null) {
+                removeCommitted(signedIn.accountId(), clientId(signedIn));
+            }
+            removeCommittedAnonymousEvents();
+        }
     }
 }

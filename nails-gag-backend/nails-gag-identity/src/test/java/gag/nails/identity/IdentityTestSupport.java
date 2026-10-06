@@ -161,10 +161,10 @@ abstract class IdentityTestSupport {
         if (clientId != null && clientQueries.byId(clientId).isPresent()) {
             clients.erase(clientId);
         }
-        // Строки журнала входов аккаунта, удалённого самим тестом, уже без ссылки (ON DELETE SET NULL).
-        jdbc.sql("delete from identity.login_event where account_id = :accountId or account_id is null")
+        jdbc.sql("delete from identity.login_event where account_id = :accountId")
                 .param("accountId", accountId)
                 .update();
+        removeCommittedAnonymousEvents();
         jdbc.sql(
                         "delete from identity.access_change where target_account_id = :accountId or actor_account_id = :accountId")
                 .param("accountId", accountId)
@@ -183,5 +183,13 @@ abstract class IdentityTestSupport {
                     .param("clientId", clientId)
                     .update();
         }
+    }
+
+    /**
+     * Строки журнала входов без аккаунта: неудачные входы и события аккаунта, удалённого самим тестом
+     * ({@code ON DELETE SET NULL}). Другие тесты своих строк не фиксируют, так что чужого здесь нет.
+     */
+    void removeCommittedAnonymousEvents() {
+        jdbc.sql("delete from identity.login_event where account_id is null").update();
     }
 }
