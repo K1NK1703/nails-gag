@@ -12,12 +12,15 @@ import gag.nails.booking.CancelReason;
 import gag.nails.booking.CreateBooking;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.LimitReachedException;
+import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.ConsentKind;
 import gag.nails.clients.ConsentSource;
 import gag.nails.clients.CreateClient;
 import gag.nails.clients.RecordConsent;
 import gag.nails.clients.RegisterClient;
+import gag.nails.clients.error.ClientBlockedException;
+import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.time.SalonTimeZone;
@@ -73,6 +76,9 @@ class BookingConcurrencyTest {
 
     @Autowired
     ClientService clients;
+
+    @Autowired
+    ClientQueries clientQueries;
 
     @Autowired
     ScheduleService schedule;
@@ -355,6 +361,106 @@ class BookingConcurrencyTest {
             assertThat(result.status()).isEqualTo(BookingStatus.CANCELLED);
             assertThat(result.cancelReason()).isEqualTo(CancelReason.PREPAYMENT_TIMEOUT);
             assertThat(result.prepaymentReceivedAt()).isNull();
+            assertThat(slotAfter).singleElement().matches(free -> !free.occupied());
+        }
+    }
+
+    @Test
+    void eraseRacingWithClientBookingNeverLeavesActiveBookingOfErasedClient() throws Exception {
+        var day = daysFromNow(15);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        var outcomes = race(
+                () -> {
+                    clients.erase(anna);
+                    return anna;
+                },
+                () -> book(anna, slot));
+
+        // Запись либо успела раньше и отменена обезличиванием, либо дождалась его и получила отказ по карточке.
+        var erased = outcomes.get(0);
+        var created = outcomes.get(1);
+        assertThat(erased.failure()).isNull();
+        assertThat(clientQueries.get(anna, master).erased()).isTrue();
+        assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
+        assertThat(scheduleQueries.slotsOfDay(day, master))
+                .singleElement()
+                .matches(free -> free.id().equals(slot.id()) && !free.occupied());
+        if (created.succeeded()) {
+            assertThat(bookingQueries.ofDay(day, master)).singleElement().satisfies(booking -> {
+                assertThat(booking.clientId()).isEqualTo(anna);
+                assertThat(booking.status()).isEqualTo(BookingStatus.CANCELLED);
+                assertThat(booking.cancelReason()).isEqualTo(CancelReason.ACCOUNT_DELETED);
+                assertThat(booking.comment()).isNull();
+            });
+        } else {
+            assertThat(created.failure()).isInstanceOf(ClientErasedException.class);
+            assertThat(bookingQueries.ofDay(day, master)).isEmpty();
+        }
+    }
+
+    /**
+     * Не гонка, а заданный порядок: самозапись ждёт блокировку клиента, которую держит ещё не
+     * зафиксированное обезличивание, и после фиксации видит обезличенную карточку. В гонке выше
+     * самозапись почти всегда берёт блокировку первой, поэтому эта ветка проверяется отдельно.
+     */
+    @Test
+    void clientBookingThatWaitedForEraseGetsClientErased() throws Exception {
+        var day = daysFromNow(17);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        Outcome created;
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var waiting = transactions.execute(status -> {
+                clients.erase(anna);
+                var attempt = executor.submit(() -> {
+                    try {
+                        book(anna, slot);
+                        return new Outcome(null);
+                    } catch (Exception e) {
+                        return new Outcome(e);
+                    }
+                });
+                assertThat(anotherTransactionWaitsForLock()).isTrue();
+                return attempt;
+            });
+            created = waiting.get(30, TimeUnit.SECONDS);
+        }
+
+        assertThat(created.failure()).isInstanceOf(ClientErasedException.class);
+        assertThat(clientQueries.get(anna, master).erased()).isTrue();
+        assertThat(bookingQueries.ofDay(day, master)).isEmpty();
+        assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
+        assertThat(scheduleQueries.slotsOfDay(day, master)).singleElement().matches(free -> !free.occupied());
+    }
+
+    @Test
+    void blockRacingWithClientBookingIsConsistent() throws Exception {
+        var day = daysFromNow(16);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        var outcomes = race(() -> clients.block(anna, "грубит", master), () -> book(anna, slot));
+
+        // Блокировка проходит всегда; запись либо успела раньше неё и остаётся, либо получила отказ.
+        var blocked = outcomes.get(0);
+        var created = outcomes.get(1);
+        assertThat(blocked.failure()).isNull();
+        assertThat(clientQueries.get(anna, master).blocked()).isTrue();
+        var slotAfter = scheduleQueries.slotsOfDay(day, master);
+        if (created.succeeded()) {
+            assertThat(bookingQueries.activeOfClient(anna, master))
+                    .singleElement()
+                    .satisfies(booking -> {
+                        assertThat(booking.slotId()).isEqualTo(slot.id());
+                        assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
+                    });
+            assertThat(slotAfter).singleElement().matches(SlotView::occupied);
+        } else {
+            assertThat(created.failure()).isInstanceOf(ClientBlockedException.class);
+            assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
             assertThat(slotAfter).singleElement().matches(free -> !free.occupied());
         }
     }
