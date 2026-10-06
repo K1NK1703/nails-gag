@@ -436,6 +436,50 @@ class BookingConcurrencyTest {
         assertThat(scheduleQueries.slotsOfDay(day, master)).singleElement().matches(free -> !free.occupied());
     }
 
+    /**
+     * Не гонка, а заданный порядок: блокировка клиента ещё не зафиксирована, когда клиент записывается
+     * сам. Блокировка не держит ничего, чего ждала бы запись (она меняет только карточку клиента, а
+     * запись читает карточку без блокировки строки), поэтому запись проходит и остаётся после
+     * фиксации блокировки — как любая запись, созданная до неё. Отказ по блокировке запись получает,
+     * только если блокировка зафиксирована раньше её проверки (см. гонку ниже).
+     */
+    @Test
+    void clientBookingDoesNotWaitForPendingBlockAndSurvivesIt() throws Exception {
+        var day = daysFromNow(18);
+        var slot = schedule.addSlot(day, NOON, master);
+        var anna = client("Анна");
+
+        Outcome created;
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            created = transactions.execute(status -> {
+                clients.block(anna, "грубит", master);
+                var attempt = executor.submit(() -> {
+                    try {
+                        book(anna, slot);
+                        return new Outcome(null);
+                    } catch (Exception e) {
+                        return new Outcome(e);
+                    }
+                });
+                try {
+                    // Завершается, пока блокировка ещё не зафиксирована: ждать ей нечего.
+                    return attempt.get(30, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    return new Outcome(e);
+                }
+            });
+        }
+
+        assertThat(created).isNotNull();
+        assertThat(created.failure()).isNull();
+        assertThat(clientQueries.get(anna, master).blocked()).isTrue();
+        assertThat(bookingQueries.activeOfClient(anna, master)).singleElement().satisfies(booking -> {
+            assertThat(booking.slotId()).isEqualTo(slot.id());
+            assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
+        });
+        assertThat(scheduleQueries.slotsOfDay(day, master)).singleElement().matches(SlotView::occupied);
+    }
+
     @Test
     void blockRacingWithClientBookingIsConsistent() throws Exception {
         var day = daysFromNow(16);
@@ -465,17 +509,23 @@ class BookingConcurrencyTest {
         }
     }
 
-    /** Ждёт, пока какая-нибудь другая транзакция не встанет в очередь за блокировкой строки. */
+    /** Ждёт, пока другая сессия этой же базы не встанет в очередь за блокировкой строки. */
     private boolean anotherTransactionWaitsForLock() {
         var giveUpAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
         while (System.nanoTime() < giveUpAt) {
-            var waiting = jdbc.sql("select count(*) from pg_stat_activity where wait_event_type = 'Lock'")
-                    .query(Integer.class)
-                    .single();
+            var waiting = jdbc.sql("""
+                            select count(*) from pg_stat_activity
+                            where wait_event_type = 'Lock' and datname = current_database() and pid <> pg_backend_pid()
+                            """).query(Integer.class).single();
             if (waiting > 0) {
                 return true;
             }
-            Thread.onSpinWait();
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
         return false;
     }
