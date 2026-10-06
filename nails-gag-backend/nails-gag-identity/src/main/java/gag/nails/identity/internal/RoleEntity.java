@@ -17,6 +17,7 @@ import jakarta.persistence.Table;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.UuidGenerator;
 
 /**
@@ -36,6 +37,7 @@ class RoleEntity {
     private boolean builtIn;
 
     @ElementCollection
+    @BatchSize(size = 50)
     @CollectionTable(schema = "identity", name = "role_grant", joinColumns = @JoinColumn(name = "role_id"))
     @MapKeyColumn(name = "section")
     @MapKeyEnumerated(EnumType.STRING)

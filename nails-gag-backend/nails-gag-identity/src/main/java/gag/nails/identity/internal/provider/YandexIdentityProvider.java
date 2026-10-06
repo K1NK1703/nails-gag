@@ -39,7 +39,8 @@ import org.springframework.web.client.RestClient;
  *       GET https://login.yandex.ru/info?format=json}, заголовок {@code Authorization: OAuth
  *       <token>}; поля {@code id}, {@code default_email}, {@code default_phone.number} (вида {@code
  *       +79037659418}), {@code display_name}, {@code real_name}, {@code default_avatar_id}, {@code
- *       is_avatar_empty}; аватар {@code https://avatars.yandex.net/get-yapic/<id>/<size>}, размер {@code
+ *       is_avatar_empty}; {@code real_name} — имя и фамилия, {@code display_name} обычно логин, поэтому имя
+ *       для показа — {@code real_name}, а {@code display_name} — запасной вариант; аватар {@code https://avatars.yandex.net/get-yapic/<id>/<size>}, размер {@code
  *       islands-200} — 200×200.
  * </ul>
  *
@@ -75,9 +76,10 @@ class YandexIdentityProvider implements IdentityProvider {
         return Provider.YANDEX;
     }
 
+    /** Яндекс обменивает код только с {@code client_secret}: без него провайдер выключен. */
     @Override
     public boolean enabled() {
-        return settings.enabled();
+        return settings.enabled() && !settings.clientSecret().isBlank();
     }
 
     @Override
@@ -141,8 +143,7 @@ class YandexIdentityProvider implements IdentityProvider {
             log.warn("yandex info: answer without id");
             throw new ProviderUnavailableException();
         }
-        var displayName =
-                info.displayName() == null || info.displayName().isBlank() ? info.realName() : info.displayName();
+        var displayName = info.realName() == null || info.realName().isBlank() ? info.displayName() : info.realName();
         var avatar = Boolean.FALSE.equals(info.isAvatarEmpty())
                         && info.defaultAvatarId() != null
                         && !info.defaultAvatarId().isBlank()

@@ -1,5 +1,6 @@
 package gag.nails.identity.internal;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -16,10 +17,15 @@ class SessionEntity {
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
+    @Column(updatable = false)
     private byte[] tokenHash;
+
     private UUID accountId;
     private UUID loginMethodId;
+
+    @Column(updatable = false)
     private Instant createdAt;
+
     private Instant lastUsedAt;
 
     protected SessionEntity() {}

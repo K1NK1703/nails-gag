@@ -82,6 +82,7 @@ CREATE TABLE identity.account_role (
     role_id    uuid NOT NULL CONSTRAINT account_role_role_id_fkey REFERENCES identity.role (id),
     CONSTRAINT account_role_pkey PRIMARY KEY (account_id, role_id)
 );
+CREATE INDEX account_role_role_id_idx ON identity.account_role (role_id);
 
 --changeset nails-gag:identity-0001-access-override
 --comment: личное переопределение уровня; NONE — явный запрет
@@ -119,3 +120,4 @@ CREATE TABLE identity.login_event (
     occurred_at timestamptz  NOT NULL
 );
 CREATE INDEX login_event_occurred_at_idx ON identity.login_event (occurred_at DESC, id DESC);
+CREATE INDEX login_event_account_id_idx ON identity.login_event (account_id);

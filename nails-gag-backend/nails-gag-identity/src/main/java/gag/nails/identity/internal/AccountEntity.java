@@ -1,5 +1,6 @@
 package gag.nails.identity.internal;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -17,6 +18,7 @@ class AccountEntity {
     private UUID id;
 
     /** Бизнес-время из {@code Clock}, не аудит. */
+    @Column(updatable = false)
     private Instant createdAt;
 
     private Instant lastLoginAt;

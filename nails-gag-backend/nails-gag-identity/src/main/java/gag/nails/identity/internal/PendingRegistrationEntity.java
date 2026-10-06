@@ -1,6 +1,7 @@
 package gag.nails.identity.internal;
 
 import gag.nails.identity.Provider;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -43,6 +44,8 @@ class PendingRegistrationEntity {
     private @Nullable UUID clientId;
     private @Nullable UUID accountId;
     private @Nullable UUID otherAccountId;
+
+    @Column(updatable = false)
     private Instant createdAt;
 
     protected PendingRegistrationEntity() {}

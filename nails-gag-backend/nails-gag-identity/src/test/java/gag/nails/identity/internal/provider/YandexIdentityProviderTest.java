@@ -17,6 +17,7 @@ import gag.nails.identity.AuthorizationResponse;
 import gag.nails.identity.Provider;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
+import gag.nails.identity.internal.IdentityProperties.ProviderSettings;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,11 @@ class YandexIdentityProviderTest {
         assertThat(provider.enabled()).isTrue();
         var disabled = new YandexIdentityProvider(ProviderTestSupport.properties(DISABLED, DISABLED), builder.build());
         assertThat(disabled.enabled()).isFalse();
+        // Яндекс без секрета код не обменяет — считается выключенным
+        var noSecret = new YandexIdentityProvider(
+                ProviderTestSupport.properties(new ProviderSettings("app-id", "", REDIRECT.toString()), DISABLED),
+                builder.build());
+        assertThat(noSecret.enabled()).isFalse();
     }
 
     @Test
@@ -96,22 +102,22 @@ class YandexIdentityProviderTest {
                         "1000034426",
                         "+79037659418",
                         "ivan.petrov@yandex.ru",
-                        "ivan",
+                        "Иван Иванов",
                         "https://avatars.yandex.net/get-yapic/131652443/islands-200"));
         server.verify();
     }
 
     @Test
-    void missingFieldsBecomeNullAndRealNameBacksUpDisplayName() {
+    void missingFieldsBecomeNullAndDisplayNameBacksUpRealName() {
         expectTokenExchange().andRespond(withSuccess(TOKEN_OK, MediaType.APPLICATION_JSON));
         expectInfo().andRespond(withSuccess("""
                         {"id": "42", "login": "x", "client_id": "app-id", "psuid": "p",
-                         "real_name": "Иван Иванов", "default_email": "  ", "default_avatar_id": "0/0-0", "is_avatar_empty": true}
+                         "display_name": "ivan", "default_email": "  ", "default_avatar_id": "0/0-0", "is_avatar_empty": true}
                         """, MediaType.APPLICATION_JSON));
 
         var profile = provider.exchange(response, "verifier", REDIRECT);
 
-        assertThat(profile).isEqualTo(new ProviderProfile("42", null, null, "Иван Иванов", null));
+        assertThat(profile).isEqualTo(new ProviderProfile("42", null, null, "ivan", null));
     }
 
     @Test

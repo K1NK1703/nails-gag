@@ -2,6 +2,7 @@ package gag.nails.identity.internal;
 
 import gag.nails.identity.LoginMethodView;
 import gag.nails.identity.Provider;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -34,7 +35,10 @@ class LoginMethodEntity {
     private @Nullable String email;
     private @Nullable String displayName;
     private @Nullable String avatarUrl;
+
+    @Column(updatable = false)
     private Instant linkedAt;
+
     private Instant lastUsedAt;
 
     protected LoginMethodEntity() {}
