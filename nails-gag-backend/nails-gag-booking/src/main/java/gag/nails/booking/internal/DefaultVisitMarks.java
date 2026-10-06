@@ -13,6 +13,7 @@ import gag.nails.clients.ClientView;
 import gag.nails.clients.PrepaymentFlagChange;
 import gag.nails.clients.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.validation.CommandValidator;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -49,14 +50,14 @@ class DefaultVisitMarks implements VisitMarks {
 
     @Override
     public BookingView complete(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         var rules = currentRules.get();
         requireMarkAllowed(booking, rules);
         var correctsNoShow = booking.status() == BookingStatus.NO_SHOW;
         booking.complete(rules.now());
         if (correctsNoShow) {
-            clearFlagSetByNoShowOf(booking, actor);
+            clearFlagSetByNoShowOf(booking);
         } else if (booking.prepaymentReceivedAt() != null && owesPrepayment(booking.clientId())) {
             setPrepaymentFlag(booking, false, PrepaymentFlagReason.VISIT_WITH_PREPAYMENT_COMPLETED);
         }
@@ -66,7 +67,7 @@ class DefaultVisitMarks implements VisitMarks {
 
     @Override
     public BookingView markNoShow(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         var rules = currentRules.get();
         requireMarkAllowed(booking, rules);
@@ -81,7 +82,7 @@ class DefaultVisitMarks implements VisitMarks {
 
     @Override
     public BookingView updateActualServices(UUID bookingId, UpdateActualServices command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         validator.requireValid(command);
         var booking = finder.requireForUpdate(bookingId);
         var rules = currentRules.get();
@@ -124,12 +125,12 @@ class DefaultVisitMarks implements VisitMarks {
      * Исправление «не пришла» снимает признак, только если он стоит именно за эту неявку: последняя
      * строка журнала признака — NO_SHOW по этой записи. Поставленный по другой причине остаётся.
      */
-    private void clearFlagSetByNoShowOf(BookingEntity booking, Actor master) {
+    private void clearFlagSetByNoShowOf(BookingEntity booking) {
         if (!owesPrepayment(booking.clientId())) {
             return;
         }
-        var setByThisNoShow = clientQueries.prepaymentHistory(booking.clientId(), master).stream()
-                .findFirst()
+        var setByThisNoShow = clientQueries
+                .lastPrepaymentChange(booking.clientId())
                 .filter(last -> last.required()
                         && last.reason() == PrepaymentFlagReason.NO_SHOW
                         && booking.id().equals(last.bookingId()))

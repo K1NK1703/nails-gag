@@ -4,6 +4,7 @@ import gag.nails.booking.BookingQueries;
 import gag.nails.booking.BookingStatus;
 import gag.nails.booking.BookingView;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.time.SalonTimeZone;
 import java.time.Clock;
@@ -43,26 +44,26 @@ class DefaultBookingQueries implements BookingQueries {
 
     @Override
     public List<BookingView> activeOfClient(UUID clientId, Actor actor) {
-        actor.requireMasterOrSelf(clientId);
+        actor.requireReadOrSelf(Section.BOOKINGS, clientId);
         return views(
                 bookings.findAllByClientIdAndStatusInOrderBySlotStartsAtAscIdAsc(clientId, BookingStatus.active()));
     }
 
     @Override
     public List<BookingView> historyOfClient(UUID clientId, Actor actor) {
-        actor.requireMasterOrSelf(clientId);
+        actor.requireReadOrSelf(Section.BOOKINGS, clientId);
         return views(bookings.findAllByClientIdAndStatusInOrderBySlotStartsAtDescIdDesc(clientId, FINISHED));
     }
 
     @Override
     public List<BookingView> ofDay(LocalDate day, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.BOOKINGS);
         return views(bookings.startingBetween(startOf(day), startOf(day.plusDays(1))));
     }
 
     @Override
     public List<BookingView> ofPeriod(LocalDate from, LocalDate to, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.BOOKINGS);
         if (to.isBefore(from)) {
             throw new ValidationException("to", "must not be before from");
         }
@@ -71,19 +72,19 @@ class DefaultBookingQueries implements BookingQueries {
 
     @Override
     public List<BookingView> awaitingMark(Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.BOOKINGS);
         return views(bookings.startedBy(BookingStatus.active(), clock.instant()));
     }
 
     @Override
     public List<BookingView> awaitingPrepayment(Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.BOOKINGS);
         return views(bookings.findAllByStatusOrderByPrepaymentDeadlineAscIdAsc(BookingStatus.AWAITING_PREPAYMENT));
     }
 
     @Override
     public Optional<String> masterNote(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.BOOKINGS);
         return Optional.ofNullable(finder.require(bookingId).masterNote());
     }
 

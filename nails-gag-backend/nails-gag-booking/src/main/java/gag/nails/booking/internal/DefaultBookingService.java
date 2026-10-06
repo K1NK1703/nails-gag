@@ -18,6 +18,7 @@ import gag.nails.clients.ClientView;
 import gag.nails.clients.ConsentKind;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
@@ -104,7 +105,7 @@ class DefaultBookingService implements BookingService {
 
     @Override
     public BookingView createByMaster(CreateBooking command, boolean awaitPrepayment, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         validator.requireValid(command);
         var rules = currentRules.get();
         var slot = occupation.get(command.slotId());
@@ -121,7 +122,7 @@ class DefaultBookingService implements BookingService {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
         booking.requireActive("cancel");
         var rules = currentRules.get();
-        if (!actor.isMaster() && rules.visitStarted(booking.slotStartsAt())) {
+        if (!actor.canWrite(Section.BOOKINGS) && rules.visitStarted(booking.slotStartsAt())) {
             throw new InvalidTransitionException(bookingId, booking.status(), "cancel a started visit");
         }
         return cancellation.cancel(booking, cancelReason(actor, rules, booking), rules.now());
@@ -129,7 +130,7 @@ class DefaultBookingService implements BookingService {
 
     @Override
     public BookingView refuseLateArrival(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         booking.requireActive("refuse late arrival");
         var rules = currentRules.get();
@@ -144,7 +145,7 @@ class DefaultBookingService implements BookingService {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
         booking.requireActive("reschedule");
         var rules = currentRules.get();
-        var byClient = !actor.isMaster();
+        var byClient = !actor.canWrite(Section.BOOKINGS);
         if (byClient && rules.visitStarted(booking.slotStartsAt())) {
             throw new InvalidTransitionException(bookingId, booking.status(), "reschedule a started visit");
         }
@@ -200,7 +201,7 @@ class DefaultBookingService implements BookingService {
 
     @Override
     public void updateMasterNote(UUID bookingId, String note, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         // Длина в символах (code points), как char_length в CHECK базы, а не в единицах UTF-16.
         if (note.codePointCount(0, note.length()) > MAX_MASTER_NOTE_LENGTH) {
@@ -245,7 +246,7 @@ class DefaultBookingService implements BookingService {
 
     /** Мастер отменяет без последствий; клиент — бесплатно в окне, позже это поздняя отмена. */
     private static CancelReason cancelReason(Actor actor, BookingRules rules, BookingEntity booking) {
-        if (actor.isMaster()) {
+        if (actor.canWrite(Section.BOOKINGS)) {
             return CancelReason.MASTER;
         }
         return rules.freeCancellationOpen(booking.slotStartsAt()) ? CancelReason.CLIENT : CancelReason.CLIENT_LATE;

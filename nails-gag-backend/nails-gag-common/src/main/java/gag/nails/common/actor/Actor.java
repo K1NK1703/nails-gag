@@ -113,23 +113,6 @@ public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Secti
         return client().orElseThrow(AccessDeniedException::new);
     }
 
-    // Временно, до перевода модулей на разделы (удаляется в Task 4).
-    public boolean isMaster() {
-        return isStaff();
-    }
-
-    public void requireMaster() {
-        if (!isMaster()) {
-            throw new AccessDeniedException();
-        }
-    }
-
-    public void requireMasterOrSelf(UUID clientId) {
-        if (!isMaster() && !isClient(clientId)) {
-            throw new AccessDeniedException();
-        }
-    }
-
     private static Map<Section, AccessLevel> builtIn(AccessLevel documents, AccessLevel access, AccessLevel finance) {
         var levels = new EnumMap<Section, AccessLevel>(Section.class);
         for (var section : Section.values()) {

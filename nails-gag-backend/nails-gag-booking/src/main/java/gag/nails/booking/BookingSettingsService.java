@@ -6,9 +6,9 @@ import gag.nails.common.error.ValidationException;
 import java.util.List;
 
 /**
- * Правила записи. Чтение открыто: значения показываются клиенту в текстах и подсказках. Изменение —
- * только мастер. Новые значения действуют на будущие проверки; уже рассчитанные сроки предоплаты не
- * пересчитываются.
+ * Правила записи. Чтение открыто: значения показываются клиенту в текстах и подсказках. Изменение
+ * требует уровня изменения раздела «Правила записи», журнал — уровня чтения. Новые значения действуют
+ * на будущие проверки; уже рассчитанные сроки предоплаты не пересчитываются.
  */
 public interface BookingSettingsService {
 
@@ -21,14 +21,14 @@ public interface BookingSettingsService {
      * оферты: её версию мастер добавляет отдельно ({@code DocumentVersionService} в {@code clients}).
      *
      * @throws ValidationException если значение вне допустимого диапазона
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет изменения раздела «Правила записи»
      */
     BookingSettingsView update(UpdateBookingSettings command, Actor actor);
 
     /**
-     * Журнал изменений правил, новые первыми. Только мастер.
+     * Журнал изменений правил, новые первыми. Нужен уровень чтения раздела «Правила записи».
      *
-     * @throws AccessDeniedException если действует не мастер
+     * @throws AccessDeniedException если у актора нет чтения раздела «Правила записи»
      */
     List<BookingSettingsChangeView> history(Actor actor);
 }

@@ -6,6 +6,7 @@ import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.ClientView;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,7 @@ class DefaultBookingPrepayments implements BookingPrepayments {
 
     @Override
     public BookingView markReceived(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         var now = clock.instant();
         booking.confirm(now, true);
@@ -46,12 +47,15 @@ class DefaultBookingPrepayments implements BookingPrepayments {
 
     @Override
     public BookingView confirmWithoutPrepayment(UUID bookingId, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKINGS);
+        // Признак клиента снимается от имени сотрудника — нужен и уровень изменения «Клиентов». Оба
+        // уровня проверяются до изменений, чтобы отказ не оставил запись подтверждённой.
+        actor.requireWrite(Section.CLIENTS);
         var booking = finder.requireForUpdate(bookingId);
         var now = clock.instant();
         booking.confirm(now, false);
-        // Мастер решила не требовать предоплату: признак снимается с причиной MASTER_WAIVED. Если его
-        // и не было (мастер сама запросила предоплату при записи), журнал признака не трогаем.
+        // Сотрудник решил не требовать предоплату: признак снимается с причиной MASTER_WAIVED. Если его
+        // и не было (предоплату запросили при записи), журнал признака не трогаем.
         if (owesPrepayment(booking.clientId())) {
             clients.setPrepaymentRequired(booking.clientId(), false, null, actor);
         }

@@ -5,6 +5,7 @@ import gag.nails.booking.BookingSettingsService;
 import gag.nails.booking.BookingSettingsView;
 import gag.nails.booking.UpdateBookingSettings;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
 import java.util.LinkedHashMap;
@@ -41,7 +42,7 @@ class DefaultBookingSettingsService implements BookingSettingsService {
 
     @Override
     public BookingSettingsView update(UpdateBookingSettings command, Actor actor) {
-        actor.requireMaster();
+        actor.requireWrite(Section.BOOKING_SETTINGS);
         validator.requireValid(command);
         var current = settings.single();
         var before = byColumn(current.toView());
@@ -60,7 +61,7 @@ class DefaultBookingSettingsService implements BookingSettingsService {
     @Override
     @Transactional(readOnly = true)
     public List<BookingSettingsChangeView> history(Actor actor) {
-        actor.requireMaster();
+        actor.requireRead(Section.BOOKING_SETTINGS);
         return changes.findAllByOrderByChangedAtDescIdDesc().stream()
                 .map(BookingSettingsChangeEntity::toView)
                 .toList();
