@@ -13,4 +13,11 @@ import jakarta.validation.constraints.Size;
 public record CompleteRegistration(
         @NotBlank @Size(max = 100) String firstName,
         @NotBlank @Size(max = 32) String phone,
-        @NotBlank @Size(max = 64) String policyVersion) {}
+        @NotBlank @Size(max = 64) String policyVersion) {
+
+    /** Телефон — личные данные, в логах его не должно быть. */
+    @Override
+    public String toString() {
+        return "CompleteRegistration[firstName=" + firstName + ", phone=<hidden>, policyVersion=" + policyVersion + "]";
+    }
+}

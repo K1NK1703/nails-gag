@@ -3,7 +3,9 @@ package gag.nails.identity.internal;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.model.ClientView;
+import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.AccountView;
 import gag.nails.identity.Accounts;
@@ -13,14 +15,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Свой аккаунт (спецификация 4.6). Удаление: сначала правило последнего администратора (без этого
- * аккаунта), затем обезличивание карточки в {@code clients} и удаление способов входа, сессий, ролей,
- * переопределений и самого аккаунта; строки журнала входов теряют ссылку ({@code ON DELETE SET NULL}).
- *
- * <p>Известное ограничение: удаление берёт блокировку роли {@code DEVELOPER}, а затем строку карточки;
- * блокировка той же карточки мастером идёт в обратном порядке (карточка → роль). Совпав по времени, они
- * могут взаимно заблокироваться — PostgreSQL прервёт одну из транзакций, её достаточно повторить. Принято
- * из-за редкости: оба действия ручные.
+ * Свой аккаунт (спецификация 4.6). Удаление в одной транзакции: обезличивание карточки в {@code
+ * clients}, затем удаление способов входа, сессий, ролей, переопределений и самого аккаунта (строки
+ * журнала входов теряют ссылку, {@code ON DELETE SET NULL}); правило последнего администратора —
+ * последним, уже без уходящего. Проверка нужна только уходящему администратору: у остального клиента
+ * терять системе нечего, и блокировка роли {@code DEVELOPER} не берётся — пока в системе нет ни одного
+ * администратора, клиент всё равно вправе удалить аккаунт. Порядок блокировок строк — карточка → роль,
+ * как у блокировки клиента мастером, поэтому взаимной блокировки с ней нет.
  */
 @Service
 @Transactional
@@ -32,6 +33,7 @@ class DefaultAccounts implements Accounts {
     private final AccountRoleRepository accountRoles;
     private final AccessOverrideRepository overrides;
     private final ActorAssembly assembly;
+    private final AccessResolver resolver;
     private final AccessGuard guard;
     private final ClientService clientService;
     private final ClientQueries clientQueries;
@@ -43,6 +45,7 @@ class DefaultAccounts implements Accounts {
             AccountRoleRepository accountRoles,
             AccessOverrideRepository overrides,
             ActorAssembly assembly,
+            AccessResolver resolver,
             AccessGuard guard,
             ClientService clientService,
             ClientQueries clientQueries) {
@@ -52,6 +55,7 @@ class DefaultAccounts implements Accounts {
         this.accountRoles = accountRoles;
         this.overrides = overrides;
         this.assembly = assembly;
+        this.resolver = resolver;
         this.guard = guard;
         this.clientService = clientService;
         this.clientQueries = clientQueries;
@@ -71,13 +75,16 @@ class DefaultAccounts implements Accounts {
     public void delete(Actor actor) {
         var account = require(actor);
         var accountId = account.id();
-        guard.requireAdminRemains(accountId);
+        var leavingAdmin = resolver.effective(accountId).get(Section.ACCESS) == AccessLevel.WRITE;
         clientQueries.byAccountId(accountId).map(ClientView::id).ifPresent(clientService::erase);
         sessions.deleteAllByAccountId(accountId);
         loginMethods.deleteAllByAccountId(accountId);
         accountRoles.deleteAllByIdAccountId(accountId);
         overrides.deleteAllByIdAccountId(accountId);
         accounts.delete(account);
+        if (leavingAdmin) {
+            guard.requireAdminRemains();
+        }
     }
 
     private AccountEntity require(Actor actor) {

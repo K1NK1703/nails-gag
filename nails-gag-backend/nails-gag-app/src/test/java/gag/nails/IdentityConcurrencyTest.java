@@ -160,14 +160,10 @@ class IdentityConcurrencyTest {
     /**
      * Вход известного человека одновременно с блокировкой его карточки. Вход либо застал блокировку и
      * получил {@code AccountBlockedException}, либо прошёл раньше — тогда его сессию закрыл слушатель
-     * {@code ClientBlocked}, а если сессия открылась уже после проверки карточки и до её блокировки, её
-     * удалит первый же {@code authenticate}: заблокированной карточке он сессий не оставляет. В любом
-     * случае после обоих потоков живых сессий у аккаунта нет.
-     *
-     * <p>Вход карточку не блокирует, а только читает, поэтому на практике почти всегда выпадает третья
-     * ветка: блокировка успевает зафиксироваться между проверкой карточки и открытием сессии, строка
-     * сессии остаётся до первого {@code authenticate}. Первые две ветки детерминированно проверяют
-     * {@code IdentityListenersTest.blockingClosesSessions} и {@code LoginFlowTest.blockedCardCannotSignIn}.
+     * {@code ClientBlocked}. Окно между проверкой карточки и фиксацией сессии закрывает перечитывание
+     * карточки после фиксации в отдельной транзакции: заблокированная карточка там означает закрытие
+     * сессий и {@code AccountBlockedException}. В любом случае после обоих потоков у аккаунта нет сессий
+     * <b>в базе</b>, а не только после первого {@code authenticate}.
      */
     @Test
     void loginRacingWithBlockNeverOpensSessionForBlockedCard() throws Exception {
@@ -183,6 +179,7 @@ class IdentityConcurrencyTest {
         var blocked = outcomes.get(1);
         assertThat(blocked.failure()).isNull();
         assertThat(clientQueries.get(clientId, master).blocked()).isTrue();
+        assertThat(sessionsOf(earlier.accountId())).isZero();
         if (login.succeeded()) {
             var signedIn = (SignedIn) login.result();
             assertThat(signedIn.accountId()).isEqualTo(earlier.accountId());
@@ -191,7 +188,6 @@ class IdentityConcurrencyTest {
             assertThat(login.failure()).isInstanceOf(AccountBlockedException.class);
         }
         assertThat(sessions.authenticate(earlier.sessionToken())).isEmpty();
-        assertThat(sessionsOf(earlier.accountId())).isZero();
     }
 
     private LoginResult complete(String code, LoginState state) {

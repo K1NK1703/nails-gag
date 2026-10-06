@@ -31,7 +31,7 @@ class LoginLocks {
         }
         for (var key : keys) {
             entityManager
-                    .createNativeQuery("select pg_advisory_xact_lock(hashtext(:key))")
+                    .createNativeQuery("select pg_advisory_xact_lock(hashtextextended(:key, 0))")
                     .setParameter("key", key)
                     .getSingleResult();
         }

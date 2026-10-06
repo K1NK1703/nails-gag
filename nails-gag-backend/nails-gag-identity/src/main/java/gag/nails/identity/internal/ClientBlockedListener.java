@@ -9,15 +9,21 @@ import org.springframework.stereotype.Component;
  * администратора — если заблокирован единственный администратор, {@code LastAccessAdminException}
  * откатывает блокировку (пока администраторов нет вовсе, терять нечего — блокировка проходит). Обычный {@code @EventListener}: выполняется синхронно в транзакции
  * {@code clients.block}, как требует {@link ClientBlocked}. Порядок блокировок строк: клиент (его держит
- * {@code clients}) → роль {@code DEVELOPER}.
+ * {@code clients}) → аккаунт → роль {@code DEVELOPER}.
+ *
+ * <p>Известное ограничение: вход при фиксации обновляет строки аккаунта и карточки (подтверждённый
+ * номер) в обратном порядке — аккаунт → клиент. Совпав по времени с блокировкой той же карточки, они
+ * могут взаимно заблокироваться; PostgreSQL прервёт одну из транзакций, её достаточно повторить.
  */
 @Component
 class ClientBlockedListener {
 
+    private final AccountRepository accounts;
     private final SessionRepository sessions;
     private final AccessGuard guard;
 
-    ClientBlockedListener(SessionRepository sessions, AccessGuard guard) {
+    ClientBlockedListener(AccountRepository accounts, SessionRepository sessions, AccessGuard guard) {
+        this.accounts = accounts;
         this.sessions = sessions;
         this.guard = guard;
     }
@@ -25,9 +31,14 @@ class ClientBlockedListener {
     @EventListener
     void on(ClientBlocked event) {
         var accountId = event.accountId();
-        if (accountId != null) {
-            sessions.deleteAllByAccountId(accountId);
+        if (accountId == null) {
+            // Карточка без аккаунта: сессий нет, администратором она быть не может — блокировку роли не берём.
+            return;
         }
+        // Под блокировкой строки аккаунта: вход, фиксирующий сессию в это же время, либо уже виден этой
+        // выборке, либо сам перепроверит карточку после фиксации (LoginWriter.rejectIfBlocked) и закроет её.
+        accounts.lockById(accountId);
+        sessions.deleteAllByAccountId(accountId);
         guard.requireAdminNotLost();
     }
 }

@@ -13,17 +13,12 @@ import gag.nails.testsupport.ModuleTest;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Синхронные слушатели {@code ClientBlocked} и {@code ClientMerged} в транзакции операции {@code clients}. */
 @ModuleTest
 class IdentityListenersTest extends IdentityTestSupport {
-
-    @Autowired
-    JdbcClient jdbc;
 
     @Test
     void blockingClosesSessions() {
@@ -47,17 +42,22 @@ class IdentityListenersTest extends IdentityTestSupport {
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void blockingLastAdminIsRejected() {
-        var developer = developer();
-        var clientId = clientId(developer);
+        SignedIn developer = null;
+        UUID clientId = null;
         try {
-            assertThatThrownBy(() -> clients.block(clientId, "по ошибке", master))
+            developer = developer();
+            clientId = clientId(developer);
+            var developerClient = clientId;
+            assertThatThrownBy(() -> clients.block(developerClient, "по ошибке", master))
                     .isInstanceOf(LastAccessAdminException.class);
 
             assertThat(clientQueries.get(clientId, master).blocked()).isFalse();
             assertThat(sessions.authenticate(developer.sessionToken())).isPresent();
             assertThat(actor(developer).level(Section.ACCESS)).isEqualTo(AccessLevel.WRITE);
         } finally {
-            removeCommitted(developer.accountId(), clientId);
+            if (developer != null) {
+                removeCommitted(developer.accountId(), clientId);
+            }
         }
     }
 
@@ -106,19 +106,5 @@ class IdentityListenersTest extends IdentityTestSupport {
         assertThat(result.survivorId()).isEqualTo(clientId(signedIn));
         assertThat(sessions.authenticate(signedIn.sessionToken())).isPresent();
         assertThat(me(signedIn).loginMethods()).hasSize(1);
-    }
-
-    /** Убирает за тестом без транзакции: аккаунт с каскадом, его журналы и личные данные карточки. */
-    private void removeCommitted(UUID accountId, UUID clientId) {
-        clients.erase(clientId);
-        jdbc.sql("delete from identity.login_event where account_id = :accountId")
-                .param("accountId", accountId)
-                .update();
-        jdbc.sql("delete from identity.access_change where target_account_id = :accountId")
-                .param("accountId", accountId)
-                .update();
-        jdbc.sql("delete from identity.account where id = :accountId")
-                .param("accountId", accountId)
-                .update();
     }
 }

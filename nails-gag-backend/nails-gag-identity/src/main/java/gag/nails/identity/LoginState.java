@@ -16,4 +16,11 @@ public record LoginState(
         String codeVerifier,
         LoginPurpose purpose,
         @Nullable UUID accountId,
-        Instant issuedAt) {}
+        Instant issuedAt) {
+
+    /** Без {@code state} и {@code codeVerifier}: их место — cookie, а не логи. */
+    @Override
+    public String toString() {
+        return "LoginState[purpose=" + purpose + ", accountId=" + accountId + ", issuedAt=" + issuedAt + "]";
+    }
+}

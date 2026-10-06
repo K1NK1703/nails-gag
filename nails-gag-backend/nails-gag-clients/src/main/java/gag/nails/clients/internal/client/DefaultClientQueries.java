@@ -67,7 +67,7 @@ class DefaultClientQueries implements ClientQueries {
         if (email.isBlank()) {
             return Optional.empty();
         }
-        var found = clients.findAllByEmailIgnoreCase(email.strip());
+        var found = clients.findAllUnregisteredByEmail(email.strip());
         return found.size() == 1 ? Optional.of(found.getFirst().toView()) : Optional.empty();
     }
 

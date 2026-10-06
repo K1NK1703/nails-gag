@@ -9,7 +9,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,12 +19,12 @@ import org.springframework.stereotype.Component;
  * изменений прав, блокировок и объединений, затрагивающих доступ: два одновременных понижения проходят
  * проверку по очереди, и второе видит результат первого.
  *
- * <p>Перед подсчётом накопленные изменения сбрасываются в базу, чтобы считать по тому, что увидит
- * фиксация, а не по кэшу сущностей. Строгая проверка ({@link #requireAdminRemains()}) — из {@code
- * AccessAdministration} (изменение и удаление роли, снятие роли, переопределение) и {@code
- * Accounts.delete}; слушатели {@code ClientBlocked} и {@code ClientMerged} прав не меняют и зовут
- * {@link #requireAdminNotLost()}: до первого разработчика администраторов нет, и блокировать клиентов
- * это не мешает.
+ * <p>Перед подсчётом накопленные изменения сбрасываются в базу, а гранты, переопределения и назначения
+ * читаются запросами: считается то, что увидит фиксация, а не кэш сущностей. Строгая проверка
+ * ({@link #requireAdminRemains()}) — из {@code AccessAdministration} (изменение и удаление роли, снятие
+ * роли, переопределение) и {@code Accounts.delete} уходящего администратора; слушатели {@code
+ * ClientBlocked} и {@code ClientMerged} прав не меняют и зовут {@link #requireAdminNotLost()}: до первого
+ * разработчика администраторов нет, и блокировать клиентов это не мешает.
  */
 @Component
 class AccessGuard {
@@ -54,16 +53,7 @@ class AccessGuard {
      * @throws LastAccessAdminException не осталось ни одного активного администратора
      */
     void requireAdminRemains() {
-        requireAdminRemains(null);
-    }
-
-    /**
-     * То же, но аккаунт {@code leavingAccountId} не считается: он удаляется в этой же транзакции.
-     *
-     * @throws LastAccessAdminException не осталось ни одного активного администратора
-     */
-    void requireAdminRemains(@Nullable UUID leavingAccountId) {
-        lockAndCount(leavingAccountId, true);
+        lockAndCount(true);
     }
 
     /**
@@ -74,22 +64,19 @@ class AccessGuard {
      * @throws LastAccessAdminException администраторы есть, но активного среди них не осталось
      */
     void requireAdminNotLost() {
-        lockAndCount(null, false);
+        lockAndCount(false);
     }
 
-    private void lockAndCount(@Nullable UUID leavingAccountId, boolean strict) {
+    private void lockAndCount(boolean strict) {
         roles.flush();
         roles.lockByCode(DEVELOPER).orElseThrow(() -> new InternalException("built-in role DEVELOPER is missing"));
         var candidates = adminCandidates();
         if (!strict && candidates.isEmpty()) {
             return;
         }
-        for (var candidate : candidates) {
-            if (!candidate.equals(leavingAccountId) && isActive(candidate)) {
-                return;
-            }
+        if (candidates.stream().noneMatch(this::isActive)) {
+            throw new LastAccessAdminException();
         }
-        throw new LastAccessAdminException();
     }
 
     /**
@@ -99,10 +86,7 @@ class AccessGuard {
     private List<UUID> adminCandidates() {
         var overridden = new HashMap<UUID, AccessLevel>();
         overrides.findAllByIdSection(Section.ACCESS).forEach(o -> overridden.put(o.accountId(), o.level()));
-        var writeRoles = roles.findAll().stream()
-                .filter(role -> role.grants().get(Section.ACCESS) == AccessLevel.WRITE)
-                .map(RoleEntity::id)
-                .toList();
+        var writeRoles = roles.findIdsGranting(Section.ACCESS, AccessLevel.WRITE);
         var candidates = new LinkedHashSet<UUID>();
         overridden.forEach((accountId, level) -> {
             if (level == AccessLevel.WRITE) {

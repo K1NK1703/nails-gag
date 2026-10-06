@@ -110,22 +110,20 @@ class DefaultAccessAdministration implements AccessAdministration {
             throw new RoleBuiltInException();
         }
         var before = role.grants();
-        var renamed = !role.title().equals(command.title());
+        if (!role.title().equals(command.title())) {
+            // Переименование — строка без раздела; за ней по строке на каждый изменившийся раздел.
+            journal.record(actor.accountId(), null, roleId, AccessChangeKind.ROLE_UPDATED, null, null, null);
+        }
         role.rename(command.title());
         role.replaceGrants(command.grants());
         var after = role.grants();
-        var changed = false;
         for (var section : Section.values()) {
             var oldLevel = before.getOrDefault(section, AccessLevel.NONE);
             var newLevel = after.getOrDefault(section, AccessLevel.NONE);
             if (oldLevel != newLevel) {
-                changed = true;
                 journal.record(
                         actor.accountId(), null, roleId, AccessChangeKind.ROLE_UPDATED, section, oldLevel, newLevel);
             }
-        }
-        if (renamed && !changed) {
-            journal.record(actor.accountId(), null, roleId, AccessChangeKind.ROLE_UPDATED, null, null, null);
         }
         guard.requireAdminRemains();
         return role.toView();
@@ -134,7 +132,8 @@ class DefaultAccessAdministration implements AccessAdministration {
     @Override
     public void deleteRole(UUID roleId, Actor actor) {
         actor.requireWrite(Section.ACCESS);
-        var role = requireRole(roleId);
+        // FOR UPDATE: идущие назначения этой роли (они держат FOR SHARE) завершатся раньше проверки «назначена ли».
+        var role = roles.lockForUpdate(roleId).orElseThrow(() -> new RoleNotFoundException(roleId));
         if (role.builtIn()) {
             throw new RoleBuiltInException();
         }
@@ -164,10 +163,9 @@ class DefaultAccessAdministration implements AccessAdministration {
     public AccountAccessView assignRole(UUID accountId, UUID roleId, Actor actor) {
         actor.requireWrite(Section.ACCESS);
         var account = requireAccount(accountId);
-        var role = requireRole(roleId);
-        var id = new AccountRoleId(accountId, roleId);
-        if (!accountRoles.existsById(id)) {
-            accountRoles.save(new AccountRoleEntity(accountId, roleId));
+        // FOR SHARE: роль не удалят, пока назначение не зафиксировано; повторное назначение в гонке — не ошибка.
+        var role = roles.lockForShare(roleId).orElseThrow(() -> new RoleNotFoundException(roleId));
+        if (accountRoles.insertIfAbsent(accountId, roleId) == 1) {
             journal.record(actor.accountId(), accountId, role.id(), AccessChangeKind.ROLE_ASSIGNED, null, null, null);
         }
         return view(account);

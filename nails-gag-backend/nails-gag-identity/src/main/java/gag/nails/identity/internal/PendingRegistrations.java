@@ -60,14 +60,20 @@ class PendingRegistrations {
     }
 
     /**
-     * Находит и удаляет билет: второй раз его не предъявить.
+     * Находит и удаляет билет: второй раз его не предъявить. Удаление — одним запросом с проверкой числа
+     * строк: два одновременных предъявления одного билета оба его находят, но удалит только одно, второе
+     * получит ту же ошибку, что и просроченный билет, а не сбой.
      *
-     * @throws RegistrationExpiredException билета нет, он выдан для другой цели или старше 30 минут
+     * @throws RegistrationExpiredException билета нет, он выдан для другой цели, старше 30 минут или уже
+     *     использован
      */
     PendingRegistrationEntity consume(String ticket, PendingPurpose purpose) {
-        var found = pending.findByTicketHash(OpaqueTokens.hash(ticket)).orElseThrow(RegistrationExpiredException::new);
-        pending.delete(found);
+        var hash = OpaqueTokens.hash(ticket);
+        var found = pending.findByTicketHash(hash).orElseThrow(RegistrationExpiredException::new);
         if (found.purpose() != purpose || found.createdAt().plus(TTL).isBefore(clock.instant())) {
+            throw new RegistrationExpiredException();
+        }
+        if (pending.deleteByTicketHash(hash) == 0) {
             throw new RegistrationExpiredException();
         }
         return found;

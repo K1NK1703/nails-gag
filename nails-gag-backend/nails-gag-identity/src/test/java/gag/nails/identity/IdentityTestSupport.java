@@ -10,7 +10,9 @@ import gag.nails.identity.testing.FakeProvider;
 import gag.nails.testsupport.MutableClock;
 import java.util.List;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -21,7 +23,8 @@ import org.springframework.test.context.DynamicPropertySource;
  * <p>Тест идёт в одной транзакции с откатом ({@code @ModuleTest}). Поэтому отклонённая операция,
  * которая успела что-то записать до своего исключения (правило последнего администратора проверяется
  * после изменения), оставляет эти записи видимыми до конца теста — в бою их откатила бы транзакция.
- * Тесты, которым важен откат, либо повторяют операцию обратного знака, либо идут без транзакции.
+ * Тесты, которым важен откат, либо повторяют операцию обратного знака, либо идут без транзакции
+ * ({@code @Transactional(propagation = NOT_SUPPORTED)}) и убирают за собой {@link #removeCommitted}.
  */
 abstract class IdentityTestSupport {
 
@@ -61,6 +64,9 @@ abstract class IdentityTestSupport {
 
     @Autowired
     MutableClock clock;
+
+    @Autowired
+    JdbcClient jdbc;
 
     final Actor master = Actor.master();
 
@@ -142,5 +148,40 @@ abstract class IdentityTestSupport {
 
     List<AccessChangeView> accessJournal() {
         return access.accessJournal(500, Actor.developer());
+    }
+
+    /**
+     * Уборка за тестом без транзакции: аккаунт с каскадом (способы входа, сессии, роли, переопределения),
+     * его журналы и карточка. Карточка сначала обезличивается публичным API {@code clients.erase}
+     * (аккаунт отвязывается, личных данных не остаётся), а удалять строки карточки, её согласий и журнала
+     * признака публичного способа нет — поэтому дальше SQL. Повторный вызов и уже удалённый аккаунт —
+     * безвредны.
+     */
+    void removeCommitted(UUID accountId, @Nullable UUID clientId) {
+        if (clientId != null && clientQueries.byId(clientId).isPresent()) {
+            clients.erase(clientId);
+        }
+        // Строки журнала входов аккаунта, удалённого самим тестом, уже без ссылки (ON DELETE SET NULL).
+        jdbc.sql("delete from identity.login_event where account_id = :accountId or account_id is null")
+                .param("accountId", accountId)
+                .update();
+        jdbc.sql(
+                        "delete from identity.access_change where target_account_id = :accountId or actor_account_id = :accountId")
+                .param("accountId", accountId)
+                .update();
+        jdbc.sql("delete from identity.account where id = :accountId")
+                .param("accountId", accountId)
+                .update();
+        if (clientId != null) {
+            jdbc.sql("delete from clients.consent where client_id = :clientId")
+                    .param("clientId", clientId)
+                    .update();
+            jdbc.sql("delete from clients.prepayment_flag_change where client_id = :clientId")
+                    .param("clientId", clientId)
+                    .update();
+            jdbc.sql("delete from clients.client where id = :clientId")
+                    .param("clientId", clientId)
+                    .update();
+        }
     }
 }

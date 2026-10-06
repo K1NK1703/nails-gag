@@ -19,6 +19,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @ModuleTest
 class AccountsTest extends IdentityTestSupport {
@@ -105,20 +107,55 @@ class AccountsTest extends IdentityTestSupport {
         assertThat(clientId(fresh)).isNotEqualTo(clientId);
     }
 
+    /**
+     * Без транзакции теста: удаление сначала стирает всё и только потом проверяет правило последнего
+     * администратора, так что откат отказа виден лишь на настоящей транзакции. Всё зафиксированное тест
+     * убирает сам.
+     */
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void lastAdminCannotDeleteAccount() {
-        var developer = developer();
+        SignedIn developer = null;
+        SignedIn second = null;
+        UUID developerClient = null;
+        UUID secondClient = null;
+        try {
+            developer = developer();
+            developerClient = clientId(developer);
+            var developerActor = actor(developer);
 
-        assertThatThrownBy(() -> accounts.delete(actor(developer))).isInstanceOf(LastAccessAdminException.class);
+            assertThatThrownBy(() -> accounts.delete(developerActor)).isInstanceOf(LastAccessAdminException.class);
 
-        assertThat(sessions.authenticate(developer.sessionToken())).isPresent();
-        assertThat(clientQueries.get(clientId(developer), master).erased()).isFalse();
+            assertThat(sessions.authenticate(developer.sessionToken())).isPresent();
+            assertThat(clientQueries.get(developerClient, master).erased()).isFalse();
+            assertThat(actor(developer).level(Section.ACCESS)).isEqualTo(AccessLevel.WRITE);
 
-        var second = signInFirstTime(profile("second", "+79211234567"));
-        access.assignRole(second.accountId(), role("DEVELOPER").id(), actor(developer));
-        accounts.delete(actor(developer));
+            second = signInFirstTime(profile("second-" + UUID.randomUUID(), "+79211234567"));
+            secondClient = clientId(second);
+            access.assignRole(second.accountId(), role("DEVELOPER").id(), developerActor);
+            accounts.delete(developerActor);
 
-        assertThat(sessions.authenticate(developer.sessionToken())).isEmpty();
-        assertThat(actor(second).level(Section.ACCESS)).isEqualTo(AccessLevel.WRITE);
+            assertThat(sessions.authenticate(developer.sessionToken())).isEmpty();
+            assertThat(clientQueries.get(developerClient, master).erased()).isTrue();
+            assertThat(actor(second).level(Section.ACCESS)).isEqualTo(AccessLevel.WRITE);
+        } finally {
+            if (developer != null) {
+                removeCommitted(developer.accountId(), developerClient);
+            }
+            if (second != null) {
+                removeCommitted(second.accountId(), secondClient);
+            }
+        }
+    }
+
+    @Test
+    void clientWithoutAccessDeletesAccountEvenWhenThereIsNoAdmin() {
+        var signedIn = signInFirstTime(profile("u1", "+79211234567"));
+        var clientId = clientId(signedIn);
+
+        accounts.delete(actor(signedIn));
+
+        assertThat(sessions.authenticate(signedIn.sessionToken())).isEmpty();
+        assertThat(clientQueries.byId(clientId).orElseThrow().erased()).isTrue();
     }
 }

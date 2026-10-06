@@ -61,12 +61,12 @@ class ClientQueriesTest {
     }
 
     @Test
-    void byEmailFindsTheOnlyCardIgnoringCaseAndStaysSilentOnDuplicates() {
+    void byEmailFindsTheOnlyUnregisteredCardIgnoringCaseAndStaysSilentOnDuplicates() {
         var card = clients.create(new CreateClient("Ольга", null, null, null, "Olga@Example.com", null), master);
-        var registered = clients.register(new RegisterClient(UUID.randomUUID(), "Ира", null, "ira@example.com"));
+        clients.register(new RegisterClient(UUID.randomUUID(), "Ира", null, "ira@example.com"));
 
         assertThat(queries.byEmail("olga@example.COM")).map(ClientView::id).contains(card.id());
-        assertThat(queries.byEmail("IRA@example.com")).map(ClientView::id).contains(registered.id());
+        assertThat(queries.byEmail("IRA@example.com")).isEmpty();
         assertThat(queries.byEmail("nobody@example.com")).isEmpty();
         assertThat(queries.byEmail(" ")).isEmpty();
 

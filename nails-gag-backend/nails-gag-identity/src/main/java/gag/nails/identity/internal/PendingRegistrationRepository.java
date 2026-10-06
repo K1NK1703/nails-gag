@@ -11,6 +11,11 @@ interface PendingRegistrationRepository extends JpaRepository<PendingRegistratio
 
     Optional<PendingRegistrationEntity> findByTicketHash(byte[] ticketHash);
 
+    /** Удаляет билет одним запросом; 0 строк — его уже использовали. */
+    @Modifying
+    @Query("delete from PendingRegistrationEntity p where p.ticketHash = :ticketHash")
+    int deleteByTicketHash(byte[] ticketHash);
+
     /**
      * Обслуживание: одним запросом удаляет билеты, выданные до {@code createdBefore}. О сбросе и очистке
      * контекста — см. {@link SessionRepository#deleteExpired}.
