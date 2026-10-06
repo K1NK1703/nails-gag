@@ -77,6 +77,16 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void clientsIdentitySupportIsMigrated() {
+        var contactPhone = jdbc.sql("""
+                        select count(*) from information_schema.columns
+                        where table_schema = 'clients' and table_name = 'client' and column_name = 'contact_phone'
+                        """).query(Integer.class).single();
+
+        assertThat(contactPhone).isEqualTo(1);
+    }
+
+    @Test
     void bookingSchemaIsMigrated() {
         var settings = jdbc.sql("select count(*) from booking.settings")
                 .query(Integer.class)

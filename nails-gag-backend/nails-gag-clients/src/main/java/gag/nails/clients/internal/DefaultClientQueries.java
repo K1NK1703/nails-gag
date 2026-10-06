@@ -68,9 +68,13 @@ class DefaultClientQueries implements ClientQueries {
     @Override
     public Optional<String> masterNote(UUID clientId, Actor actor) {
         actor.requireRead(Section.CLIENTS);
-        return clients.findById(clientId)
-                .orElseThrow(() -> new ClientNotFoundException(clientId))
-                .masterNote();
+        return require(clientId).masterNote();
+    }
+
+    @Override
+    public Optional<String> blockReason(UUID clientId, Actor actor) {
+        actor.requireRead(Section.CLIENTS);
+        return require(clientId).blockReason();
     }
 
     @Override
@@ -101,5 +105,9 @@ class DefaultClientQueries implements ClientQueries {
         return flagChanges
                 .findFirstByClientIdOrderByChangedAtDescIdDesc(clientId)
                 .map(PrepaymentFlagChangeEntity::toView);
+    }
+
+    private ClientEntity require(UUID clientId) {
+        return clients.findById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
     }
 }

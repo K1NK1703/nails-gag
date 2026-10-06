@@ -30,7 +30,10 @@ public interface ClientQueries {
      */
     Optional<ClientView> byPhone(String phone);
 
-    /** Нужен уровень чтения раздела «Клиенты». Пустой запрос — все клиенты по алфавиту. */
+    /**
+     * Нужен уровень чтения раздела «Клиенты». Ищет по имени, фамилии, телефону и номеру для связи;
+     * пустой запрос — все клиенты по алфавиту. Обезличенные карточки не возвращаются.
+     */
     List<ClientView> search(String query, Actor actor);
 
     /**
@@ -39,6 +42,14 @@ public interface ClientQueries {
      * @throws ClientNotFoundException если клиента нет
      */
     Optional<String> masterNote(UUID clientId, Actor actor);
+
+    /**
+     * Причина блокировки; пусто, если клиент не заблокирован или причина не указана. Клиенту не видна:
+     * нужен уровень чтения раздела «Клиенты».
+     *
+     * @throws ClientNotFoundException если клиента нет
+     */
+    Optional<String> blockReason(UUID clientId, Actor actor);
 
     /**
      * Есть ли у клиента согласия всех перечисленных видов на действующие версии документов. Без

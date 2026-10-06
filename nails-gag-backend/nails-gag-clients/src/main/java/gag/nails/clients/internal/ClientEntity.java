@@ -24,6 +24,9 @@ import org.jspecify.annotations.Nullable;
 @Table(schema = "clients", name = "client")
 class ClientEntity {
 
+    /** Имя обезличенной карточки: личных данных у неё больше нет, а записи и история остаются. */
+    static final String ERASED_FIRST_NAME = "Удалённый клиент";
+
     @Id
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
@@ -42,6 +45,10 @@ class ClientEntity {
 
     private @Nullable UUID accountId;
     private boolean prepaymentRequired;
+    private @Nullable String contactPhone;
+    private @Nullable Instant blockedAt;
+    private @Nullable String blockReason;
+    private @Nullable Instant erasedAt;
 
     // Аудит, не бизнес-время: бизнес-время берётся только из Clock.
     @CreationTimestamp
@@ -112,6 +119,59 @@ class ClientEntity {
         this.accountId = accountId;
     }
 
+    Optional<String> contactPhone() {
+        return Optional.ofNullable(contactPhone);
+    }
+
+    /** Номер для связи уже нормализован; {@code null} стирает. */
+    void setContactPhone(@Nullable String contactPhone) {
+        this.contactPhone = contactPhone;
+    }
+
+    boolean isBlocked() {
+        return blockedAt != null;
+    }
+
+    Optional<String> blockReason() {
+        return Optional.ofNullable(blockReason);
+    }
+
+    /** Время первой блокировки сохраняется, причина заменяется; пустая причина стирается. */
+    void block(@Nullable String reason, Instant now) {
+        if (blockedAt == null) {
+            blockedAt = now;
+        }
+        blockReason = reason == null || reason.isBlank() ? null : reason.strip();
+    }
+
+    void unblock() {
+        blockedAt = null;
+        blockReason = null;
+    }
+
+    boolean isErased() {
+        return erasedAt != null;
+    }
+
+    /**
+     * Обезличивание: остаются имя-заглушка, источник, признак предоплаты и сама блокировка (без причины).
+     * Набор стираемых полей — тот же, что в ограничении {@code client_erased_check}.
+     */
+    void erase(Instant now) {
+        firstName = ERASED_FIRST_NAME;
+        lastName = null;
+        patronymic = null;
+        phone = null;
+        contactPhone = null;
+        email = null;
+        birthDay = null;
+        birthMonth = null;
+        masterNote = null;
+        accountId = null;
+        blockReason = null;
+        erasedAt = now;
+    }
+
     boolean prepaymentRequired() {
         return prepaymentRequired;
     }
@@ -121,13 +181,16 @@ class ClientEntity {
     }
 
     /**
-     * Переносит на этого клиента то, чего у него нет, с удаляемого дубля — кроме телефона и признака
-     * предоплаты: ими занимается объединение.
+     * Переносит на этого клиента то, чего у него нет, с удаляемого дубля — кроме телефона, аккаунта и
+     * признака предоплаты: ими занимается объединение. Блокировка переходит тоже: оставшийся
+     * заблокирован, если был заблокирован любой из двух, с более ранним временем и своей причиной, а
+     * если своей нет — с причиной удаляемого.
      */
     void absorb(ClientEntity other) {
         if (lastName == null) lastName = other.lastName;
         if (patronymic == null) patronymic = other.patronymic;
         if (email == null) email = other.email;
+        if (contactPhone == null) contactPhone = other.contactPhone;
         if (birthDay == null) {
             birthDay = other.birthDay;
             birthMonth = other.birthMonth;
@@ -135,11 +198,27 @@ class ClientEntity {
         if (other.masterNote != null) {
             masterNote = masterNote == null ? other.masterNote : masterNote + "\n" + other.masterNote;
         }
+        if (other.blockedAt != null) {
+            blockedAt = blockedAt == null || other.blockedAt.isBefore(blockedAt) ? other.blockedAt : blockedAt;
+            if (blockReason == null) blockReason = other.blockReason;
+        }
     }
 
     ClientView toView() {
         var birthday = birthDay == null || birthMonth == null ? null : MonthDay.of(birthMonth, birthDay);
         return new ClientView(
-                id, firstName, lastName, patronymic, phone, email, birthday, source, accountId, prepaymentRequired);
+                id,
+                firstName,
+                lastName,
+                patronymic,
+                phone,
+                email,
+                birthday,
+                source,
+                accountId,
+                prepaymentRequired,
+                contactPhone,
+                isBlocked(),
+                isErased());
     }
 }
