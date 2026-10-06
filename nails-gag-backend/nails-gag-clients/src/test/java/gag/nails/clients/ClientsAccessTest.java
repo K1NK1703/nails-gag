@@ -10,6 +10,8 @@ import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.MutableClock;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Map;
@@ -33,6 +35,9 @@ class ClientsAccessTest {
 
     @Autowired
     MutableClock clock;
+
+    @PersistenceContext
+    EntityManager entityManager;
 
     private final Actor master = Actor.master();
     private ClientView maria;
@@ -68,6 +73,19 @@ class ClientsAccessTest {
                 .isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> clients.recordConsent(maria.id(), consent(ConsentSource.ENTERED_BY_MASTER), reader))
                 .isInstanceOf(AccessDeniedException.class);
+
+        entityManager.flush();
+        entityManager.clear();
+        var unchanged = queries.get(maria.id(), reader);
+        assertThat(unchanged.firstName()).isEqualTo("Мария");
+        assertThat(unchanged.phone()).isEqualTo("+79211234567");
+        assertThat(unchanged.prepaymentRequired()).isFalse();
+        assertThat(queries.masterNote(maria.id(), reader)).isEmpty();
+        assertThat(queries.consents(maria.id(), reader)).isEmpty();
+        assertThat(queries.prepaymentHistory(maria.id(), reader)).isEmpty();
+        assertThat(queries.search("", reader))
+                .extracting(ClientView::id)
+                .containsExactlyInAnyOrder(maria.id(), anna.id());
     }
 
     @Test

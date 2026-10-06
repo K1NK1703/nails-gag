@@ -11,6 +11,8 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.testsupport.ModuleTest;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -38,11 +40,14 @@ class ScheduleAccessTest {
     @Autowired
     ScheduleSettingsService settings;
 
+    @PersistenceContext
+    EntityManager entityManager;
+
     private final Actor master = Actor.master();
 
     private UUID dayTemplate;
     private UUID weekTemplate;
-    private UUID slot;
+    private SlotView slot;
 
     @BeforeEach
     void seed() {
@@ -55,8 +60,7 @@ class ScheduleAccessTest {
                         new CreateWeekTemplate("Неделя", Map.of(MONDAY, dayTemplate, WEDNESDAY, dayTemplate)), master)
                 .id();
         templates.setRotation(new SetRotation(List.of(weekTemplate), MONDAY_5TH, 0), master);
-        slot = schedule.addSlot(MONDAY_5TH.plusDays(1), LocalTime.of(9, 0), master)
-                .id();
+        slot = schedule.addSlot(MONDAY_5TH.plusDays(1), LocalTime.of(9, 0), master);
     }
 
     @Test
@@ -69,16 +73,16 @@ class ScheduleAccessTest {
         assertThat(templates.dayTemplates(reader)).isNotEmpty();
         assertThat(templates.weekTemplates(reader)).isNotEmpty();
         assertThat(templates.rotation(reader).weekTemplateIds()).containsExactly(weekTemplate);
-        assertThat(settings.history(reader)).isNotNull();
+        assertThat(settings.history(reader)).isEmpty();
         assertThat(schedule.previewRotation(MONDAY_5TH, MONDAY_5TH.plusDays(6), reader)
                         .weeks())
                 .hasSize(1);
 
         assertThatThrownBy(() -> schedule.addSlot(MONDAY_5TH, LocalTime.of(9, 0), reader))
                 .isInstanceOf(AccessDeniedException.class);
-        assertThatThrownBy(() -> schedule.moveSlot(slot, LocalTime.of(12, 0), reader))
+        assertThatThrownBy(() -> schedule.moveSlot(slot.id(), LocalTime.of(12, 0), reader))
                 .isInstanceOf(AccessDeniedException.class);
-        assertThatThrownBy(() -> schedule.deleteSlot(slot, reader)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> schedule.deleteSlot(slot.id(), reader)).isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> schedule.applyDayTemplate(dayTemplate, List.of(MONDAY_5TH), reader))
                 .isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> schedule.applyRotation(
@@ -106,6 +110,19 @@ class ScheduleAccessTest {
         assertThatThrownBy(() -> templates.setRotation(new SetRotation(List.of(weekTemplate), MONDAY_5TH, 0), reader))
                 .isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> settings.setSlotDuration(60, reader)).isInstanceOf(AccessDeniedException.class);
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(queries.slotsOfDay(MONDAY_5TH.plusDays(1), reader)).containsExactly(slot);
+        assertThat(queries.slotsOfDay(MONDAY_5TH, reader)).isEmpty();
+        assertThat(templates.dayTemplates(reader))
+                .extracting(DayTemplateView::id)
+                .containsExactly(dayTemplate);
+        assertThat(templates.weekTemplates(reader))
+                .extracting(WeekTemplateView::id)
+                .containsExactly(weekTemplate);
+        assertThat(settings.settings().slotDurationMinutes()).isEqualTo(120);
+        assertThat(settings.history(reader)).isEmpty();
     }
 
     @Test
@@ -115,10 +132,10 @@ class ScheduleAccessTest {
         assertThat(queries.slotsOfDay(MONDAY_5TH.plusDays(1), writer)).hasSize(1);
         assertThat(templates.dayTemplates(writer)).isNotEmpty();
         assertThat(templates.rotation(writer).weekTemplateIds()).containsExactly(weekTemplate);
-        assertThat(settings.history(writer)).isNotNull();
+        assertThat(settings.history(writer)).isEmpty();
         assertThatCode(() -> {
-                    schedule.moveSlot(slot, LocalTime.of(12, 0), writer);
-                    schedule.deleteSlot(slot, writer);
+                    schedule.moveSlot(slot.id(), LocalTime.of(12, 0), writer);
+                    schedule.deleteSlot(slot.id(), writer);
                     schedule.applyDayTemplate(dayTemplate, List.of(MONDAY_5TH.plusDays(2)), writer);
                     schedule.applyRotation(
                             new ApplyRotation(
@@ -133,6 +150,10 @@ class ScheduleAccessTest {
                     settings.setSlotDuration(60, writer);
                 })
                 .doesNotThrowAnyException();
+        assertThat(settings.history(writer)).singleElement().satisfies(change -> {
+            assertThat(change.oldValue()).isEqualTo("120");
+            assertThat(change.newValue()).isEqualTo("60");
+        });
     }
 
     @Test

@@ -87,6 +87,9 @@ class ActorTest {
 
         assertThat(reader.isStaff()).isTrue();
         assertThat(Actor.of(ACCOUNT_ID, null, Map.of()).isStaff()).isFalse();
+        assertThat(Actor.of(ACCOUNT_ID, null, Map.of(Section.CATALOG, AccessLevel.NONE))
+                        .isStaff())
+                .isFalse();
     }
 
     @Test

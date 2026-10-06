@@ -12,8 +12,10 @@ import gag.nails.schedule.error.WeekTemplateNotFoundException;
 import java.util.List;
 import java.util.UUID;
 
-/** Шаблоны дня и недели и ротация недель. Чтение требует уровня чтения раздела «Расписание», изменение —
- * уровня изменения. */
+/**
+ * Шаблоны дня и недели и ротация недель. Чтение требует уровня чтения раздела «Расписание»,
+ * изменение — уровня изменения.
+ */
 public interface ScheduleTemplates {
 
     /**

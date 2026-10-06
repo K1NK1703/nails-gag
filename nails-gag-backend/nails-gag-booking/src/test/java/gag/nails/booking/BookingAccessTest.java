@@ -8,8 +8,10 @@ import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.schedule.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -34,7 +36,7 @@ class BookingAccessTest extends BookingTestSupport {
     @Autowired
     BookingSettingsService settings;
 
-    @Autowired
+    @PersistenceContext
     EntityManager entityManager;
 
     @Test
@@ -65,6 +67,17 @@ class BookingAccessTest extends BookingTestSupport {
         assertThatThrownBy(() -> offers.propose(booking.id(), slot.startsAt().minus(Duration.ofHours(1)), READER))
                 .isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> marks.complete(booking.id(), READER)).isInstanceOf(AccessDeniedException.class);
+
+        entityManager.flush();
+        entityManager.clear();
+        var unchanged = queries.get(booking.id(), READER);
+        assertThat(unchanged.status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(unchanged.slotId()).isEqualTo(slot.id());
+        assertThat(unchanged.earlierTime()).isNull();
+        assertThat(queries.masterNote(booking.id(), READER)).isEmpty();
+        assertThat(scheduleQueries.freeSlots(TUESDAY, TUESDAY))
+                .extracting(SlotView::id)
+                .containsExactly(freeSlot.id());
     }
 
     @Test
@@ -77,6 +90,52 @@ class BookingAccessTest extends BookingTestSupport {
 
         assertThat(cancelled.status()).isEqualTo(BookingStatus.CANCELLED);
         assertThat(cancelled.cancelReason()).isEqualTo(CancelReason.MASTER);
+    }
+
+    @Test
+    void writerCancellingOwnBookingActsAsStaff() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        var annaAtWork = Actor.of(UUID.randomUUID(), anna, Map.of(Section.BOOKINGS, AccessLevel.WRITE));
+        timeIsBefore(slot, Duration.ofHours(23));
+
+        var cancelled = bookings.cancel(booking.id(), annaAtWork);
+
+        assertThat(cancelled.cancelReason()).isEqualTo(CancelReason.MASTER);
+        assertThat(owesPrepayment(anna)).isFalse();
+        assertThat(clientQueries.prepaymentHistory(anna, master)).isEmpty();
+    }
+
+    @Test
+    void readerCannotRescheduleSomeoneElsesBooking() {
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(client("Анна"), slot);
+        var freeSlot = slot(TUESDAY, "12:00");
+
+        assertThatThrownBy(() -> bookings.reschedule(booking.id(), freeSlot.id(), READER))
+                .isInstanceOf(AccessDeniedException.class);
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(queries.get(booking.id(), master).slotId()).isEqualTo(slot.id());
+        assertThat(scheduleQueries.freeSlots(TUESDAY, TUESDAY))
+                .extracting(SlotView::id)
+                .containsExactly(freeSlot.id());
+        assertThat(scheduleQueries.freeSlots(MONDAY, MONDAY)).isEmpty();
+    }
+
+    @Test
+    void writerRespondsToOfferOnSomeoneElsesBooking() {
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(client("Анна"), slot);
+        var earlier = slot.startsAt().minus(Duration.ofMinutes(90));
+        offers.propose(booking.id(), earlier, WRITER);
+
+        var accepted = offers.respond(booking.id(), true, WRITER);
+
+        assertThat(accepted.earlierTime().status()).isEqualTo(EarlierTimeStatus.ACCEPTED);
+        assertThat(accepted.agreedStart()).isEqualTo(earlier);
     }
 
     @Test

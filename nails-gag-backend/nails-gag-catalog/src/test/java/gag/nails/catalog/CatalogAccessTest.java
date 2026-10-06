@@ -9,6 +9,8 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.testsupport.ModuleTest;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -28,11 +30,15 @@ class CatalogAccessTest {
     @Autowired
     CatalogQueries queries;
 
+    @PersistenceContext
+    EntityManager entityManager;
+
     @Test
     void readerReadsButDoesNotWrite() {
         var reader = Actor.of(null, null, Map.of(Section.CATALOG, AccessLevel.READ));
-
-        assertThat(queries.all(reader)).isNotEmpty();
+        var before = queries.all(reader);
+        assertThat(before).isNotEmpty();
+        assertThat(queries.get(FRENCH).active()).isTrue();
 
         assertThatThrownBy(() -> catalog.create(pedicure(), reader)).isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> catalog.update(FRENCH, frenchUpdate(), reader))
@@ -41,6 +47,11 @@ class CatalogAccessTest {
         assertThatThrownBy(() -> catalog.deactivate(FRENCH, reader)).isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> catalog.reorder(List.of(FRENCH, MANICURE), reader))
                 .isInstanceOf(AccessDeniedException.class);
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(queries.all(reader)).hasSameSizeAs(before).isEqualTo(before);
+        assertThat(queries.get(FRENCH).active()).isTrue();
     }
 
     @Test
