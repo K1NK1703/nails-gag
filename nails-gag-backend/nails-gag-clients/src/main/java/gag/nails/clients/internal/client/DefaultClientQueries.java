@@ -62,6 +62,11 @@ class DefaultClientQueries implements ClientQueries {
     }
 
     @Override
+    public Optional<ClientView> byAccountId(UUID accountId) {
+        return clients.findByAccountId(accountId).map(ClientEntity::toView);
+    }
+
+    @Override
     public List<ClientView> search(String query, Actor actor) {
         actor.requireRead(Section.CLIENTS);
         var fragment = query.strip();

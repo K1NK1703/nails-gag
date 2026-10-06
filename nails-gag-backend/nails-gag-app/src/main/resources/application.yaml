@@ -14,6 +14,23 @@ spring:
 
 nails-gag:
   time-zone: Europe/Moscow
+  identity:
+    # Пары provider:subject, которым при входе выдаётся роль «Разработчик»: ["YANDEX:1234567", "VK:7654321"]
+    bootstrap-developers: []
+    jobs:
+      enabled: true
+    fake-provider:
+      enabled: false
+    # Пустой client-id — провайдер выключен. Секреты задавать через переменные окружения, не в файле.
+    providers:
+      yandex:
+        client-id: ""
+        client-secret: ""
+        redirect-uri: ""
+      vk:
+        client-id: ""
+        client-secret: ""
+        redirect-uri: ""
 
 management:
   endpoints:

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.RegisterClient;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.Actor;
@@ -48,6 +49,15 @@ class ClientQueriesTest {
     void byPhoneNormalizesInput() {
         assertThat(queries.byPhone("8 921 123-45-67")).map(ClientView::id).contains(maria.id());
         assertThat(queries.byPhone("+70000000000")).isEmpty();
+    }
+
+    @Test
+    void byAccountIdFindsRegisteredClient() {
+        var accountId = UUID.randomUUID();
+        var registered = clients.register(new RegisterClient(accountId, "Ольга", "+79215550001", null));
+
+        assertThat(queries.byAccountId(accountId)).map(ClientView::id).contains(registered.id());
+        assertThat(queries.byAccountId(UUID.randomUUID())).isEmpty();
     }
 
     @Test
