@@ -1,9 +1,11 @@
 package gag.nails.booking;
 
+import gag.nails.booking.command.UpdateActualServices;
 import gag.nails.booking.error.BookingNotFoundException;
 import gag.nails.booking.error.CorrectionWindowClosedException;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.VisitNotStartedException;
+import gag.nails.booking.model.BookingView;
 import gag.nails.catalog.error.ServiceNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;

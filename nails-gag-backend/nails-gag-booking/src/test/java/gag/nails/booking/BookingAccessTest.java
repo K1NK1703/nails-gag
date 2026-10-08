@@ -4,6 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.booking.command.UpdateBookingSettings;
+import gag.nails.booking.model.BookingStatus;
+import gag.nails.booking.model.BookingView;
+import gag.nails.booking.model.CancelReason;
+import gag.nails.booking.model.EarlierTimeStatus;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;

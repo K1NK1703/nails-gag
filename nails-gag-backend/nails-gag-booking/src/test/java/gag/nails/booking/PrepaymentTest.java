@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.booking.error.InvalidTransitionException;
+import gag.nails.booking.event.BookingConfirmed;
+import gag.nails.booking.model.BookingStatus;
 import gag.nails.clients.model.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;

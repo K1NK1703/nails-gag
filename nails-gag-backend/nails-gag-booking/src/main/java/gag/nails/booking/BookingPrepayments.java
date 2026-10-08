@@ -2,6 +2,7 @@ package gag.nails.booking;
 
 import gag.nails.booking.error.BookingNotFoundException;
 import gag.nails.booking.error.InvalidTransitionException;
+import gag.nails.booking.model.BookingView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import java.util.UUID;

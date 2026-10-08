@@ -3,9 +3,17 @@ package gag.nails.booking;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.booking.command.CreateBooking;
+import gag.nails.booking.command.UpdateActualServices;
 import gag.nails.booking.error.CorrectionWindowClosedException;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.VisitNotStartedException;
+import gag.nails.booking.event.BookingCompleted;
+import gag.nails.booking.event.BookingNoShow;
+import gag.nails.booking.model.BookedServiceView;
+import gag.nails.booking.model.BookingStatus;
+import gag.nails.booking.model.BookingView;
+import gag.nails.booking.model.EarlierTimeStatus;
 import gag.nails.catalog.CatalogService;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.clients.model.PrepaymentFlagReason;

@@ -1,5 +1,7 @@
 package gag.nails.booking;
 
+import gag.nails.booking.command.CreateBooking;
+import gag.nails.booking.model.BookingView;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.command.CreateClient;

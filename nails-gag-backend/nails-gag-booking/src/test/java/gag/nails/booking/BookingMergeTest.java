@@ -2,6 +2,7 @@ package gag.nails.booking;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import gag.nails.booking.model.BookingView;
 import gag.nails.clients.command.RegisterClient;
 import gag.nails.testsupport.ModuleTest;
 import java.util.UUID;

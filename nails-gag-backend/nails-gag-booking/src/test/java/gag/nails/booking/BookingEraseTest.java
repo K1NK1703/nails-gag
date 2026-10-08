@@ -3,6 +3,12 @@ package gag.nails.booking;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.booking.command.CreateBooking;
+import gag.nails.booking.event.BookingCancelled;
+import gag.nails.booking.model.BookedServiceView;
+import gag.nails.booking.model.BookingStatus;
+import gag.nails.booking.model.BookingView;
+import gag.nails.booking.model.CancelReason;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.common.actor.Actor;
 import gag.nails.schedule.model.SlotView;

@@ -3,6 +3,9 @@ package gag.nails.booking;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.booking.command.UpdateBookingSettings;
+import gag.nails.booking.model.BookingSettingsChangeView;
+import gag.nails.booking.model.BookingSettingsView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
