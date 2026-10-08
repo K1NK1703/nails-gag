@@ -2,11 +2,11 @@ package gag.nails.identity.internal.provider;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import gag.nails.identity.AuthorizationResponse;
-import gag.nails.identity.Provider;
 import gag.nails.identity.error.ProviderUnavailableException;
 import gag.nails.identity.internal.IdentityProperties;
 import gag.nails.identity.internal.IdentityProperties.ProviderSettings;
+import gag.nails.identity.model.AuthorizationResponse;
+import gag.nails.identity.model.Provider;
 import java.net.URI;
 import java.util.LinkedHashMap;
 import org.jspecify.annotations.Nullable;

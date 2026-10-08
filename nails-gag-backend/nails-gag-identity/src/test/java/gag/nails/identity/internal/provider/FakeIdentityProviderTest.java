@@ -3,10 +3,10 @@ package gag.nails.identity.internal.provider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import gag.nails.identity.AuthorizationResponse;
-import gag.nails.identity.Provider;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
+import gag.nails.identity.model.AuthorizationResponse;
+import gag.nails.identity.model.Provider;
 import gag.nails.identity.testing.FakeProfile;
 import java.net.URI;
 import org.junit.jupiter.api.Test;

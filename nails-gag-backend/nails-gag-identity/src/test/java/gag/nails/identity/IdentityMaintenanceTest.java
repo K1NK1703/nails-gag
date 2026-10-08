@@ -3,7 +3,9 @@ package gag.nails.identity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.identity.command.CompleteRegistration;
 import gag.nails.identity.error.RegistrationExpiredException;
+import gag.nails.identity.model.LoginOutcome;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
 import java.time.Duration;

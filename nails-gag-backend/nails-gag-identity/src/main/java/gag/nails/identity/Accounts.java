@@ -4,6 +4,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.error.LastAccessAdminException;
+import gag.nails.identity.model.AccountView;
 
 /** Свой аккаунт: профиль и удаление. Имя и номер для связи клиент меняет через {@code clients}. */
 public interface Accounts {

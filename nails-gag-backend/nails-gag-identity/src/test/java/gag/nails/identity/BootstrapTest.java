@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.identity.model.AccessChangeKind;
+import gag.nails.identity.model.RoleView;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.testsupport.ModuleTest;
 import org.junit.jupiter.api.Test;

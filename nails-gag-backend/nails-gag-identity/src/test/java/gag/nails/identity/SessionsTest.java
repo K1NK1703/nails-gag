@@ -7,6 +7,7 @@ import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.identity.model.SignedIn;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
 import jakarta.persistence.EntityManager;

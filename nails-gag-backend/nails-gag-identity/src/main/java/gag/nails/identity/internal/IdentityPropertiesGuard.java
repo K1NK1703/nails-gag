@@ -1,8 +1,8 @@
 package gag.nails.identity.internal;
 
 import gag.nails.common.error.InternalException;
-import gag.nails.identity.Provider;
 import gag.nails.identity.internal.IdentityProperties.ProviderSettings;
+import gag.nails.identity.model.Provider;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;

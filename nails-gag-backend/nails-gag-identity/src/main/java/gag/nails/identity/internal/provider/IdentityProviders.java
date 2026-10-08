@@ -1,7 +1,7 @@
 package gag.nails.identity.internal.provider;
 
-import gag.nails.identity.Provider;
 import gag.nails.identity.error.ProviderUnavailableException;
+import gag.nails.identity.model.Provider;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;

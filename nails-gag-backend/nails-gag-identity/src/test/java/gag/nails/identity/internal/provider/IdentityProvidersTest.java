@@ -5,8 +5,8 @@ import static gag.nails.identity.internal.provider.ProviderTestSupport.DISABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import gag.nails.identity.Provider;
 import gag.nails.identity.error.ProviderUnavailableException;
+import gag.nails.identity.model.Provider;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;

@@ -12,11 +12,11 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import gag.nails.identity.AuthorizationResponse;
-import gag.nails.identity.Provider;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
 import gag.nails.identity.internal.IdentityProperties.ProviderSettings;
+import gag.nails.identity.model.AuthorizationResponse;
+import gag.nails.identity.model.Provider;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;

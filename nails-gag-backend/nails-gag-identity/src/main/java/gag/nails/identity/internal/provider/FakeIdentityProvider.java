@@ -1,9 +1,9 @@
 package gag.nails.identity.internal.provider;
 
-import gag.nails.identity.AuthorizationResponse;
-import gag.nails.identity.Provider;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
+import gag.nails.identity.model.AuthorizationResponse;
+import gag.nails.identity.model.Provider;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.identity.testing.FakeProvider;
 import java.net.URI;

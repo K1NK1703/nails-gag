@@ -3,10 +3,22 @@ package gag.nails.identity;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.identity.command.CompleteRegistration;
 import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
 import gag.nails.identity.error.RegistrationExpiredException;
+import gag.nails.identity.model.AuthorizationResponse;
+import gag.nails.identity.model.ClientInfo;
+import gag.nails.identity.model.LinkConfirmationRequired;
+import gag.nails.identity.model.Linked;
+import gag.nails.identity.model.LoginPurpose;
+import gag.nails.identity.model.LoginResult;
+import gag.nails.identity.model.LoginStart;
+import gag.nails.identity.model.LoginState;
+import gag.nails.identity.model.Provider;
+import gag.nails.identity.model.RegistrationRequired;
+import gag.nails.identity.model.SignedIn;
 import org.jspecify.annotations.Nullable;
 
 /**

@@ -1,7 +1,7 @@
 package gag.nails.identity.testing;
 
-import gag.nails.identity.AuthorizationResponse;
-import gag.nails.identity.Provider;
+import gag.nails.identity.model.AuthorizationResponse;
+import gag.nails.identity.model.Provider;
 
 /**
  * Подставной провайдер ({@link Provider#FAKE}): тесты и локальная разработка. Бин есть только при

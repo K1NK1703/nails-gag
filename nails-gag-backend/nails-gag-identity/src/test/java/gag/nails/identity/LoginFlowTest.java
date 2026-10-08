@@ -4,9 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.clients.command.CreateClient;
+import gag.nails.identity.command.CompleteRegistration;
 import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
+import gag.nails.identity.model.AuthorizationResponse;
+import gag.nails.identity.model.LoginEventView;
+import gag.nails.identity.model.LoginOutcome;
+import gag.nails.identity.model.LoginPurpose;
+import gag.nails.identity.model.Provider;
+import gag.nails.identity.model.RegistrationPrefill;
+import gag.nails.identity.model.RegistrationRequired;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.testsupport.ModuleTest;
 import java.time.Duration;

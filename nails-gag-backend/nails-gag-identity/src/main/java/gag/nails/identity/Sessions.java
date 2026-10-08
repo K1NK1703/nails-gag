@@ -2,6 +2,7 @@ package gag.nails.identity;
 
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.identity.model.Authenticated;
 import java.util.Optional;
 
 /**
