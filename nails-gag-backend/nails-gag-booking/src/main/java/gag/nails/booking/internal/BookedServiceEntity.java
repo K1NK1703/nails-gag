@@ -1,8 +1,8 @@
 package gag.nails.booking.internal;
 
 import gag.nails.booking.BookedServiceView;
-import gag.nails.catalog.ServiceKind;
-import gag.nails.catalog.ServiceView;
+import gag.nails.catalog.model.ServiceKind;
+import gag.nails.catalog.model.ServiceView;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

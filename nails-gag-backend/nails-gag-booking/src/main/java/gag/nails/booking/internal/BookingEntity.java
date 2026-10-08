@@ -8,7 +8,7 @@ import gag.nails.booking.CancelReason;
 import gag.nails.booking.EarlierTimeStatus;
 import gag.nails.booking.EarlierTimeView;
 import gag.nails.booking.error.InvalidTransitionException;
-import gag.nails.catalog.ServiceView;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.error.InternalException;
 import gag.nails.schedule.SlotView;
 import jakarta.persistence.CascadeType;

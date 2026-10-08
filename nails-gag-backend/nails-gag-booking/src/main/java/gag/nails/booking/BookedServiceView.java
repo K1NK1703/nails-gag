@@ -1,6 +1,6 @@
 package gag.nails.booking;
 
-import gag.nails.catalog.ServiceKind;
+import gag.nails.catalog.model.ServiceKind;
 import java.math.BigDecimal;
 import java.util.UUID;
 

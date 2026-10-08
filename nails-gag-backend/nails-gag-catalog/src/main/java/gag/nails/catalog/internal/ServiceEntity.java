@@ -1,9 +1,9 @@
 package gag.nails.catalog.internal;
 
-import gag.nails.catalog.CreateService;
-import gag.nails.catalog.ServiceKind;
-import gag.nails.catalog.ServiceView;
-import gag.nails.catalog.UpdateService;
+import gag.nails.catalog.command.CreateService;
+import gag.nails.catalog.command.UpdateService;
+import gag.nails.catalog.model.ServiceKind;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.error.ValidationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

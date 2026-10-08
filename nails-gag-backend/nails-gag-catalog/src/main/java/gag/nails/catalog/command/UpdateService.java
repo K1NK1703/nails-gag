@@ -1,4 +1,4 @@
-package gag.nails.catalog;
+package gag.nails.catalog.command;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -9,12 +9,8 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import org.jspecify.annotations.Nullable;
 
-/**
- * Новая услуга. {@code durationMinutes} обязательна для {@link ServiceKind#MAIN} и запрещена для
- * {@link ServiceKind#ADDON} — это проверяет сервис, а не аннотации.
- */
-public record CreateService(
-        @NotNull ServiceKind kind,
+/** Правка услуги. Вид услуги не меняется: дополнение не может стать основной услугой. */
+public record UpdateService(
         @NotBlank @Size(max = 200) String title,
         @NotNull @Size(max = 2000) String description,
 

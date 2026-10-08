@@ -1,7 +1,7 @@
 package gag.nails.booking.internal;
 
-import gag.nails.catalog.ServiceKind;
-import gag.nails.catalog.ServiceView;
+import gag.nails.catalog.model.ServiceKind;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.error.ValidationException;
 import java.util.ArrayList;
 import java.util.List;

@@ -1,4 +1,4 @@
-package gag.nails.catalog;
+package gag.nails.catalog.model;
 
 import java.math.BigDecimal;
 import java.util.UUID;
