@@ -1,10 +1,21 @@
 package gag.nails.clients;
 
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.PrepaymentFlagChange;
+import gag.nails.clients.command.RecordConsent;
+import gag.nails.clients.command.RegisterClient;
+import gag.nails.clients.command.UpdateClient;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
+import gag.nails.clients.event.ClientBlocked;
+import gag.nails.clients.event.ClientErased;
+import gag.nails.clients.event.ClientMerged;
+import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentSource;
+import gag.nails.clients.model.MergeResult;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;

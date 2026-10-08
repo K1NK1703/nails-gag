@@ -1,6 +1,6 @@
 package gag.nails.clients.error;
 
-import gag.nails.clients.ConsentKind;
+import gag.nails.clients.model.ConsentKind;
 import gag.nails.common.error.UserFacingException;
 import java.util.Map;
 

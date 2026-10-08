@@ -4,6 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.clients.command.AddDocumentVersion;
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.PrepaymentFlagChange;
+import gag.nails.clients.command.RecordConsent;
+import gag.nails.clients.command.UpdateClient;
+import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentKind;
+import gag.nails.clients.model.ConsentSource;
+import gag.nails.clients.model.DocumentKind;
+import gag.nails.clients.model.PrepaymentFlagReason;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;

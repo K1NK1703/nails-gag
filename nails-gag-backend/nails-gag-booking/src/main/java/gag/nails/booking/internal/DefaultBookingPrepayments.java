@@ -4,7 +4,7 @@ import gag.nails.booking.BookingPrepayments;
 import gag.nails.booking.BookingView;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
-import gag.nails.clients.ClientView;
+import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import java.time.Clock;

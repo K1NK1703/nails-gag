@@ -1,6 +1,6 @@
 package gag.nails.booking.internal;
 
-import gag.nails.clients.ClientMerged;
+import gag.nails.clients.event.ClientMerged;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 

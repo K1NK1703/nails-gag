@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.booking.error.LateRescheduleNotAllowedException;
-import gag.nails.clients.ConsentKind;
-import gag.nails.clients.PrepaymentFlagChangeView;
-import gag.nails.clients.PrepaymentFlagReason;
-import gag.nails.clients.RegisterClient;
+import gag.nails.clients.command.RegisterClient;
+import gag.nails.clients.model.ConsentKind;
+import gag.nails.clients.model.PrepaymentFlagChangeView;
+import gag.nails.clients.model.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
 import gag.nails.schedule.SlotView;
 import gag.nails.testsupport.ModuleTest;

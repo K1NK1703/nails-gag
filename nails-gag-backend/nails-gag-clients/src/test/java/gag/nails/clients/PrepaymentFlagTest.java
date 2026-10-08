@@ -3,6 +3,12 @@ package gag.nails.clients;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.PrepaymentFlagChange;
+import gag.nails.clients.model.ChangedBy;
+import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.PrepaymentFlagChangeView;
+import gag.nails.clients.model.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;

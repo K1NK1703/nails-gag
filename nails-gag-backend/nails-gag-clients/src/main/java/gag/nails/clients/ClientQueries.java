@@ -1,6 +1,10 @@
 package gag.nails.clients;
 
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentKind;
+import gag.nails.clients.model.ConsentView;
+import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import java.util.List;

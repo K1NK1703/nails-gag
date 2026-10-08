@@ -1,7 +1,7 @@
 package gag.nails.booking.internal;
 
 import gag.nails.booking.CancelReason;
-import gag.nails.clients.ClientErased;
+import gag.nails.clients.event.ClientErased;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 

@@ -1,6 +1,6 @@
 package gag.nails.clients.error;
 
-import gag.nails.clients.DocumentKind;
+import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.error.UserFacingException;
 import java.util.Map;
 

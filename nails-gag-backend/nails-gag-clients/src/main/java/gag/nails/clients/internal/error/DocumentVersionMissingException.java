@@ -1,6 +1,6 @@
 package gag.nails.clients.internal.error;
 
-import gag.nails.clients.DocumentKind;
+import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.error.InternalException;
 
 /** В базе нет ни одной действующей редакции документа — нарушение стартовых данных, не ошибка пользователя. */
