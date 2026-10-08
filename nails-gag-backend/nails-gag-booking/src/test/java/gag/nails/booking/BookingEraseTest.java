@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.common.actor.Actor;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
 import jakarta.persistence.EntityManager;

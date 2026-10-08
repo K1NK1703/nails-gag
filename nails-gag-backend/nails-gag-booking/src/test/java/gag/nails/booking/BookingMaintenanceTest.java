@@ -3,7 +3,7 @@ package gag.nails.booking;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.common.actor.Actor;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;

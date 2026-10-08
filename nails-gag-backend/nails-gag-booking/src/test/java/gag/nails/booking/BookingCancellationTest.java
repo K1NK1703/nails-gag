@@ -11,7 +11,7 @@ import gag.nails.clients.model.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
 import jakarta.persistence.EntityManager;

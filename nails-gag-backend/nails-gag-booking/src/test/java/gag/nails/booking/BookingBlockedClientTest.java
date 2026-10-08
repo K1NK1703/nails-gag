@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.common.actor.Actor;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import org.junit.jupiter.api.Test;
 

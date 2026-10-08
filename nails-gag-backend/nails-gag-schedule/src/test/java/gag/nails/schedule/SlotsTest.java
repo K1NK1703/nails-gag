@@ -8,6 +8,7 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.error.SlotNotFoundException;
 import gag.nails.schedule.error.SlotOverlapException;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import java.time.Instant;
 import java.time.LocalDate;

@@ -9,7 +9,7 @@ import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.clients.model.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import java.time.Duration;
 import java.time.LocalDate;

@@ -9,7 +9,7 @@ import gag.nails.clients.model.ConsentSource;
 import gag.nails.common.actor.Actor;
 import gag.nails.schedule.ScheduleQueries;
 import gag.nails.schedule.ScheduleService;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.MutableClock;
 import java.time.Duration;
 import java.time.LocalDate;

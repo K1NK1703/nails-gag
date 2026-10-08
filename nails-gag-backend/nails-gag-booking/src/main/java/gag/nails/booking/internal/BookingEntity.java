@@ -10,7 +10,7 @@ import gag.nails.booking.EarlierTimeView;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.error.InternalException;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
