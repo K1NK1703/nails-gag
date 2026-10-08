@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.RegisterClient;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.Actor;
@@ -48,6 +49,30 @@ class ClientQueriesTest {
     void byPhoneNormalizesInput() {
         assertThat(queries.byPhone("8 921 123-45-67")).map(ClientView::id).contains(maria.id());
         assertThat(queries.byPhone("+70000000000")).isEmpty();
+    }
+
+    @Test
+    void byAccountIdFindsRegisteredClient() {
+        var accountId = UUID.randomUUID();
+        var registered = clients.register(new RegisterClient(accountId, "Ольга", "+79215550001", null));
+
+        assertThat(queries.byAccountId(accountId)).map(ClientView::id).contains(registered.id());
+        assertThat(queries.byAccountId(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void byEmailFindsTheOnlyUnregisteredCardIgnoringCaseAndStaysSilentOnDuplicates() {
+        var card = clients.create(new CreateClient("Ольга", null, null, null, "Olga@Example.com", null), master);
+        clients.register(new RegisterClient(UUID.randomUUID(), "Ира", null, "ira@example.com"));
+
+        assertThat(queries.byEmail("olga@example.COM")).map(ClientView::id).contains(card.id());
+        assertThat(queries.byEmail("IRA@example.com")).isEmpty();
+        assertThat(queries.byEmail("nobody@example.com")).isEmpty();
+        assertThat(queries.byEmail(" ")).isEmpty();
+
+        clients.create(new CreateClient("Оля", null, null, null, "OLGA@example.com", null), master);
+
+        assertThat(queries.byEmail("olga@example.com")).isEmpty();
     }
 
     @Test

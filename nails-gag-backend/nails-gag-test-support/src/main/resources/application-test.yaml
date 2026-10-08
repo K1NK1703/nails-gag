@@ -11,6 +11,13 @@ nails-gag:
     jobs:
       # Планировщик записей в тестах не работает: тесты вызывают BookingMaintenance сами.
       enabled: false
+  identity:
+    jobs:
+      # Обслуживание входа в тестах не работает: тесты вызывают IdentityMaintenance сами.
+      enabled: false
+    fake-provider:
+      # Единственный способ пройти вход в тестах без сети.
+      enabled: true
 logging:
   level:
     liquibase: warn

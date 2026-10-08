@@ -1,4 +1,4 @@
-# Профиль local: читаемые логи вместо JSON, Compose поднимает базу сам.
+# Профиль local: читаемые логи вместо JSON, Compose поднимает базу сам, вход — через подставного провайдера.
 spring:
   docker:
     compose:
@@ -9,3 +9,8 @@ logging:
   structured:
     format:
       console:
+
+nails-gag:
+  identity:
+    fake-provider:
+      enabled: true

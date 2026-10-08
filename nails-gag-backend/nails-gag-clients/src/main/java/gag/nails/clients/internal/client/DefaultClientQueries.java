@@ -13,6 +13,7 @@ import gag.nails.clients.model.ConsentView;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.common.text.Phones;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -59,6 +60,20 @@ class DefaultClientQueries implements ClientQueries {
     @Override
     public Optional<ClientView> byPhone(String phone) {
         return Phones.parse(phone).flatMap(clients::findByPhone).map(ClientEntity::toView);
+    }
+
+    @Override
+    public Optional<ClientView> byEmail(String email) {
+        if (email.isBlank()) {
+            return Optional.empty();
+        }
+        var found = clients.findAllUnregisteredByEmail(email.strip());
+        return found.size() == 1 ? Optional.of(found.getFirst().toView()) : Optional.empty();
+    }
+
+    @Override
+    public Optional<ClientView> byAccountId(UUID accountId) {
+        return clients.findByAccountId(accountId).map(ClientEntity::toView);
     }
 
     @Override

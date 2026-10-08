@@ -94,4 +94,13 @@ class ApplicationSmokeTest {
 
         assertThat(settings).isEqualTo(1);
     }
+
+    @Test
+    void identitySchemaIsMigrated() {
+        var builtInRoles = jdbc.sql("select count(*) from identity.role where built_in")
+                .query(Integer.class)
+                .single();
+
+        assertThat(builtInRoles).isEqualTo(2);
+    }
 }
