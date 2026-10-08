@@ -7,6 +7,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.InternalException;
 import gag.nails.schedule.error.SlotNotFoundException;
 import gag.nails.schedule.error.SlotOccupiedException;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import java.time.LocalDate;
 import java.time.LocalTime;

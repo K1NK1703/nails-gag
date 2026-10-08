@@ -2,6 +2,7 @@ package gag.nails.catalog;
 
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import java.util.List;

@@ -1,8 +1,8 @@
 package gag.nails.schedule;
 
-import static gag.nails.schedule.DayPlanStatus.ALREADY_OPEN;
-import static gag.nails.schedule.DayPlanStatus.DAY_OFF;
-import static gag.nails.schedule.DayPlanStatus.PLANNED;
+import static gag.nails.schedule.model.DayPlanStatus.ALREADY_OPEN;
+import static gag.nails.schedule.model.DayPlanStatus.DAY_OFF;
+import static gag.nails.schedule.model.DayPlanStatus.PLANNED;
 import static java.time.DayOfWeek.FRIDAY;
 import static java.time.DayOfWeek.MONDAY;
 import static java.time.DayOfWeek.SATURDAY;
@@ -15,8 +15,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.schedule.command.ApplyRotation;
+import gag.nails.schedule.command.CreateDayTemplate;
+import gag.nails.schedule.command.CreateWeekTemplate;
+import gag.nails.schedule.command.SetRotation;
 import gag.nails.schedule.error.RotationNotConfiguredException;
 import gag.nails.schedule.error.TemplateOverlapException;
+import gag.nails.schedule.model.DayPlan;
+import gag.nails.schedule.model.RotationView;
+import gag.nails.schedule.model.WeekChoice;
+import gag.nails.schedule.model.WeekPlan;
 import gag.nails.testsupport.ModuleTest;
 import java.time.LocalDate;
 import java.time.LocalTime;

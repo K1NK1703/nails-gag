@@ -1,10 +1,10 @@
 package gag.nails.catalog.internal;
 
 import gag.nails.catalog.CatalogService;
-import gag.nails.catalog.CreateService;
-import gag.nails.catalog.ServiceView;
-import gag.nails.catalog.UpdateService;
+import gag.nails.catalog.command.CreateService;
+import gag.nails.catalog.command.UpdateService;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;

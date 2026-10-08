@@ -1,6 +1,6 @@
 package gag.nails.booking.error;
 
-import gag.nails.booking.BookingStatus;
+import gag.nails.booking.model.BookingStatus;
 import gag.nails.common.error.UserFacingException;
 import java.util.Map;
 import java.util.UUID;

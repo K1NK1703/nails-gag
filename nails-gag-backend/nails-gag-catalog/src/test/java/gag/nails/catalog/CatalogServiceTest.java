@@ -3,7 +3,11 @@ package gag.nails.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.catalog.command.CreateService;
+import gag.nails.catalog.command.UpdateService;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.catalog.model.ServiceKind;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;

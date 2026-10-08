@@ -1,15 +1,17 @@
 package gag.nails.booking;
 
+import gag.nails.booking.command.CreateBooking;
+import gag.nails.booking.model.BookingView;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
-import gag.nails.clients.ConsentKind;
-import gag.nails.clients.ConsentSource;
-import gag.nails.clients.CreateClient;
-import gag.nails.clients.RecordConsent;
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.RecordConsent;
+import gag.nails.clients.model.ConsentKind;
+import gag.nails.clients.model.ConsentSource;
 import gag.nails.common.actor.Actor;
 import gag.nails.schedule.ScheduleQueries;
 import gag.nails.schedule.ScheduleService;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.MutableClock;
 import java.time.Duration;
 import java.time.LocalDate;

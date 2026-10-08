@@ -3,8 +3,11 @@ package gag.nails.clients;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.clients.command.AddDocumentVersion;
 import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
+import gag.nails.clients.model.DocumentKind;
+import gag.nails.clients.model.DocumentVersionView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;

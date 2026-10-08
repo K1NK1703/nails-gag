@@ -3,9 +3,13 @@ package gag.nails.booking;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.booking.model.BookingCreator;
+import gag.nails.booking.model.BookingStatus;
+import gag.nails.booking.model.BookingView;
+import gag.nails.booking.model.CancelReason;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.common.actor.Actor;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import org.junit.jupiter.api.Test;
 

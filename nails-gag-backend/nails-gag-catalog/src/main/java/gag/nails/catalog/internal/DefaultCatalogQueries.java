@@ -1,9 +1,9 @@
 package gag.nails.catalog.internal;
 
 import gag.nails.catalog.CatalogQueries;
-import gag.nails.catalog.ServiceView;
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import java.util.List;

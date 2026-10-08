@@ -1,5 +1,6 @@
 package gag.nails.booking;
 
+import gag.nails.booking.command.CreateBooking;
 import gag.nails.booking.error.BookingNotFoundException;
 import gag.nails.booking.error.ConsentMissingException;
 import gag.nails.booking.error.InvalidTransitionException;
@@ -7,6 +8,8 @@ import gag.nails.booking.error.LateRescheduleNotAllowedException;
 import gag.nails.booking.error.LimitReachedException;
 import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.error.VisitNotStartedException;
+import gag.nails.booking.model.BookingView;
+import gag.nails.booking.model.CancelReason;
 import gag.nails.catalog.error.ServiceInactiveException;
 import gag.nails.catalog.error.ServiceNotFoundException;
 import gag.nails.clients.error.ClientBlockedException;

@@ -3,7 +3,11 @@ package gag.nails.clients;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.RegisterClient;
 import gag.nails.clients.error.ClientBlockedException;
+import gag.nails.clients.event.ClientBlocked;
+import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;

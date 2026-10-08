@@ -1,7 +1,10 @@
 package gag.nails.clients;
 
+import gag.nails.clients.command.AddDocumentVersion;
 import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
+import gag.nails.clients.model.DocumentKind;
+import gag.nails.clients.model.DocumentVersionView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import java.util.List;

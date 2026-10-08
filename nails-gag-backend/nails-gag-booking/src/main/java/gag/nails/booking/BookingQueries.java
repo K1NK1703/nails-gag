@@ -1,6 +1,7 @@
 package gag.nails.booking;
 
 import gag.nails.booking.error.BookingNotFoundException;
+import gag.nails.booking.model.BookingView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;

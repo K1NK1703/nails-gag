@@ -4,10 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.booking.error.InvalidTransitionException;
+import gag.nails.booking.event.EarlierTimeAccepted;
+import gag.nails.booking.event.EarlierTimeDeclined;
+import gag.nails.booking.event.EarlierTimeProposed;
+import gag.nails.booking.model.BookingView;
+import gag.nails.booking.model.EarlierTimeStatus;
+import gag.nails.booking.model.EarlierTimeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
-import gag.nails.schedule.SlotView;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.TestTimeConfiguration;
 import jakarta.persistence.EntityManager;

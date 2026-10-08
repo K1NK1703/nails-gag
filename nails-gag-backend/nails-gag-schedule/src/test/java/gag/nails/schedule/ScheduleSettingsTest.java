@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.schedule.model.SettingsChangeView;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.MutableClock;
 import gag.nails.testsupport.TestTimeConfiguration;

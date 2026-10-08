@@ -2,6 +2,7 @@ package gag.nails.schedule;
 
 import gag.nails.schedule.error.SlotNotFoundException;
 import gag.nails.schedule.error.SlotOccupiedException;
+import gag.nails.schedule.model.SlotView;
 import java.util.UUID;
 
 /**

@@ -3,8 +3,12 @@ package gag.nails.clients;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.RegisterClient;
+import gag.nails.clients.command.UpdateClient;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.error.PhoneTakenException;
+import gag.nails.clients.model.ClientSource;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;

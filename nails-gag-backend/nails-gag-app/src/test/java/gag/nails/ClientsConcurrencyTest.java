@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
-import gag.nails.clients.ClientView;
-import gag.nails.clients.CreateClient;
+import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.error.PhoneTakenException;
+import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.Actor;
 import java.util.ArrayList;
 import java.util.List;

@@ -3,6 +3,7 @@ package gag.nails.schedule;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.schedule.model.SlotView;
 import java.time.LocalDate;
 import java.util.List;
 
