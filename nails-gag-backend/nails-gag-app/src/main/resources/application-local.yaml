@@ -19,3 +19,10 @@ nails-gag:
     site-origin: http://localhost:5173
     cookies:
       secure: false
+
+# springdoc есть только при bootRun (developmentOnly): схема OpenAPI для фронта и Swagger UI.
+springdoc:
+  api-docs:
+    path: /api/openapi.json
+  swagger-ui:
+    path: /api/docs

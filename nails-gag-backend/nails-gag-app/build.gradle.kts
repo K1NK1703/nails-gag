@@ -26,6 +26,8 @@ dependencies {
     // developmentOnly не наследует BOM из convention-плагина (он на api), поэтому BOM здесь явно.
     developmentOnly(platform(libs.spring.boot.bom))
     developmentOnly(libs.spring.boot.docker.compose)
+    // Схема OpenAPI на /api/openapi.json и Swagger UI на /api/docs — только при bootRun (адреса в application-local.yaml).
+    developmentOnly(libs.springdoc.webmvc.ui)
 
     // app не использует test-support: у него свой класс приложения в том же пакете gag.nails,
     // и два @SpringBootApplication рядом ломали бы поиск конфигурации в тестах.
