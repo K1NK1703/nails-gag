@@ -4,10 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
+import gag.nails.clients.model.DocumentKind;
+import gag.nails.identity.model.Provider;
+import io.swagger.v3.oas.models.PathItem;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;
 import tools.jackson.databind.JsonNode;
@@ -15,17 +21,58 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Схема OpenAPI, из которой фронт получает типы (спецификация API, §11): тело ошибки, ответ обратного вызова,
- * скрытые аргументы слоя, перечисления в пути. springdoc подключён только к тестам {@code api}, адреса — как в
- * {@code application-local.yaml}. Тестовые адреса ({@code /api/test/**}) в проверки не входят: в рабочем приложении их
- * нет.
+ * скрытые аргументы слоя, перечисления в пути, {@code null} в полях. springdoc подключён только к тестам {@code api} и
+ * включён только здесь ({@link ApiTest} его выключает), адреса — как в {@code application-local.yaml}. Тестовые адреса
+ * ({@code /api/test/**}) в проверки не входят: в рабочем приложении их нет.
  */
 @ApiTest
-@TestPropertySource(properties = {"springdoc.api-docs.path=/api/openapi.json", "springdoc.paths-to-match=/api/**"})
+@TestPropertySource(
+        properties = {
+            "springdoc.api-docs.enabled=true",
+            "springdoc.api-docs.version=openapi_3_1",
+            "springdoc.api-docs.path=/api/openapi.json",
+            "springdoc.paths-to-match=/api/**"
+        })
 class OpenApiSchemaTest extends ApiTestSupport {
 
     private static final String PROBLEM_REF = "#/components/schemas/Problem";
 
-    private static final Set<String> HTTP_METHODS = Set.of("get", "put", "post", "delete", "patch");
+    /** Ключи операций в элементе {@code paths}: имена методов HTTP в нижнем регистре. */
+    private static final Set<String> HTTP_METHODS = Arrays.stream(PathItem.HttpMethod.values())
+            .map(method -> method.name().toLowerCase(Locale.ROOT))
+            .collect(Collectors.toUnmodifiableSet());
+
+    /** springdoc 3 по умолчанию пишет OpenAPI 3.1: {@code null} в полях — массив типов, а не {@code nullable}. */
+    @Test
+    void schemaIsOpenApi31() {
+        assertThat(openApi().path("openapi").asString()).startsWith("3.1.");
+    }
+
+    /**
+     * Компонент записи с {@code @Nullable} допускает {@code null} (типы фронта — {@code string | null}, спецификация
+     * API, §4.2), остальные — нет. Ссылка на схему — через {@code oneOf} с {@code null}.
+     */
+    @Test
+    void nullableComponentsAreNullable() {
+        var schemas = openApi().path("components").path("schemas");
+
+        var client = schemas.path("ClientView").path("properties");
+        assertThat(types(client.path("lastName"))).containsExactlyInAnyOrder("string", "null");
+        assertThat(types(client.path("accountId"))).containsExactlyInAnyOrder("string", "null");
+        assertThat(client.path("accountId").path("format").asString()).isEqualTo("uuid");
+        assertThat(types(client.path("firstName"))).containsExactly("string");
+        assertThat(types(client.path("id"))).containsExactly("string");
+        assertThat(types(client.path("source"))).containsExactly("string");
+        assertThat(types(client.path("blocked"))).containsExactly("boolean");
+
+        var me = schemas.path("Me").path("properties");
+        assertThat(me.path("client").path("oneOf").values())
+                .extracting(option ->
+                        option.path("$ref").asString() + option.path("type").asString())
+                .containsExactlyInAnyOrder("#/components/schemas/ClientView", "null");
+        assertThat(me.path("account").path("$ref").asString()).isEqualTo("#/components/schemas/AccountView");
+        assertThat(me.path("account").path("oneOf").isMissingNode()).isTrue();
+    }
 
     @Test
     void problemSchemaIsDefaultResponse() {
@@ -87,10 +134,10 @@ class OpenApiSchemaTest extends ApiTestSupport {
         var providers = parameters(operations, "provider");
         assertThat(providers).isNotEmpty();
         providers.forEach(
-                provider -> assertThat(enumValues(provider)).containsExactlyInAnyOrder("yandex", "vk", "fake"));
+                provider -> assertThat(enumValues(provider)).containsExactlyElementsOf(kebabCase(Provider.values())));
         var kinds = parameters(operations, "kind");
         assertThat(kinds).isNotEmpty();
-        kinds.forEach(kind -> assertThat(enumValues(kind)).containsExactlyInAnyOrder("policy", "offer"));
+        kinds.forEach(kind -> assertThat(enumValues(kind)).containsExactlyElementsOf(kebabCase(DocumentKind.values())));
     }
 
     /** Операция схемы: {@code name} — метод и адрес для сообщений проверок. */
@@ -129,6 +176,18 @@ class OpenApiSchemaTest extends ApiTestSupport {
                 .flatMap(operation -> operation.node().path("parameters").values().stream())
                 .filter(parameter -> parameter.path("name").asString().equals(name))
                 .toList();
+    }
+
+    private static List<String> kebabCase(Enum<?>[] constants) {
+        return Arrays.stream(constants)
+                .map(constant -> WebConfiguration.kebabCase(constant.name()))
+                .toList();
+    }
+
+    /** {@code type} схемы как список: в OpenAPI 3.1 это строка или массив строк. */
+    private static List<String> types(JsonNode schema) {
+        var type = schema.path("type");
+        return type.isArray() ? type.values().stream().map(JsonNode::asString).toList() : List.of(type.asString());
     }
 
     private static List<String> enumValues(JsonNode parameter) {

@@ -3,10 +3,11 @@ package gag.nails.api.internal.http;
 import gag.nails.api.internal.error.Problem;
 import gag.nails.common.actor.Actor;
 import gag.nails.identity.model.ClientInfo;
+import io.swagger.v3.core.converter.ModelConverter;
 import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.SpecVersion;
+import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.headers.Header;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
@@ -32,6 +33,9 @@ import org.springframework.http.HttpHeaders;
  * {@code bootRun}, без него эта настройка не загружается — условие проверяется по имени класса, и других ссылок на
  * этот класс нет. Из схемы фронт получает типы TypeScript (§11).
  *
+ * <p>Схема — OpenAPI 3.1 ({@code springdoc.api-docs.version: openapi_3_1}, по умолчанию у springdoc 3): настройка
+ * рассчитана только на неё — {@code null} в полях пишется массивом типов ({@link NullableRecordComponents}).
+ *
  * <p>springdoc не знает резолверов слоя и принял бы {@code Actor}, {@code Optional<Actor>} и {@code ClientInfo} за
  * параметры запроса: они скрываются. Перечисления в пути и параметрах запроса показываются так, как их принимает адрес,
  * — в нижнем регистре через дефис ({@link WebConfiguration#KEBAB_CASE_TYPES}). Тело ошибки {@link Problem} — ответ
@@ -42,7 +46,7 @@ import org.springframework.http.HttpHeaders;
 class OpenApiConfiguration {
 
     /** Обратный вызов провайдера: всегда {@code 303} на страницу сайта (§6.3). */
-    static final String CALLBACK_PATH = ApiPaths.AUTH + "/{provider}/callback";
+    private static final String CALLBACK_PATH = ApiPaths.AUTH + "/{provider}/callback";
 
     private static final String PROBLEM_JSON = "application/problem+json";
 
@@ -54,7 +58,9 @@ class OpenApiConfiguration {
 
     /**
      * {@code Optional<Actor>} springdoc видит как {@code Optional} и не пропускает по типу: такой параметр убирается
-     * здесь. Перечисления в пути и запросе получают значения через дефис.
+     * здесь. Перечисления в пути и запросе получают значения через дефис — только скалярный параметр со встроенным
+     * {@code enum}; список перечислений ({@code List<Section>}) или ссылка на схему перечисления остались бы с именами
+     * Java.
      */
     @Bean
     ParameterCustomizer apiParameterCustomizer() {
@@ -71,28 +77,24 @@ class OpenApiConfiguration {
         };
     }
 
+    /** springdoc регистрирует бины {@link ModelConverter} в общем {@link ModelConverters} схемы 3.1. */
+    @Bean
+    ModelConverter nullableRecordComponents() {
+        return new NullableRecordComponents();
+    }
+
     /**
      * Схема {@code Problem} в {@code components}, ответ {@code default} с ней у каждой операции; у обратного вызова
-     * провайдера вместо {@code 200} — {@code 303} с {@code Location}, а {@code default} остаётся: до контроллера отказ
-     * ({@code 429}) пишет фильтр. Описания ответов — по-английски, как у ответов, которые пишет springdoc.
+     * провайдера — {@code 303} вместо всех ответов, кроме {@code default}. Описания ответов — по-английски, как у
+     * ответов, которые пишет springdoc.
      */
     @Bean
     OpenApiCustomizer apiOpenApiCustomizer() {
         return openApi -> {
             addProblemSchemas(openApi);
-            if (openApi.getPaths() == null) {
-                return;
-            }
-            openApi.getPaths().values().stream()
-                    .flatMap(path -> path.readOperations().stream())
-                    .forEach(operation -> operation.getResponses().addApiResponse(ApiResponses.DEFAULT, problem()));
-            var callback = openApi.getPaths().get(CALLBACK_PATH);
-            if (callback != null && callback.getGet() != null) {
-                var responses = callback.getGet().getResponses();
-                var problem = responses.get(ApiResponses.DEFAULT);
-                responses.clear();
-                responses.addApiResponse("303", seeOther());
-                responses.addApiResponse(ApiResponses.DEFAULT, problem);
+            if (openApi.getPaths() != null) {
+                addDefaultProblemResponses(openApi.getPaths());
+                replaceCallbackResponses(openApi.getPaths());
             }
         };
     }
@@ -121,13 +123,39 @@ class OpenApiConfiguration {
             openApi.setComponents(new Components());
         }
         var components = openApi.getComponents();
-        ModelConverters.getInstance(openApi.getSpecVersion() == SpecVersion.V31)
-                .readAll(Problem.class)
-                .forEach(components::addSchemas);
+        ModelConverters.getInstance(true).readAll(Problem.class).forEach(components::addSchemas);
         Schema<?> problem = components.getSchemas().get("Problem");
         problem.setRequired(List.of("type", "status", "instance", "code"));
         Schema<?> fieldError = components.getSchemas().get("FieldError");
         fieldError.setRequired(List.of("field", "reason"));
+    }
+
+    /**
+     * Ошибку в {@code problem+json} может вернуть любой адрес: обработчик ошибок контроллеров, а до контроллера —
+     * фильтры ({@code 403 common.csrf}, {@code 429}).
+     */
+    private static void addDefaultProblemResponses(Paths paths) {
+        paths.values().stream()
+                .flatMap(path -> path.readOperations().stream())
+                .forEach(operation -> operation.getResponses().addApiResponse(ApiResponses.DEFAULT, problem()));
+    }
+
+    /**
+     * Обратный вызов отвечает браузеру переходом при любом исходе; {@code default} остаётся — отказ {@code 429} пишет
+     * фильтр до контроллера.
+     */
+    private static void replaceCallbackResponses(Paths paths) {
+        var callback = paths.get(CALLBACK_PATH);
+        if (callback == null || callback.getGet() == null) {
+            return;
+        }
+        var responses = callback.getGet().getResponses();
+        var problem = responses.get(ApiResponses.DEFAULT);
+        responses.clear();
+        responses.addApiResponse("303", seeOther());
+        if (problem != null) {
+            responses.addApiResponse(ApiResponses.DEFAULT, problem);
+        }
     }
 
     private static ApiResponse problem() {
@@ -140,7 +168,6 @@ class OpenApiConfiguration {
     private static ApiResponse seeOther() {
         var uri = new Schema<String>();
         uri.setTypes(Set.of("string"));
-        uri.setType("string");
         uri.setFormat("uri");
         return new ApiResponse()
                 .description("Redirect to a site page: cabinet, registration, link confirmation or failure")

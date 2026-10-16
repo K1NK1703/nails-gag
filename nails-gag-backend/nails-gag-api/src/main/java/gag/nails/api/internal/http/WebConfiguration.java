@@ -28,9 +28,7 @@ class WebConfiguration implements WebMvcConfigurer {
 
     /** Перечисления, которые в адресе пишутся по имени в нижнем регистре через дефис. */
     private static final List<KebabCaseEnum<?>> KEBAB_CASE_ENUMS = List.of(
-            new KebabCaseEnum<>(Provider.class),
-            new KebabCaseEnum<>(DocumentKind.class),
-            new KebabCaseEnum<>(Section.class));
+            KebabCaseEnum.of(Provider.class), KebabCaseEnum.of(DocumentKind.class), KebabCaseEnum.of(Section.class));
 
     /** Типы из {@link #KEBAB_CASE_ENUMS}; по ним же схема OpenAPI показывает значения через дефис. */
     static final Set<Class<?>> KEBAB_CASE_TYPES =
@@ -58,19 +56,23 @@ class WebConfiguration implements WebMvcConfigurer {
      * значение параметра, {@code 400 common.validation} с его именем. У провайдера и документа шаблон адреса пропускает
      * лишь известные имена, поэтому другое имя до конвертера не доходит, а даёт {@code 404}.
      */
-    private record KebabCaseEnum<E extends Enum<E>>(Class<E> type) {
+    private record KebabCaseEnum<E extends Enum<E>>(Class<E> type, Map<String, E> constants) {
 
-        void register(FormatterRegistry registry) {
+        static <E extends Enum<E>> KebabCaseEnum<E> of(Class<E> type) {
             var constants = Arrays.stream(type.getEnumConstants())
                     .collect(Collectors.toUnmodifiableMap(constant -> kebabCase(constant.name()), Function.identity()));
-            registry.addConverter(String.class, type, source -> parse(constants, source));
+            return new KebabCaseEnum<>(type, constants);
         }
 
-        private E parse(Map<String, E> constants, String source) {
+        void register(FormatterRegistry registry) {
+            registry.addConverter(String.class, type, this::parse);
+        }
+
+        private E parse(String source) {
             var constant = constants.get(source);
             if (constant == null) {
-                // Spring оборачивает отказ конвертера в MethodArgumentTypeMismatchException с именем параметра; поле
-                // здесь неизвестно, и в ответ попадает уже имя параметра.
+                // Аргументы исключения в ответ не попадают: Spring оборачивает отказ конвертера в
+                // MethodArgumentTypeMismatchException, и ProblemHandler берёт поле из имени параметра.
                 throw new ValidationException(type.getSimpleName(), "unknown value");
             }
             return constant;

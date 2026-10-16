@@ -8,12 +8,12 @@ import java.time.temporal.ChronoUnit;
  * Период в параметрах запроса (спецификация API, §4.1): {@code from} и {@code to} включительно, {@code to} не раньше
  * {@code from}, не больше {@value #MAX_DAYS} дней. Иначе {@code 400 common.validation} с полем {@code to}.
  */
-public final class Periods {
+public final class PeriodParams {
 
     /** Самый длинный период в днях, включая оба конца: квартал с запасом. */
     public static final int MAX_DAYS = 93;
 
-    private Periods() {}
+    private PeriodParams() {}
 
     /**
      * @throws ValidationException если {@code to} раньше {@code from} или период длиннее {@value #MAX_DAYS} дней
