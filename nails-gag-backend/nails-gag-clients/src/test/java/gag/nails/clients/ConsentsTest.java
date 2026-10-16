@@ -88,7 +88,9 @@ class ConsentsTest {
                 new RecordConsent(ConsentKind.OFFER, "2026-09-25", ConsentSource.SITE_CHECKBOX),
                 mariaActor);
         documents.addVersion(
-                new AddDocumentVersion(DocumentKind.OFFER, "2026-10-01", LocalDate.of(2026, 10, 1)), Actor.developer());
+                new AddDocumentVersion(
+                        DocumentKind.OFFER, "2026-10-01", LocalDate.of(2026, 10, 1), "Текст редакции 2026-10-01"),
+                Actor.developer());
 
         assertThat(queries.hasCurrentConsents(maria.id(), Set.of(ConsentKind.OFFER)))
                 .isFalse();

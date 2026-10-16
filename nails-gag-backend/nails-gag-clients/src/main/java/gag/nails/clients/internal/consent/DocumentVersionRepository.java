@@ -15,6 +15,8 @@ interface DocumentVersionRepository extends JpaRepository<DocumentVersionEntity,
 
     List<DocumentVersionEntity> findAllByKindOrderByEffectiveFromDesc(DocumentKind kind);
 
+    Optional<DocumentVersionEntity> findByKindAndVersion(DocumentKind kind, String version);
+
     boolean existsByKindAndVersion(DocumentKind kind, String version);
 
     boolean existsByKindAndEffectiveFrom(DocumentKind kind, LocalDate effectiveFrom);

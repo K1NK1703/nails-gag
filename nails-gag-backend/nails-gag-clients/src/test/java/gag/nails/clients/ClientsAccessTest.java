@@ -192,6 +192,7 @@ class ClientsAccessTest {
     }
 
     private static AddDocumentVersion version(String version) {
-        return new AddDocumentVersion(DocumentKind.OFFER, version, LocalDate.parse(version));
+        return new AddDocumentVersion(
+                DocumentKind.OFFER, version, LocalDate.parse(version), "Текст редакции " + version);
     }
 }

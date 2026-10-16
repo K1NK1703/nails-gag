@@ -4,8 +4,10 @@ import gag.nails.clients.DocumentVersionService;
 import gag.nails.clients.command.AddDocumentVersion;
 import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
+import gag.nails.clients.error.DocumentVersionNotFoundException;
 import gag.nails.clients.internal.error.DocumentVersionMissingException;
 import gag.nails.clients.model.DocumentKind;
+import gag.nails.clients.model.DocumentVersionText;
 import gag.nails.clients.model.DocumentVersionView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
@@ -48,6 +50,15 @@ public class DefaultDocumentVersionService implements DocumentVersionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public DocumentVersionText version(DocumentKind kind, String version, Actor actor) {
+        actor.requireRead(Section.DOCUMENTS);
+        return versions.findByKindAndVersion(kind, version)
+                .map(DocumentVersionEntity::toVersionText)
+                .orElseThrow(() -> new DocumentVersionNotFoundException(kind, version));
+    }
+
+    @Override
     public DocumentVersionView addVersion(AddDocumentVersion command, Actor actor) {
         actor.requireWrite(Section.DOCUMENTS);
         validator.requireValid(command);
@@ -58,7 +69,8 @@ public class DefaultDocumentVersionService implements DocumentVersionService {
         if (versions.existsByKindAndEffectiveFrom(kind, command.effectiveFrom())) {
             throw new DocumentVersionDateTakenException(kind, command.effectiveFrom());
         }
-        return versions.save(new DocumentVersionEntity(kind, command.version(), command.effectiveFrom()))
+        return versions.save(
+                        new DocumentVersionEntity(kind, command.version(), command.effectiveFrom(), command.text()))
                 .toView();
     }
 
