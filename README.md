@@ -87,11 +87,11 @@ nails-gag.ru {
 ```bash
 cd nails-gag-backend
 ./gradlew check                                   # тесты, границы модулей, форматирование (нужен Docker)
-SPRING_PROFILES_ACTIVE=local ./gradlew :nails-gag-app:bootRun   # поднимает PostgreSQL через Compose, http://localhost:8080/actuator/health
+SPRING_PROFILES_ACTIVE=local ./gradlew :nails-gag-app:bootRun   # поднимает PostgreSQL через Compose, API на :8080, http://localhost:8081/actuator/health
 ./gradlew spotlessApply                           # форматирование
 ```
 
-Модули: `nails-gag-common` (разделы и уровни доступа, действующее лицо, исключения, время), `nails-gag-test-support` (тестовая обвязка), `nails-gag-app` (запуск, конфигурация, миграции). Доменные модули: `nails-gag-catalog` (услуги и дополнения, прайс), `nails-gag-clients` (клиенты, согласия и версии документов, признак предоплаты, объединение дублей, блокировка, обезличивание при удалении аккаунта), `nails-gag-schedule` (слоты, открытые для записи, шаблоны дня и недели, ротация недель, длительность слота с журналом; занятие/освобождение слотов для записей), `nails-gag-booking` (записи: создание, отмена и перенос по правилам оферты, предоплата, предложение приехать раньше, отметки визита, фоновые задачи, настройки правил), `nails-gag-identity` (вход через Яндекс ID и VK ID, аккаунты и способы входа, сессии в PostgreSQL, роли и личные переопределения прав с правилом последнего администратора, журналы входов и прав, реакция на блокировку и объединение клиентов, удаление аккаунта, ежедневная очистка просроченных сессий, билетов регистрации и старых событий входа).
+Модули: `nails-gag-common` (разделы и уровни доступа, действующее лицо, исключения, время), `nails-gag-test-support` (тестовая обвязка), `nails-gag-app` (запуск, конфигурация, миграции). Доменные модули: `nails-gag-catalog` (услуги и дополнения, прайс), `nails-gag-clients` (клиенты, согласия и версии документов, признак предоплаты, объединение дублей, блокировка, обезличивание при удалении аккаунта), `nails-gag-schedule` (слоты, открытые для записи, шаблоны дня и недели, ротация недель, длительность слота с журналом; занятие/освобождение слотов для записей), `nails-gag-booking` (записи: создание, отмена и перенос по правилам оферты, предоплата, предложение приехать раньше, отметки визита, фоновые задачи, настройки правил), `nails-gag-identity` (вход через Яндекс ID и VK ID, аккаунты и способы входа, сессии в PostgreSQL, роли и личные переопределения прав с правилом последнего администратора, журналы входов и прав, реакция на блокировку и объединение клиентов, удаление аккаунта, ежедневная очистка просроченных сессий, билетов регистрации и старых событий входа). HTTP-слой — `nails-gag-api` (защита, единый формат ошибок, вход по HTTP, `/api/me`, документы; адреса остальных модулей появятся в следующем плане).
 
 ### Пакеты модуля
 
@@ -109,11 +109,22 @@ SPRING_PROFILES_ACTIVE=local ./gradlew :nails-gag-app:bootRun   # поднима
 
 Подпакет без содержимого не создаётся (`command`/`event` есть не у всех модулей; `catalog` с одной подобластью оставляет `internal` плоским). Внутри `internal` подпакеты только по подобласти, не по типу классов; класс, нужный соседней подобласти, становится `public`, остальные остаются package-private.
 
+`nails-gag-api` публичного Java-API не имеет: в корне `gag.nails.api` только `package-info.java`, всё остальное — в `internal.<область>` (`auth`, `security`, `error`, `http`, `me`, `documents`).
+
+### HTTP API
+
+- Все адреса под `/api`, JSON в `camelCase`. Ошибки — `application/problem+json` с машинным полем `code` (`common.not_found`, `booking.booking_not_found`, …) и `params`: по ним фронт выбирает текст.
+- Вошедшего узнают по cookie `ng_session` (`HttpOnly`, `SameSite=Lax`, `Path=/api`). Права проверяют модули через `Actor`; HTTP-слой решает только, нужна ли сессия: нет её — `401`, у сотрудника нет прав — `403`, клиенту чужое — `404`.
+- Изменяющие запросы требуют заголовок `X-Requested-With: nails.gag` и `Origin` (или `Referer`) сайта из `nails-gag.api.site-origin`, иначе `403 common.csrf`. Частые запросы — `429` с `Retry-After`; лимиты и остальные настройки — `nails-gag.api.*` в `application.yaml`.
+- Actuator — на отдельном порту 8081, через прокси наружу не публикуется.
+- Схема OpenAPI и Swagger UI — только при `bootRun` с профилем `local`: http://localhost:8080/api/openapi.json и http://localhost:8080/api/docs. springdoc подключён как `developmentOnly` и в `app.jar` и образ не попадает.
+
 ### Профили
 
-- `local` — читаемые логи, база из `compose.yaml`, вход через подставного провайдера (`nails-gag.identity.fake-provider.enabled=true`: профиль задаётся кодом через `gag.nails.identity.testing.FakeProvider`, без Яндекса и VK); HTTP-слой входа появится в следующем плане, пока вход доступен только из кода и тестов.
+- `local` — читаемые логи, база из `compose.yaml`, вход через подставного провайдера (`nails-gag.identity.fake-provider.enabled=true`: профиль задаётся кодом через `gag.nails.identity.testing.FakeProvider`, без Яндекса и VK). Вход по HTTP: `POST /api/auth/fake/start` с `{"purpose":"LOGIN"}` → `POST /api/auth/fake/code` с профилем (`subject`, `phone`, `displayName`, …) → `GET /api/auth/fake/callback?code=…&state=…` (`state` — из `authorizationUri`, с cookie `ng_login`); новый человек затем отправляет `POST /api/auth/registration`.
 - `observability` — экспорт трейсов, метрик и логов в `grafana/otel-lgtm`: `docker compose --profile observability up -d`, затем `SPRING_PROFILES_ACTIVE=local,observability ./gradlew :nails-gag-app:bootRun`, Grafana на http://localhost:3000 (admin/admin).
 - Без профилей — как в продакшене: логи в JSON, база из `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`.
+- `prod` — для боевого запуска: включает проверки настроек `FakeProviderGuard` (подставной провайдер запрещён) и `ApiPropertiesGuard` (нужен `nails-gag.api.login-state-key`, cookie только `Secure`); при нарушении приложение не стартует.
 
 ### Образ
 
