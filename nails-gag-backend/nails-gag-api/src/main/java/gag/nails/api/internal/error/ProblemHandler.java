@@ -7,6 +7,7 @@ import gag.nails.common.error.ValidationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -18,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.core.MethodParameter;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -53,7 +55,8 @@ import tools.jackson.databind.exc.UnrecognizedPropertyException;
  * видит точный код и параметры.
  *
  * <p>Логи: ошибки модулей и формы запроса — WARN без стека и без значений {@code params} (в них бывают телефоны),
- * только код и имена параметров; недоступность БД из-за блокировки — WARN; непредусмотренное — ERROR со стеком.
+ * только код и имена параметров (у ошибки проверки модуля — имя поля); недоступность БД из-за блокировки — WARN с
+ * классом исключения и SQLState, без сообщения драйвера; непредусмотренное — ERROR со стеком.
  * Отказы самого Spring MVC (нет адреса, не тот метод) и оборванные клиентом соединения — DEBUG: в WARN они бы
  * заглушили полезное.
  */
@@ -89,7 +92,12 @@ class ProblemHandler {
             return internal(request);
         }
         if (exception instanceof ValidationException validation) {
-            logUserFacing(request, HttpStatus.BAD_REQUEST, exception);
+            log.warn(
+                    "{} {} -> 400 {} {}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    exception.code(),
+                    validation.field());
             return validation(request, List.of(new Problem.FieldError(validation.field(), validation.reason())));
         }
         var staff = ApiRequestAttributes.authenticated(request)
@@ -208,11 +216,14 @@ class ProblemHandler {
      */
     @ExceptionHandler(PessimisticLockingFailureException.class)
     ResponseEntity<Problem> busy(PessimisticLockingFailureException exception, HttpServletRequest request) {
+        // Сообщение драйвера не пишется: в нём бывает текст запроса и значения строк. Класс и SQLState достаточно.
+        var cause = NestedExceptionUtils.getMostSpecificCause(exception);
         log.warn(
-                "{} {} -> 503 database lock failure: {}",
+                "{} {} -> 503 database lock failure: {}{}",
                 request.getMethod(),
                 request.getRequestURI(),
-                exception.getMessage());
+                exception.getClass().getSimpleName(),
+                cause instanceof SQLException sql ? " SQLState " + sql.getSQLState() : "");
         var headers = new HttpHeaders();
         headers.set(HttpHeaders.RETRY_AFTER, BUSY_RETRY_AFTER_SECONDS);
         return respond(writer.problem(request, HttpStatus.SERVICE_UNAVAILABLE, ProblemStatuses.BUSY), headers);
