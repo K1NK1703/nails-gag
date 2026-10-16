@@ -13,6 +13,8 @@ import gag.nails.clients.model.ConsentView;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.common.paging.Paged;
+import gag.nails.common.paging.Paging;
 import gag.nails.common.text.Phones;
 import java.util.List;
 import java.util.Locale;
@@ -20,6 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 class DefaultClientQueries implements ClientQueries {
 
-    /** Спецсимволы LIKE и сам символ экранирования из {@link ClientRepository#search}. */
+    /** Спецсимволы LIKE и сам символ экранирования из {@link ClientRepository#SEARCH}. */
     private static final Pattern LIKE_SPECIALS = Pattern.compile("[%_!]");
 
     private final ClientRepository clients;
@@ -79,10 +82,16 @@ class DefaultClientQueries implements ClientQueries {
     @Override
     public List<ClientView> search(String query, Actor actor) {
         actor.requireRead(Section.CLIENTS);
-        var fragment = query.strip();
-        var needle = Phones.prefix(fragment).orElseGet(() -> fragment.toLowerCase(Locale.ROOT));
-        var pattern = "%" + LIKE_SPECIALS.matcher(needle).replaceAll("!$0") + "%";
-        return clients.search(pattern).stream().map(ClientEntity::toView).toList();
+        return clients.search(searchPattern(query)).stream()
+                .map(ClientEntity::toView)
+                .toList();
+    }
+
+    @Override
+    public Paged<ClientView> search(String query, Paging paging, Actor actor) {
+        actor.requireRead(Section.CLIENTS);
+        var page = clients.search(searchPattern(query), PageRequest.of(paging.page(), paging.size()));
+        return Paged.of(page.map(ClientEntity::toView).getContent(), paging, page.getTotalElements());
     }
 
     @Override
@@ -125,6 +134,13 @@ class DefaultClientQueries implements ClientQueries {
         return flagChanges
                 .findFirstByClientIdOrderByChangedAtDescIdDesc(clientId)
                 .map(PrepaymentFlagChangeEntity::toView);
+    }
+
+    /** Шаблон LIKE для {@link ClientRepository#SEARCH}: начало телефона или фрагмент имени в нижнем регистре. */
+    private static String searchPattern(String query) {
+        var fragment = query.strip();
+        var needle = Phones.prefix(fragment).orElseGet(() -> fragment.toLowerCase(Locale.ROOT));
+        return "%" + LIKE_SPECIALS.matcher(needle).replaceAll("!$0") + "%";
     }
 
     private ClientEntity require(UUID clientId) {

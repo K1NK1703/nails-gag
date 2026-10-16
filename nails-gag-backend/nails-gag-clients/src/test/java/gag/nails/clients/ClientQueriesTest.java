@@ -9,6 +9,7 @@ import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.common.paging.Paging;
 import gag.nails.testsupport.ModuleTest;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -101,6 +102,30 @@ class ClientQueriesTest {
     @Test
     void searchIsForMasterOnly() {
         assertThatThrownBy(() -> queries.search("мар", Actor.client(maria.id())))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void searchPagesKeepOrderAndTotal() {
+        var marina = clients.create(new CreateClient("Марина", "Сидорова", null, "+79215550001", null, null), master);
+        var all = queries.search("8921", master);
+
+        var first = queries.search("8921", new Paging(0, 2), master);
+        var second = queries.search("8921", new Paging(1, 2), master);
+
+        assertThat(all).extracting(ClientView::id).containsExactly(anna.id(), marina.id(), maria.id());
+        assertThat(first.items()).extracting(ClientView::id).containsExactly(anna.id(), marina.id());
+        assertThat(first.page()).isZero();
+        assertThat(first.size()).isEqualTo(2);
+        assertThat(first.total()).isEqualTo(3);
+        assertThat(second.items()).extracting(ClientView::id).containsExactly(maria.id());
+        assertThat(second.page()).isEqualTo(1);
+        assertThat(second.total()).isEqualTo(3);
+    }
+
+    @Test
+    void searchPageNeedsClientsRead() {
+        assertThatThrownBy(() -> queries.search("мар", new Paging(0, 50), Actor.client(maria.id())))
                 .isInstanceOf(AccessDeniedException.class);
     }
 }
