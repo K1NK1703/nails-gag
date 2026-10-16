@@ -1,11 +1,23 @@
 package gag.nails.api.internal.http;
 
+import gag.nails.api.internal.error.Problem;
 import gag.nails.common.actor.Actor;
 import gag.nails.identity.model.ClientInfo;
+import io.swagger.v3.core.converter.ModelConverters;
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.SpecVersion;
+import io.swagger.v3.oas.models.headers.Header;
+import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.parameters.Parameter;
-import java.util.Locale;
+import io.swagger.v3.oas.models.responses.ApiResponse;
+import io.swagger.v3.oas.models.responses.ApiResponses;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springdoc.core.customizers.ParameterCustomizer;
 import org.springdoc.core.utils.SpringDocUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -13,19 +25,28 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
+import org.springframework.http.HttpHeaders;
 
 /**
  * Схема OpenAPI для локального запуска (спецификация API, §5.5): springdoc подключён в {@code app} только для
  * {@code bootRun}, без него эта настройка не загружается — условие проверяется по имени класса, и других ссылок на
- * этот класс нет.
+ * этот класс нет. Из схемы фронт получает типы TypeScript (§11).
  *
  * <p>springdoc не знает резолверов слоя и принял бы {@code Actor}, {@code Optional<Actor>} и {@code ClientInfo} за
- * параметры запроса: они скрываются. Провайдер и документ в пути показываются в нижнем регистре, как их принимает
- * адрес ({@link WebConfiguration#LOWER_CASE_PATH_ENUMS}).
+ * параметры запроса: они скрываются. Перечисления в пути и параметрах запроса показываются так, как их принимает адрес,
+ * — в нижнем регистре через дефис ({@link WebConfiguration#KEBAB_CASE_TYPES}). Тело ошибки {@link Problem} — ответ
+ * {@code default} каждой операции: его пишут и обработчик ошибок контроллеров, и фильтры ({@code 403}, {@code 429}).
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(name = "org.springdoc.core.utils.SpringDocUtils")
 class OpenApiConfiguration {
+
+    /** Обратный вызов провайдера: всегда {@code 303} на страницу сайта (§6.3). */
+    static final String CALLBACK_PATH = ApiPaths.AUTH + "/{provider}/callback";
+
+    private static final String PROBLEM_JSON = "application/problem+json";
+
+    private static final String SCHEMAS = "#/components/schemas/";
 
     OpenApiConfiguration() {
         SpringDocUtils.getConfig().addRequestWrapperToIgnore(Actor.class, ClientInfo.class);
@@ -33,7 +54,7 @@ class OpenApiConfiguration {
 
     /**
      * {@code Optional<Actor>} springdoc видит как {@code Optional} и не пропускает по типу: такой параметр убирается
-     * здесь. Перечисления в пути получают значения в нижнем регистре.
+     * здесь. Перечисления в пути и запросе получают значения через дефис.
      */
     @Bean
     ParameterCustomizer apiParameterCustomizer() {
@@ -42,11 +63,37 @@ class OpenApiConfiguration {
                 return null;
             }
             if (parameter != null
-                    && "path".equals(parameter.getIn())
-                    && WebConfiguration.LOWER_CASE_PATH_ENUMS.contains(methodParameter.getParameterType())) {
-                lowerCaseEnum(parameter);
+                    && ("path".equals(parameter.getIn()) || "query".equals(parameter.getIn()))
+                    && WebConfiguration.KEBAB_CASE_TYPES.contains(methodParameter.getParameterType())) {
+                kebabCaseEnum(parameter);
             }
             return parameter;
+        };
+    }
+
+    /**
+     * Схема {@code Problem} в {@code components}, ответ {@code default} с ней у каждой операции; у обратного вызова
+     * провайдера вместо {@code 200} — {@code 303} с {@code Location}, а {@code default} остаётся: до контроллера отказ
+     * ({@code 429}) пишет фильтр. Описания ответов — по-английски, как у ответов, которые пишет springdoc.
+     */
+    @Bean
+    OpenApiCustomizer apiOpenApiCustomizer() {
+        return openApi -> {
+            addProblemSchemas(openApi);
+            if (openApi.getPaths() == null) {
+                return;
+            }
+            openApi.getPaths().values().stream()
+                    .flatMap(path -> path.readOperations().stream())
+                    .forEach(operation -> operation.getResponses().addApiResponse(ApiResponses.DEFAULT, problem()));
+            var callback = openApi.getPaths().get(CALLBACK_PATH);
+            if (callback != null && callback.getGet() != null) {
+                var responses = callback.getGet().getResponses();
+                var problem = responses.get(ApiResponses.DEFAULT);
+                responses.clear();
+                responses.addApiResponse("303", seeOther());
+                responses.addApiResponse(ApiResponses.DEFAULT, problem);
+            }
         };
     }
 
@@ -56,12 +103,48 @@ class OpenApiConfiguration {
     }
 
     @SuppressWarnings("unchecked")
-    private static void lowerCaseEnum(Parameter parameter) {
+    private static void kebabCaseEnum(Parameter parameter) {
         var schema = (Schema<Object>) parameter.getSchema();
         if (schema != null && schema.getEnum() != null) {
             schema.setEnum(schema.getEnum().stream()
-                    .map(value -> (Object) value.toString().toLowerCase(Locale.ROOT))
+                    .map(value -> (Object) WebConfiguration.kebabCase(value.toString()))
                     .toList());
         }
+    }
+
+    /**
+     * {@code Problem} и {@code FieldError} — схемы по записям, как у ответов; обязательны поля, которые есть в каждом
+     * теле ошибки. {@code title}, {@code params}, {@code errors} и {@code traceId} бывают опущены.
+     */
+    private static void addProblemSchemas(OpenAPI openApi) {
+        if (openApi.getComponents() == null) {
+            openApi.setComponents(new Components());
+        }
+        var components = openApi.getComponents();
+        ModelConverters.getInstance(openApi.getSpecVersion() == SpecVersion.V31)
+                .readAll(Problem.class)
+                .forEach(components::addSchemas);
+        Schema<?> problem = components.getSchemas().get("Problem");
+        problem.setRequired(List.of("type", "status", "instance", "code"));
+        Schema<?> fieldError = components.getSchemas().get("FieldError");
+        fieldError.setRequired(List.of("field", "reason"));
+    }
+
+    private static ApiResponse problem() {
+        return new ApiResponse()
+                .description("Problem (RFC 9457)")
+                .content(new Content()
+                        .addMediaType(PROBLEM_JSON, new MediaType().schema(new Schema<>().$ref(SCHEMAS + "Problem"))));
+    }
+
+    private static ApiResponse seeOther() {
+        var uri = new Schema<String>();
+        uri.setTypes(Set.of("string"));
+        uri.setType("string");
+        uri.setFormat("uri");
+        return new ApiResponse()
+                .description("Redirect to a site page: cabinet, registration, link confirmation or failure")
+                .addHeaderObject(
+                        HttpHeaders.LOCATION, new Header().required(true).schema(uri));
     }
 }

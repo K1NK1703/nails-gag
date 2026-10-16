@@ -180,6 +180,7 @@ class ObservabilityTest {
                 .uri(route)
                 .headers(headers -> {
                     if (sessionToken != null) {
+                        // Имя повторяет SessionCookie из api: его internal из app не виден.
                         headers.add(HttpHeaders.COOKIE, "ng_session=" + sessionToken);
                     }
                 })
