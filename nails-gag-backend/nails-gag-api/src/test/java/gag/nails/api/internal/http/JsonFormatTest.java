@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.client.RestTestClient.BodyContentSpec;
 
 @ApiTest
 class JsonFormatTest extends ApiTestSupport {
@@ -65,7 +66,14 @@ class JsonFormatTest extends ApiTestSupport {
                 .body("{\"time\":\"10:00\",\"tmie\":\"11:00\"}")
                 .exchange()
                 .expectStatus()
-                .isEqualTo(HttpStatus.BAD_REQUEST);
+                .isEqualTo(HttpStatus.BAD_REQUEST)
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.validation")
+                .jsonPath("$.errors[0].field")
+                .isEqualTo("tmie")
+                .jsonPath("$.errors[0].reason")
+                .isEqualTo("unknown property");
     }
 
     private String jsonSample() {
@@ -81,7 +89,7 @@ class JsonFormatTest extends ApiTestSupport {
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    private org.springframework.test.web.servlet.client.RestTestClient.BodyContentSpec echoTime(String time) {
+    private BodyContentSpec echoTime(String time) {
         return csrf(client.post().uri("/api/test/json"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("{\"time\":" + time + "}")

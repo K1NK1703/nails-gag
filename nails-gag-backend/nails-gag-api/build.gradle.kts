@@ -11,6 +11,8 @@ dependencies {
     implementation(project(":nails-gag-identity"))
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.validation)
+    // Взаимная блокировка в БД приходит как PessimisticLockingFailureException и отвечает 503 common.busy.
+    implementation(libs.spring.tx)
 
     testImplementation(project(":nails-gag-test-support"))
     testImplementation(libs.spring.boot.resttestclient)

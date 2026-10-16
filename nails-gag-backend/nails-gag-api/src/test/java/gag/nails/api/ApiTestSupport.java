@@ -42,9 +42,16 @@ public abstract class ApiTestSupport {
     @Autowired
     protected MutableClock clock;
 
-    /** Заголовки, без которых изменяющий запрос не пройдёт защиту от CSRF. */
-    protected static <S extends RequestHeadersSpec<S>> S csrf(S spec) {
-        return spec.header("X-Requested-With", REQUESTED_WITH).header("Origin", ORIGIN);
+    /**
+     * Заголовки, без которых изменяющий запрос не пройдёт защиту от CSRF. Спецификация запроса — изменяемый
+     * построитель, поэтому возвращается она же: тип сохраняется и для {@code post()}, и для {@code delete()}.
+     */
+    protected static <S extends RequestHeadersSpec<?>> S csrf(S spec) {
+        spec.headers(headers -> {
+            headers.set("X-Requested-With", REQUESTED_WITH);
+            headers.set("Origin", ORIGIN);
+        });
+        return spec;
     }
 
     /** {@code subject} нового человека у подставного провайдера. */
