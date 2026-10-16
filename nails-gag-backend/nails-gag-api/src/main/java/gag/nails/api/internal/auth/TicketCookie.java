@@ -1,6 +1,7 @@
 package gag.nails.api.internal.auth;
 
 import gag.nails.api.internal.ApiProperties;
+import gag.nails.api.internal.security.SessionCookie;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,7 +31,10 @@ final class TicketCookie {
         this.secure = properties.cookies().secure();
     }
 
-    /** Первое непустое значение cookie; годен ли билет, решает модуль. */
+    /**
+     * Первое значение cookie в форме билета ({@link SessionCookie#tokenShaped}); значение другой формы — как будто
+     * cookie нет. Годен ли билет, решает модуль.
+     */
     Optional<String> read(HttpServletRequest request) {
         var cookies = request.getCookies();
         if (cookies == null) {
@@ -39,8 +43,14 @@ final class TicketCookie {
         return Arrays.stream(cookies)
                 .filter(cookie -> NAME.equals(cookie.getName()))
                 .map(Cookie::getValue)
-                .filter(value -> value != null && !value.isBlank())
+                .filter(SessionCookie::tokenShaped)
                 .findFirst();
+    }
+
+    /** Есть ли в запросе cookie билета — годная или нет. */
+    boolean sent(HttpServletRequest request) {
+        var cookies = request.getCookies();
+        return cookies != null && Arrays.stream(cookies).anyMatch(cookie -> NAME.equals(cookie.getName()));
     }
 
     void write(HttpServletResponse response, String ticket) {

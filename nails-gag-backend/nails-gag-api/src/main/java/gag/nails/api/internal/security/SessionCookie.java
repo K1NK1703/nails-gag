@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
@@ -30,13 +31,24 @@ public final class SessionCookie {
     /** Сколько значений cookie с этим именем проверяется по базе, не больше. */
     static final int MAX_CANDIDATES = 2;
 
-    /** Форма токена сессии: 32 случайных байта в base64url без дополнения — 43 символа. */
+    /**
+     * Форма токена сессии и билета входа ({@code OpaqueTokens.token()} модуля входа): 32 случайных байта в base64url
+     * без дополнения — 43 символа.
+     */
     private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9_-]{43}");
 
     private final boolean secure;
 
     SessionCookie(ApiProperties properties) {
         this.secure = properties.cookies().secure();
+    }
+
+    /**
+     * Похоже ли значение на токен {@code Sessions} или билет {@code LoginFlow}. Значение другой формы в базу не идёт —
+     * оно заведомо не годно.
+     */
+    public static boolean tokenShaped(@Nullable String value) {
+        return value != null && TOKEN.matcher(value).matches();
     }
 
     /** Есть ли в запросе cookie сессии — годная или нет. */
@@ -58,7 +70,7 @@ public final class SessionCookie {
         return Arrays.stream(cookies)
                 .filter(cookie -> NAME.equals(cookie.getName()))
                 .map(Cookie::getValue)
-                .filter(value -> value != null && TOKEN.matcher(value).matches())
+                .filter(SessionCookie::tokenShaped)
                 .limit(MAX_CANDIDATES)
                 .toList();
     }

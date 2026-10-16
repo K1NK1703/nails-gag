@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
 import gag.nails.clients.ClientService;
+import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Actor;
 import gag.nails.identity.command.CompleteRegistration;
@@ -14,9 +15,11 @@ import gag.nails.identity.model.Provider;
 import gag.nails.identity.testing.FakeProfile;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -36,6 +39,20 @@ class LoginHttpTest extends ApiTestSupport {
 
     @Autowired
     private ClientService clients;
+
+    /**
+     * Сбой подставного провайдера взведён и ещё не сработал. Контекст общий для всех тестов: если тест упал раньше,
+     * чем сбой сработал, его снимает {@link #consumeArmedProviderFailure()}, а не следующий чужой вход.
+     */
+    private boolean providerFailureArmed;
+
+    @AfterEach
+    void consumeArmedProviderFailure() {
+        if (providerFailureArmed) {
+            providerFailureArmed = false;
+            callback(startLogin(LoginPurpose.LOGIN, null), fakeCode(person()), null);
+        }
+    }
 
     @Test
     void startReturnsProviderUriAndSetsEncryptedStateCookie() {
@@ -145,13 +162,56 @@ class LoginHttpTest extends ApiTestSupport {
         var actor = sessions.authenticate(session.getValue()).orElseThrow().actor();
         assertThat(actor.clientId()).isNotNull();
         assertCleared(cookie(result, TICKET_COOKIE), "/api/auth");
-        // Билет потреблён: повтор с той же cookie — просрочен.
-        register(ticket, registration(profile, currentPolicy()))
+        // Билет потреблён: повтор с той же cookie — просрочен, и cookie снимается.
+        var replay = register(ticket, registration(profile, currentPolicy()))
                 .expectStatus()
                 .isUnauthorized()
                 .expectBody()
                 .jsonPath("$.code")
-                .isEqualTo("identity.registration_expired");
+                .isEqualTo("identity.registration_expired")
+                .returnResult();
+        assertCleared(cookie(replay, TICKET_COOKIE), "/api/auth");
+    }
+
+    @Test
+    void registrationClosesPreviousSession() {
+        var previous = signInClient();
+        var profile = person();
+        var ticket = registrationTicket(profile);
+
+        var result = as(previous, csrf(client.post().uri("/api/auth/registration")))
+                .cookie(TICKET_COOKIE, ticket)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registration(profile, currentPolicy()))
+                .exchange()
+                .expectStatus()
+                .isNoContent()
+                .expectBody()
+                .returnResult();
+
+        assertThat(sessions.authenticate(cookie(result, SESSION_COOKIE).getValue()))
+                .isPresent();
+        assertThat(sessions.authenticate(previous.cookie())).isEmpty();
+    }
+
+    @Test
+    void registrationOfBlockedCardClearsTicket() {
+        var phone = uniquePhone();
+        var card = clients.create(new CreateClient("Карточка", null, null, phone, null, null), Actor.developer());
+        var profile = new FakeProfile(uniqueSubject(), phone, null, "Карточка", null);
+        var ticket = registrationTicket(profile);
+        clients.block(card.id(), null, Actor.developer());
+
+        var result = register(ticket, registration(profile, currentPolicy()))
+                .expectStatus()
+                .isForbidden()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("identity.account_blocked")
+                .returnResult();
+
+        assertCleared(cookie(result, TICKET_COOKIE), "/api/auth");
+        assertThat(result.getResponseCookies().getFirst(SESSION_COOKIE)).isNull();
     }
 
     @Test
@@ -215,7 +275,7 @@ class LoginHttpTest extends ApiTestSupport {
     void missingCodeFailsWithoutCallingProvider() {
         var started = startLogin(LoginPurpose.LOGIN, null);
         // Провайдер упал бы, если бы до него дошло: тогда исход был бы error=provider.
-        fakeProvider.failNextExchange();
+        armProviderFailure();
 
         var result = client.get()
                 .uri("/api/auth/fake/callback?error=access_denied&state={state}", started.state())
@@ -241,6 +301,7 @@ class LoginHttpTest extends ApiTestSupport {
         // Сбой провайдера ещё взведён: до него дошёл только следующий полный вход.
         assertThat(location(callback(startLogin(LoginPurpose.LOGIN, null), fakeCode(person()), null)))
                 .isEqualTo(PROVIDER);
+        providerFailureArmed = false;
     }
 
     @Test
@@ -271,9 +332,10 @@ class LoginHttpTest extends ApiTestSupport {
     void tamperedStateCookieFails() {
         var profile = person();
         var started = startLogin(LoginPurpose.LOGIN, null);
-        var value = started.cookie();
-        var last = value.charAt(value.length() - 1);
-        var tampered = value.substring(0, value.length() - 1) + (last == 'A' ? 'B' : 'A');
+        // Один бит шифртекста (сразу за IV из 12 байт): тег не сойдётся.
+        var bytes = Base64.getUrlDecoder().decode(started.cookie());
+        bytes[12] ^= 1;
+        var tampered = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 
         for (var cookie : new String[] {tampered, "not-a-state", ""}) {
             var result = callback(new LoginStarted(started.state(), cookie), fakeCode(profile), null);
@@ -290,6 +352,86 @@ class LoginHttpTest extends ApiTestSupport {
                 .expectBody()
                 .returnResult();
         assertThat(location(result)).isEqualTo(FAILED);
+    }
+
+    @Test
+    void expiredStateFails() {
+        var started = startLogin(LoginPurpose.LOGIN, null);
+        var code = fakeCode(person());
+        clock.advance(Duration.ofMinutes(11));
+
+        var result = callback(started, code, null);
+
+        assertThat(location(result)).isEqualTo(FAILED);
+        assertCleared(cookie(result, LOGIN_COOKIE), "/api/auth");
+    }
+
+    @Test
+    void stateFromAnotherProviderFails() {
+        // Состояние, начатое у fake, предъявлено обратному вызову yandex: cookie привязана к провайдеру и не
+        // расшифровывается. Без привязки модуль дошёл бы до выключенного провайдера — error=provider.
+        var started = startLogin(LoginPurpose.LOGIN, null);
+
+        var result = client.get()
+                .uri("/api/auth/yandex/callback?code={code}&state={state}", fakeCode(person()), started.state())
+                .cookie(LOGIN_COOKIE, started.cookie())
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.SEE_OTHER)
+                .expectBody()
+                .returnResult();
+
+        assertThat(location(result)).isEqualTo(FAILED);
+        assertCleared(cookie(result, LOGIN_COOKIE), "/api/auth");
+    }
+
+    @Test
+    void signInClosesPreviousSessionAndClearsLeftoverTicket() {
+        var profile = person();
+        var known = signIn(profile);
+        var previous = signInClient();
+        var leftover = registrationTicket(person());
+
+        var started = startLogin(LoginPurpose.LOGIN, null);
+        var result = as(previous, client.get())
+                .uri("/api/auth/fake/callback?code={code}&state={state}", fakeCode(profile), started.state())
+                .cookie(LOGIN_COOKIE, started.cookie())
+                .cookie(TICKET_COOKIE, leftover)
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.SEE_OTHER)
+                .expectBody()
+                .returnResult();
+
+        assertThat(location(result)).isEqualTo(CABINET);
+        var session = cookie(result, SESSION_COOKIE).getValue();
+        assertThat(sessions.authenticate(session).orElseThrow().actor().accountId())
+                .isEqualTo(known.accountId());
+        assertThat(sessions.authenticate(previous.cookie())).isEmpty();
+        assertCleared(cookie(result, TICKET_COOKIE), "/api/auth");
+    }
+
+    @Test
+    void linkClearsLeftoverTicketAndKeepsSession() {
+        var session = signInClient();
+        var leftover = registrationTicket(person());
+        var unowned = new FakeProfile(uniqueSubject(), null, null, "Второй способ", null);
+
+        var started = startLogin(LoginPurpose.LINK, session);
+        var result = as(session, client.get())
+                .uri("/api/auth/fake/callback?code={code}&state={state}", fakeCode(unowned), started.state())
+                .cookie(LOGIN_COOKIE, started.cookie())
+                .cookie(TICKET_COOKIE, leftover)
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.SEE_OTHER)
+                .expectBody()
+                .returnResult();
+
+        assertThat(location(result)).isEqualTo(LINKED);
+        assertCleared(cookie(result, TICKET_COOKIE), "/api/auth");
+        assertThat(result.getResponseCookies().getFirst(SESSION_COOKIE)).isNull();
+        assertThat(sessions.authenticate(session.cookie())).isPresent();
     }
 
     @Test
@@ -316,6 +458,9 @@ class LoginHttpTest extends ApiTestSupport {
 
         var again = startLogin(LoginPurpose.LINK, first);
         assertThat(location(callback(again, fakeCode(profile), null))).isEqualTo(FAILED);
+
+        // Ничего не привязалось: по этому способу входа человек регистрирует свой аккаунт.
+        assertThat(signIn(profile).accountId()).isNotIn(first.accountId(), second.accountId());
     }
 
     @Test
@@ -378,6 +523,29 @@ class LoginHttpTest extends ApiTestSupport {
     }
 
     @Test
+    void confirmLinkWithBlockedCardClearsTicket() {
+        var first = signInClient();
+        var otherProfile = person();
+        var second = signIn(otherProfile);
+        var result = callback(startLogin(LoginPurpose.LINK, first), fakeCode(otherProfile), first);
+        assertThat(location(result)).isEqualTo(LINK_CONFIRM);
+        var ticket = cookie(result, TICKET_COOKIE).getValue();
+        clients.block(Objects.requireNonNull(actor(second).clientId()), null, Actor.developer());
+
+        var rejected = as(first, csrf(client.post().uri("/api/auth/link/confirm")))
+                .cookie(TICKET_COOKIE, ticket)
+                .exchange()
+                .expectStatus()
+                .isForbidden()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("identity.account_blocked")
+                .returnResult();
+
+        assertCleared(cookie(rejected, TICKET_COOKIE), "/api/auth");
+    }
+
+    @Test
     void blockedPersonIsRedirectedWithBlockedError() {
         var profile = person();
         var session = signIn(profile);
@@ -395,11 +563,12 @@ class LoginHttpTest extends ApiTestSupport {
     void providerFailureRedirectsWithProviderError() {
         var started = startLogin(LoginPurpose.LOGIN, null);
         var code = fakeCode(person());
-        fakeProvider.failNextExchange();
+        armProviderFailure();
 
         var result = callback(started, code, null);
 
         assertThat(location(result)).isEqualTo(PROVIDER);
+        providerFailureArmed = false;
         assertCleared(cookie(result, LOGIN_COOKIE), "/api/auth");
     }
 
@@ -419,6 +588,12 @@ class LoginHttpTest extends ApiTestSupport {
                 .exchange()
                 .expectStatus()
                 .isNotFound();
+    }
+
+    /** Следующий обмен кода у подставного провайдера упадёт; не сработавший сбой снимается после теста. */
+    private void armProviderFailure() {
+        fakeProvider.failNextExchange();
+        providerFailureArmed = true;
     }
 
     /** Новый человек с подтверждённым телефоном. */

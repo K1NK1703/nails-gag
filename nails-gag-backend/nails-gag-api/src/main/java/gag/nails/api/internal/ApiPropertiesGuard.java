@@ -13,9 +13,9 @@ import org.springframework.stereotype.Component;
  * Проверка настроек HTTP-слоя при старте. {@code site-origin} — абсолютный URI без пути, запроса и данных
  * пользователя, {@code https} ({@code http} допустим только для {@code localhost}), в том виде, в каком браузер
  * шлёт {@code Origin}: строчные схема и хост, без порта по умолчанию — с ним заголовок сверяется побуквенно.
- * {@code login-state-key}, если задан, — base64 ровно 32 байт; лимиты частоты положительны. При профиле
- * {@code prod} ещё нужны непустой ключ (иначе cookie этапа входа не переживают перезапуск) и
- * {@code cookies.secure=true}. Нарушение — {@link InternalException}, приложение не стартует.
+ * {@code login-state-key}, если задан, — base64 ровно 32 байт; лимиты частоты положительны; {@code redirects.*} —
+ * пути этого сайта. При профиле {@code prod} ещё нужны непустой ключ (иначе cookie этапа входа не переживают
+ * перезапуск) и {@code cookies.secure=true}. Нарушение — {@link InternalException}, приложение не стартует.
  */
 @Component
 class ApiPropertiesGuard implements InitializingBean {
@@ -36,6 +36,7 @@ class ApiPropertiesGuard implements InitializingBean {
         requireSiteOrigin(properties.siteOrigin());
         requireLoginStateKey(properties.loginStateKey());
         requireRateLimits(properties.rateLimits());
+        requireRedirects(properties.redirects());
         if (environment.matchesProfiles(PRODUCTION_PROFILE)) {
             if (properties.loginStateKey().isBlank()) {
                 throw new InternalException("nails-gag.api.login-state-key is required under the prod profile");
@@ -77,6 +78,30 @@ class ApiPropertiesGuard implements InitializingBean {
         }
         if ((https && uri.getPort() == 443) || (localHttp && uri.getPort() == 80)) {
             throw new InternalException(key + " must not name the default port of its scheme");
+        }
+    }
+
+    private static void requireRedirects(ApiProperties.Redirects redirects) {
+        requireRedirectPath("nails-gag.api.redirects.signed-in", redirects.signedIn());
+        requireRedirectPath("nails-gag.api.redirects.registration", redirects.registration());
+        requireRedirectPath("nails-gag.api.redirects.link-confirm", redirects.linkConfirm());
+        requireRedirectPath("nails-gag.api.redirects.linked", redirects.linked());
+        requireRedirectPath("nails-gag.api.redirects.failure", redirects.failure());
+    }
+
+    /**
+     * Путь переходов после входа склеивается с {@code site-origin}, поэтому он обязан остаться путём того же сайта:
+     * начинается с одного {@code /} ({@code //host} и {@code /\host} браузер прочтёт как другой сайт), без обратной
+     * косой черты, {@code #} (к пути отказа дописывается {@code ?error=…}) и пробельных или управляющих символов.
+     */
+    private static void requireRedirectPath(String key, String path) {
+        if (!path.startsWith("/") || path.startsWith("//")) {
+            throw new InternalException(key + " must be a path starting with a single /");
+        }
+        var unsafe = path.chars()
+                .anyMatch(c -> c == '\\' || c == '#' || Character.isWhitespace(c) || Character.isISOControl(c));
+        if (unsafe) {
+            throw new InternalException(key + " must not contain backslashes, #, whitespace or control characters");
         }
     }
 

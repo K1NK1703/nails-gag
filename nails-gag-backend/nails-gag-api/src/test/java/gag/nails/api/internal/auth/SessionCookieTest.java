@@ -35,6 +35,24 @@ class SessionCookieTest extends ApiTestSupport {
     }
 
     @Test
+    void logoutClearsLeftoverTicket() {
+        var session = signInClient();
+
+        var result = as(session, csrf(client.post().uri("/api/auth/logout")))
+                .cookie(TICKET_COOKIE, "A".repeat(43))
+                .exchange()
+                .expectStatus()
+                .isNoContent()
+                .expectBody()
+                .returnResult();
+
+        var ticket = cookie(result, TICKET_COOKIE);
+        assertThat(ticket.getValue()).isEmpty();
+        assertThat(ticket.getMaxAge()).isEqualTo(Duration.ZERO);
+        assertThat(ticket.getPath()).isEqualTo("/api/auth");
+    }
+
+    @Test
     void logoutWithoutSessionIsNoContent() {
         var result = csrf(client.post().uri("/api/auth/logout"))
                 .exchange()

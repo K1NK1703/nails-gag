@@ -3,6 +3,7 @@ package gag.nails.api.internal.auth;
 import gag.nails.api.internal.ApiProperties;
 import gag.nails.common.error.InternalException;
 import gag.nails.identity.model.LoginState;
+import gag.nails.identity.model.Provider;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -33,7 +34,8 @@ import tools.jackson.databind.json.JsonMapper;
  * значение зашифровано AES-256-GCM серверным ключом: прочитать его нельзя, подделать — тоже (не сойдётся тег).
  *
  * <p>Значение — base64url без дополнения от {@code IV (12 байт) ‖ шифртекст+тег (128 бит)}, дополнительные
- * аутентифицированные данные — имя cookie, открытый текст — JSON состояния. Ключ —
+ * аутентифицированные данные — {@code ng_login:<ПРОВАЙДЕР>} (состояние, начатое у одного провайдера, не примет
+ * обратный вызов другого), открытый текст — JSON состояния. Ключ —
  * {@code nails-gag.api.login-state-key}; пустой (только вне {@code prod}, это проверяет {@code ApiPropertiesGuard}) —
  * случайный на время работы процесса.
  * Атрибуты: {@code HttpOnly}, {@code Secure} из настроек, {@code SameSite=Lax} (обратный вызов — межсайтовый
@@ -53,7 +55,6 @@ final class LoginStateCookie {
     private static final int KEY_BYTES = 32;
     private static final int IV_BYTES = 12;
     private static final int TAG_BITS = 128;
-    private static final byte[] AAD = NAME.getBytes(StandardCharsets.US_ASCII);
 
     /** Сколько значений cookie с этим именем пробуется расшифровать, не больше. */
     private static final int MAX_CANDIDATES = 2;
@@ -71,10 +72,10 @@ final class LoginStateCookie {
 
     /**
      * Состояние из cookie запроса. Пусто, если cookie нет или ни одно из первых {@value #MAX_CANDIDATES} значений не
-     * расшифровалось: неверный base64, короткое значение, не сошёлся тег, не разобрался JSON. Не бросает: значение
-     * прислал браузер.
+     * расшифровалось: неверный base64, короткое значение, не сошёлся тег (в том числе вход начат у другого
+     * провайдера), не разобрался JSON. Не бросает: значение прислал браузер.
      */
-    Optional<LoginState> read(HttpServletRequest request) {
+    Optional<LoginState> read(HttpServletRequest request, Provider provider) {
         var cookies = request.getCookies();
         if (cookies == null) {
             return Optional.empty();
@@ -83,14 +84,15 @@ final class LoginStateCookie {
                 .filter(cookie -> NAME.equals(cookie.getName()))
                 .map(Cookie::getValue)
                 .limit(MAX_CANDIDATES)
-                .map(this::decrypt)
+                .map(value -> decrypt(value, provider))
                 .flatMap(Optional::stream)
                 .findFirst();
     }
 
-    void write(HttpServletResponse response, LoginState state) {
+    void write(HttpServletResponse response, Provider provider, LoginState state) {
         response.addHeader(
-                HttpHeaders.SET_COOKIE, cookie(encrypt(state), MAX_AGE).toString());
+                HttpHeaders.SET_COOKIE,
+                cookie(encrypt(state, provider), MAX_AGE).toString());
     }
 
     /** Та же cookie с пустым значением и {@code Max-Age=0}: браузер её удаляет. */
@@ -98,14 +100,14 @@ final class LoginStateCookie {
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString());
     }
 
-    private String encrypt(LoginState state) {
+    private String encrypt(LoginState state, Provider provider) {
         var iv = new byte[IV_BYTES];
         random.nextBytes(iv);
         byte[] sealed;
         try {
             var cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, iv));
-            cipher.updateAAD(AAD);
+            cipher.updateAAD(aad(provider));
             sealed = cipher.doFinal(mapper.writeValueAsBytes(state));
         } catch (GeneralSecurityException e) {
             throw new InternalException("login state encryption failed", e);
@@ -117,7 +119,7 @@ final class LoginStateCookie {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
     }
 
-    private Optional<LoginState> decrypt(String value) {
+    private Optional<LoginState> decrypt(String value, Provider provider) {
         byte[] bytes;
         try {
             bytes = Base64.getUrlDecoder().decode(value);
@@ -131,7 +133,7 @@ final class LoginStateCookie {
         try {
             var cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, bytes, 0, IV_BYTES));
-            cipher.updateAAD(AAD);
+            cipher.updateAAD(aad(provider));
             json = cipher.doFinal(bytes, IV_BYTES, bytes.length - IV_BYTES);
         } catch (AEADBadTagException e) {
             return Optional.empty();
@@ -143,6 +145,11 @@ final class LoginStateCookie {
         } catch (JacksonException e) {
             return Optional.empty();
         }
+    }
+
+    /** Дополнительные аутентифицированные данные: имя cookie и провайдер, у которого начат вход. */
+    private static byte[] aad(Provider provider) {
+        return (NAME + ":" + provider.name()).getBytes(StandardCharsets.US_ASCII);
     }
 
     private ResponseCookie cookie(String value, Duration maxAge) {

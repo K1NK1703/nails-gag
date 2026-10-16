@@ -24,8 +24,8 @@ import gag.nails.identity.model.SignedIn;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,7 +89,7 @@ class AuthController {
             throw new UnauthenticatedException();
         }
         var start = loginFlow.start(provider, body.purpose(), actor.orElse(null));
-        loginStateCookie.write(response, start.state());
+        loginStateCookie.write(response, provider, start.state());
         return new LoginRedirect(start.authorizationUri());
     }
 
@@ -97,7 +97,8 @@ class AuthController {
      * Возврат браузера от провайдера — всегда {@code 303} на страницу сайта (§6.3), cookie этапа входа снимается при
      * любом исходе. До модуля отсекается: нет или не расшифровалось состояние; нет {@code code} или {@code state}
      * (пользователь отказал, провайдер прислал {@code error}); привязка без сессии того же аккаунта, что начал её.
-     * Совпадение {@code state} и срок проверяет модуль — так неудача попадает в журнал входов.
+     * Совпадение {@code state} и срок проверяет модуль — так неудача попадает в журнал входов. Непредусмотренная
+     * ошибка — тоже отказ {@code failed} (и ERROR в логе): ответ получает браузер, {@code problem+json} ему ни к чему.
      */
     @GetMapping(PROVIDER + "/callback")
     ResponseEntity<Void> callback(
@@ -111,7 +112,7 @@ class AuthController {
             HttpServletRequest request,
             HttpServletResponse response) {
         loginStateCookie.clear(response);
-        var loginState = loginStateCookie.read(request);
+        var loginState = loginStateCookie.read(request, provider);
         if (loginState.isEmpty()) {
             return rejected(provider, "no readable login state");
         }
@@ -119,8 +120,7 @@ class AuthController {
             return rejected(provider, "no code or state from the provider");
         }
         var expected = loginState.get();
-        if (expected.purpose() == LoginPurpose.LINK
-                && !Objects.equals(actor.map(Actor::accountId).orElse(null), expected.accountId())) {
+        if (expected.purpose() == LoginPurpose.LINK && !sameAccount(actor, expected.accountId())) {
             return rejected(provider, "link without the session that started it");
         }
         try {
@@ -128,7 +128,8 @@ class AuthController {
                     loginFlow.complete(provider, new AuthorizationResponse(code, state, deviceId), expected, client);
             return switch (result) {
                 case SignedIn signedIn -> {
-                    sessionCookie.write(response, signedIn.sessionToken());
+                    replaceSession(request, response, signedIn);
+                    clearLeftoverTicket(request, response);
                     yield redirects.signedIn();
                 }
                 case RegistrationRequired required -> {
@@ -139,7 +140,10 @@ class AuthController {
                     ticketCookie.write(response, required.ticket());
                     yield redirects.linkConfirm();
                 }
-                case Linked ignored -> redirects.linked();
+                case Linked ignored -> {
+                    clearLeftoverTicket(request, response);
+                    yield redirects.linked();
+                }
             };
         } catch (LoginFailedException e) {
             return redirects.failure(Failure.FAILED);
@@ -153,6 +157,11 @@ class AuthController {
                     "{} login callback hit a database lock failure: {}",
                     provider,
                     e.getClass().getSimpleName());
+            return redirects.failure(Failure.FAILED);
+        } catch (RuntimeException e) {
+            // Ответ получает браузер, а не JS: вместо problem+json — та же страница отказа. Токенов и кодов в
+            // исключениях модуля нет, стек нужен для разбора.
+            log.error("{} login callback failed", provider, e);
             return redirects.failure(Failure.FAILED);
         }
     }
@@ -182,7 +191,7 @@ class AuthController {
             ticketCookie.clear(response);
             throw e;
         }
-        sessionCookie.write(response, signedIn.sessionToken());
+        replaceSession(request, response, signedIn);
         ticketCookie.clear(response);
         return ResponseEntity.noContent().build();
     }
@@ -207,6 +216,7 @@ class AuthController {
     ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         ApiRequestAttributes.sessionToken(request).ifPresent(sessions::close);
         sessionCookie.clear(response);
+        clearLeftoverTicket(request, response);
         return ResponseEntity.noContent().build();
     }
 
@@ -216,6 +226,34 @@ class AuthController {
         sessions.closeAll(actor);
         sessionCookie.clear(response);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Привязку продолжает только сессия того аккаунта, что её начал. Состояние привязки без аккаунта модуль не
+     * выдаёт; если оно всё же пришло — отказ, а не совпадение {@code null} с {@code null}.
+     */
+    private static boolean sameAccount(Optional<Actor> actor, @Nullable UUID stateAccountId) {
+        return stateAccountId != null
+                && stateAccountId.equals(actor.map(Actor::accountId).orElse(null));
+    }
+
+    /**
+     * Новый вход в этом браузере: прежняя сессия, если запрос её нёс, закрывается — её cookie сейчас заменится, и
+     * открытой без владельца она остаться не должна.
+     */
+    private void replaceSession(HttpServletRequest request, HttpServletResponse response, SignedIn signedIn) {
+        ApiRequestAttributes.sessionToken(request).ifPresent(sessions::close);
+        sessionCookie.write(response, signedIn.sessionToken());
+    }
+
+    /**
+     * Брошенный билет регистрации (человек ушёл с экрана регистрации) снимается при входе, привязке и выходе: на общем
+     * компьютере следующий человек не увидит по нему чужую подстановку.
+     */
+    private void clearLeftoverTicket(HttpServletRequest request, HttpServletResponse response) {
+        if (ticketCookie.sent(request)) {
+            ticketCookie.clear(response);
+        }
     }
 
     private ResponseEntity<Void> rejected(Provider provider, String reason) {

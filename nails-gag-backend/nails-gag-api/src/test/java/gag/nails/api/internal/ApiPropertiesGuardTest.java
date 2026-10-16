@@ -63,6 +63,23 @@ class ApiPropertiesGuardTest {
     }
 
     @Test
+    void rejectsUnsafeRedirectPaths() {
+        // Путь склеивается с site-origin: «//evil.example» или «/\evil.example» браузер понял бы как другой сайт.
+        List.of("signed-in", "registration", "link-confirm", "linked", "failure")
+                .forEach(redirect -> List.of(
+                                "",
+                                "cabinet",
+                                "https://evil.example",
+                                "//evil.example",
+                                "/\\evil.example",
+                                "/cabinet#x",
+                                "/cab inet",
+                                "/cab\tinet")
+                        .forEach(
+                                path -> assertStopsTheApplication("nails-gag.api.redirects." + redirect + "=" + path)));
+    }
+
+    @Test
     void prodRequiresKeyAndSecureCookies() {
         assertStopsTheApplication("spring.profiles.active=prod");
         assertStopsTheApplication(
