@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -19,6 +21,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class ProblemWriter {
+
+    private static final Logger log = LoggerFactory.getLogger(ProblemWriter.class);
 
     /** Ключ MDC, куда трассировка Spring Boot кладёт идентификатор трассы. */
     static final String TRACE_ID = "traceId";
@@ -57,10 +61,20 @@ public class ProblemWriter {
         write(response, problem(request, status, code));
     }
 
+    /**
+     * Пишет тело, если ответ ещё не начат: уже отправленные заголовки не перепишешь, тогда только DEBUG. Начатое, но не
+     * отправленное тело сбрасывается. JSON сначала собирается в байты — Jackson не закрывает поток контейнера.
+     */
     public void write(HttpServletResponse response, Problem problem) throws IOException {
+        if (response.isCommitted()) {
+            log.debug("Response for {} already committed, problem {} not written", problem.instance(), problem.code());
+            return;
+        }
+        response.resetBuffer();
+        var body = json.mapper().writeValueAsBytes(problem);
         response.setStatus(problem.status());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        json.mapper().writeValue(response.getOutputStream(), problem);
+        response.setContentLength(body.length);
+        response.getOutputStream().write(body);
     }
 }

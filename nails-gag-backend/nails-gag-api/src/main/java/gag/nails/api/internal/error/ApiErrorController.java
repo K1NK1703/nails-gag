@@ -1,5 +1,6 @@
 package gag.nails.api.internal.error;
 
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -13,9 +14,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code /error} вместо стандартного контроллера Spring Boot: ошибки, не дошедшие до {@code DispatcherServlet}
- * (отказ Tomcat, исключение вне наших фильтров), тоже отвечают {@link Problem}. Только статус и код по
- * статусу — без сообщения, исключения и стека: причину в лог уже записал контейнер.
+ * {@code /error} вместо стандартного контроллера Spring Boot: ошибки, которые контейнер переадресует сюда
+ * ({@code response.sendError(...)} мимо исключений, исключение, вылетевшее из фильтра), тоже отвечают
+ * {@link Problem}. Только статус и код по статусу — без сообщения, исключения и стека: причину в лог уже записал
+ * контейнер. Запросы, которые Tomcat отвергает ещё до фильтров (кривой URI в {@code CoyoteAdapter}), сюда не
+ * доходят и отвечают как решит Tomcat. Прямой запрос на {@code /error} — не переадресация ошибки, а адрес,
+ * которого у API нет: {@code 404 common.not_found}.
  */
 @RestController
 class ApiErrorController implements ErrorController {
@@ -28,7 +32,7 @@ class ApiErrorController implements ErrorController {
 
     @RequestMapping("${spring.web.error.path:${error.path:/error}}")
     ResponseEntity<Problem> error(HttpServletRequest request) {
-        var status = status(request);
+        var status = request.getDispatcherType() == DispatcherType.ERROR ? status(request) : HttpStatus.NOT_FOUND;
         var instance = request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI) instanceof String uri
                 ? uri
                 : request.getRequestURI();

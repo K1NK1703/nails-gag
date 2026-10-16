@@ -13,7 +13,9 @@ class ProblemFormatTest extends ApiTestSupport {
 
     @Test
     void validationListsEveryViolation() {
+        // Причины — тексты Bean Validation на английском при любом Accept-Language.
         csrf(client.post().uri("/api/test/validated"))
+                .header("Accept-Language", "ru-RU")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("{\"phone\":\"123\",\"name\":\" \"}")
                 .exchange()
@@ -27,11 +29,11 @@ class ProblemFormatTest extends ApiTestSupport {
                 .jsonPath("$.errors[0].field")
                 .isEqualTo("name")
                 .jsonPath("$.errors[0].reason")
-                .isNotEmpty()
+                .isEqualTo("must not be blank")
                 .jsonPath("$.errors[1].field")
                 .isEqualTo("phone")
                 .jsonPath("$.errors[1].reason")
-                .isNotEmpty()
+                .isEqualTo("must match \"^\\+7\\d{10}$\"")
                 .jsonPath("$.params")
                 .doesNotExist();
     }
@@ -136,6 +138,142 @@ class ProblemFormatTest extends ApiTestSupport {
                 .expectBody()
                 .jsonPath("$.code")
                 .isEqualTo("common.method_not_allowed");
+    }
+
+    @Test
+    void missingParameterNamesIt() {
+        client.get()
+                .uri("/api/test/param")
+                .exchange()
+                .expectStatus()
+                .isBadRequest()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.validation")
+                .jsonPath("$.errors.length()")
+                .isEqualTo(1)
+                .jsonPath("$.errors[0].field")
+                .isEqualTo("count")
+                .jsonPath("$.errors[0].reason")
+                .isEqualTo("required");
+    }
+
+    @Test
+    void parameterOfWrongTypeNamesIt() {
+        client.get()
+                .uri("/api/test/param?count=many")
+                .exchange()
+                .expectStatus()
+                .isBadRequest()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.validation")
+                .jsonPath("$.errors[0].field")
+                .isEqualTo("count")
+                .jsonPath("$.errors[0].reason")
+                .isEqualTo("invalid value");
+    }
+
+    @Test
+    void parameterConstraintNamesTheRequestParameter() {
+        client.get()
+                .uri("/api/test/min?size=0")
+                .exchange()
+                .expectStatus()
+                .isBadRequest()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.validation")
+                .jsonPath("$.errors.length()")
+                .isEqualTo(1)
+                .jsonPath("$.errors[0].field")
+                .isEqualTo("size")
+                .jsonPath("$.errors[0].reason")
+                .isEqualTo("must be greater than or equal to 1");
+    }
+
+    @Test
+    void malformedJsonHasNoFieldErrors() {
+        csrf(client.post().uri("/api/test/json"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"time\":")
+                .exchange()
+                .expectStatus()
+                .isBadRequest()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.validation")
+                .jsonPath("$.errors")
+                .doesNotExist();
+    }
+
+    @Test
+    void anonymousAccessDeniedIsUnauthenticated() {
+        client.get()
+                .uri("/api/test/throw/access-denied")
+                .exchange()
+                .expectStatus()
+                .isUnauthorized()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.unauthenticated");
+    }
+
+    /** Не сотрудник не отличает чужое от несуществующего: общий код и никаких параметров. */
+    @Test
+    void notFoundIsMaskedForNonStaff() {
+        var body = client.get()
+                .uri("/api/test/throw/booking-not-found")
+                .exchange()
+                .expectStatus()
+                .isNotFound()
+                .expectBody(String.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertThat(body)
+                .contains("\"code\":\"common.not_found\"")
+                .doesNotContain("\"params\"")
+                .doesNotContain(ProblemTestController.BOOKING_ID.toString());
+    }
+
+    @Test
+    void serverErrorStatusIsKeptWithoutDetails() {
+        var body = client.get()
+                .uri("/api/test/throw/unavailable")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+                .expectBody(String.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertThat(body).contains("\"code\":\"common.internal\"").doesNotContain(ProblemTestController.SECRET);
+    }
+
+    @Test
+    void sendErrorIsAnsweredByErrorController() {
+        client.get()
+                .uri("/api/test/send-error")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.CONTENT_TOO_LARGE)
+                .expectHeader()
+                .contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.bad_request")
+                .jsonPath("$.instance")
+                .isEqualTo("/api/test/send-error");
+
+        client.get()
+                .uri("/error")
+                .exchange()
+                .expectStatus()
+                .isNotFound()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.not_found");
     }
 
     @Test

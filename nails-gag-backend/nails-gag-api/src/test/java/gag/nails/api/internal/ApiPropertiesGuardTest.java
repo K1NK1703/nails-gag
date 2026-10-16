@@ -29,7 +29,11 @@ class ApiPropertiesGuardTest {
                         "https://nails.gag/app",
                         "https://nails.gag?x=1",
                         "https://user@nails.gag",
-                        "ht tp://nails.gag")
+                        "ht tp://nails.gag",
+                        "HTTPS://nails.gag",
+                        "https://Nails.gag",
+                        "https://nails.gag:443",
+                        "http://localhost:80")
                 .forEach(siteOrigin -> assertStopsTheApplication("nails-gag.api.site-origin=" + siteOrigin));
     }
 
@@ -61,6 +65,8 @@ class ApiPropertiesGuardTest {
 
     @Test
     void acceptsLocalDefaults() {
+        runner.withPropertyValues("nails-gag.api.site-origin=https://nails.gag:8443")
+                .run(context -> assertThat(context).hasNotFailed());
         runner.run(context -> {
             assertThat(context).hasNotFailed().hasSingleBean(ApiPropertiesGuard.class);
             var properties = context.getBean(ApiProperties.class);

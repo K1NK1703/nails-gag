@@ -17,6 +17,14 @@ class ExceptionsTest {
     }
 
     @Test
+    void validationExceptionExposesFieldAndReason() {
+        var e = new ValidationException("phone", "invalid");
+
+        assertThat(e.field()).isEqualTo("phone");
+        assertThat(e.reason()).isEqualTo("invalid");
+    }
+
+    @Test
     void internalExceptionKeepsCause() {
         var cause = new IllegalStateException("driver failed");
         var e = new InternalException("cannot read slot", cause);
