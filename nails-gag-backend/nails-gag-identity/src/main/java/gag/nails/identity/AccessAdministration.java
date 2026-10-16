@@ -5,6 +5,8 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.common.paging.Paged;
+import gag.nails.common.paging.Paging;
 import gag.nails.identity.command.CreateRole;
 import gag.nails.identity.command.UpdateRole;
 import gag.nails.identity.error.AccountNotFoundException;
@@ -111,6 +113,9 @@ public interface AccessAdministration {
      */
     List<AccessChangeView> accessJournal(int limit, Actor actor);
 
+    /** Журнал прав постранично, новые первыми — в том же порядке, что {@link #accessJournal(int, Actor)}. */
+    Paged<AccessChangeView> accessJournal(Paging paging, Actor actor);
+
     /**
      * Журнал входов, новые первыми.
      *
@@ -118,4 +123,7 @@ public interface AccessAdministration {
      * @throws ValidationException {@code limit} вне диапазона
      */
     List<LoginEventView> loginJournal(int limit, Actor actor);
+
+    /** Журнал входов постранично, новые первыми — в том же порядке, что {@link #loginJournal(int, Actor)}. */
+    Paged<LoginEventView> loginJournal(Paging paging, Actor actor);
 }

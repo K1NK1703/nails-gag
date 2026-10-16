@@ -1,5 +1,7 @@
 package gag.nails.identity.internal.login;
 
+import gag.nails.common.paging.Paged;
+import gag.nails.common.paging.Paging;
 import gag.nails.identity.model.ClientInfo;
 import gag.nails.identity.model.LoginEventView;
 import gag.nails.identity.model.LoginOutcome;
@@ -9,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 /**
@@ -46,6 +49,12 @@ public class LoginEvents {
         return events.findAllByOrderByOccurredAtDescIdDesc(Limit.of(limit)).stream()
                 .map(LoginEventEntity::toView)
                 .toList();
+    }
+
+    /** Постранично, в порядке {@link #latest}. */
+    public Paged<LoginEventView> page(Paging paging) {
+        var page = events.findAllByOrderByOccurredAtDescIdDesc(PageRequest.of(paging.page(), paging.size()));
+        return Paged.of(page.map(LoginEventEntity::toView).getContent(), paging, page.getTotalElements());
     }
 
     private static @Nullable String truncate(@Nullable String value, int max) {
