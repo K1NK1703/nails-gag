@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
+import gag.nails.identity.model.LoginPurpose;
 import java.time.Duration;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient.ResponseSpec;
 
@@ -116,6 +119,20 @@ class RateLimitTest extends ApiTestSupport {
     }
 
     @Test
+    void startIsLimitedByAuthBucket() {
+        for (var i = 0; i < AUTH; i++) {
+            start("198.51.100.15").expectStatus().isOk();
+        }
+
+        start("198.51.100.15")
+                .expectStatus()
+                .isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.rate_limited");
+    }
+
+    @Test
     void signedInRequestToAuthPathUsesIpBucket() {
         var session = signInClient();
 
@@ -154,6 +171,14 @@ class RateLimitTest extends ApiTestSupport {
             get("/api/authx", "198.51.100.14").expectStatus().isNotFound();
         }
         get("/api/authx", "198.51.100.14").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    private ResponseSpec start(String ip) {
+        return csrf(client.post().uri("/api/auth/fake/start"))
+                .header("X-Forwarded-For", ip)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("purpose", LoginPurpose.LOGIN))
+                .exchange();
     }
 
     private ResponseSpec get(String uri, String ip) {
