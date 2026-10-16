@@ -14,3 +14,8 @@ nails-gag:
   identity:
     fake-provider:
       enabled: true
+  api:
+    # Vite отдаёт сайт на 5173 и проксирует /api на 8080.
+    site-origin: http://localhost:5173
+    cookies:
+      secure: false

@@ -29,6 +29,8 @@ spring-boot-docker-compose = { module = "org.springframework.boot:spring-boot-do
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
+# RestTestClient и @AutoConfigureRestTestClient для HTTP-тестов модуля api
+spring-boot-resttestclient = { module = "org.springframework.boot:spring-boot-resttestclient" }
 
 spring-modulith-starter-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
 spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }
