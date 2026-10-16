@@ -1,6 +1,7 @@
 package gag.nails.api.internal.auth;
 
 import gag.nails.api.internal.ApiProperties;
+import gag.nails.api.internal.http.ApiPaths;
 import gag.nails.common.error.InternalException;
 import gag.nails.identity.model.LoginState;
 import gag.nails.identity.model.Provider;
@@ -47,12 +48,11 @@ final class LoginStateCookie {
     private static final Logger log = LoggerFactory.getLogger(LoginStateCookie.class);
 
     static final String NAME = "ng_login";
-    static final String PATH = "/api/auth";
+    static final String PATH = ApiPaths.AUTH;
     static final Duration MAX_AGE = Duration.ofMinutes(10);
 
     private static final String ALGORITHM = "AES";
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
-    private static final int KEY_BYTES = 32;
     private static final int IV_BYTES = 12;
     private static final int TAG_BITS = 128;
 
@@ -65,7 +65,7 @@ final class LoginStateCookie {
     private final JsonMapper mapper;
 
     LoginStateCookie(ApiProperties properties, JsonMapper mapper) {
-        this.key = new SecretKeySpec(keyBytes(properties.loginStateKey()), ALGORITHM);
+        this.key = new SecretKeySpec(keyBytes(properties), ALGORITHM);
         this.secure = properties.cookies().secure();
         this.mapper = mapper;
     }
@@ -162,24 +162,17 @@ final class LoginStateCookie {
                 .build();
     }
 
-    /** Ключ из настроек; форму при старте уже проверил {@code ApiPropertiesGuard}, здесь — на случай порядка бинов. */
-    private byte[] keyBytes(String configured) {
-        if (configured.isBlank()) {
+    /**
+     * Ключ из настроек (форму проверяет {@link ApiProperties#loginStateKeyBytes()} — та же проверка, что при старте);
+     * не задан — случайный на время работы процесса.
+     */
+    private byte[] keyBytes(ApiProperties properties) {
+        return properties.loginStateKeyBytes().orElseGet(() -> {
             log.warn("nails-gag.api.login-state-key is empty: using a random key, sign-ins in progress will not"
                     + " survive a restart");
-            var bytes = new byte[KEY_BYTES];
+            var bytes = new byte[ApiProperties.LOGIN_STATE_KEY_BYTES];
             random.nextBytes(bytes);
             return bytes;
-        }
-        byte[] bytes;
-        try {
-            bytes = Base64.getDecoder().decode(configured);
-        } catch (IllegalArgumentException e) {
-            throw new InternalException("nails-gag.api.login-state-key is not valid base64", e);
-        }
-        if (bytes.length != KEY_BYTES) {
-            throw new InternalException("nails-gag.api.login-state-key must decode to exactly " + KEY_BYTES + " bytes");
-        }
-        return bytes;
+        });
     }
 }

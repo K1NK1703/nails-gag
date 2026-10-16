@@ -34,7 +34,7 @@ nails-gag:
   api:
     # Origin сайта: с ним сверяется Origin изменяющих запросов (CSRF), от него строятся переходы после входа.
     # Абсолютный, без пути и завершающего слэша; https (http — только для localhost).
-    site-origin: https://nails.gag
+    site-origin: https://nails-gag.ru
     cookies:
       # Атрибут Secure у cookie слоя; false только в профиле local, иначе браузер не сохранит их на http://localhost.
       secure: true

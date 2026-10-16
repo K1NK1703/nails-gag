@@ -32,10 +32,8 @@ import org.springframework.test.web.servlet.client.RestTestClient.RequestHeaders
 /** Общая обвязка HTTP-тестов {@code api}: клиент, сервисы модулей для подготовки данных, уникальные люди. */
 public abstract class ApiTestSupport {
 
-    /** Служебный заголовок и origin, которые ждёт защита от CSRF. */
+    /** Служебный заголовок, который ждёт защита от CSRF. */
     public static final String REQUESTED_WITH = "nails.gag";
-
-    public static final String ORIGIN = "http://localhost";
 
     /** Cookie сессии. */
     public static final String SESSION_COOKIE = "ng_session";
@@ -46,7 +44,10 @@ public abstract class ApiTestSupport {
     /** Cookie билета регистрации или привязки. */
     public static final String TICKET_COOKIE = "ng_ticket";
 
-    /** Адрес сайта, на который обратный вызов отправляет браузер: {@code site-origin} в {@link ApiTest}. */
+    /**
+     * Origin сайта — {@code site-origin} в {@link ApiTest}: его ждёт защита от CSRF, на него обратный вызов отправляет
+     * браузер.
+     */
     public static final String SITE = "http://localhost";
 
     /** {@code subject} разработчика из {@code bootstrap-developers} в {@link ApiTest}. */
@@ -107,7 +108,7 @@ public abstract class ApiTestSupport {
     protected static <S extends RequestHeadersSpec<?>> S csrf(S spec) {
         spec.headers(headers -> {
             headers.set("X-Requested-With", REQUESTED_WITH);
-            headers.set("Origin", ORIGIN);
+            headers.set("Origin", SITE);
         });
         return spec;
     }

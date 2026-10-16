@@ -1,6 +1,7 @@
 package gag.nails.api.internal.auth;
 
 import gag.nails.api.internal.auth.LoginRedirects.Failure;
+import gag.nails.api.internal.http.ApiPaths;
 import gag.nails.api.internal.http.ApiRequestAttributes;
 import gag.nails.api.internal.me.Me;
 import gag.nails.api.internal.me.MeAssembler;
@@ -53,7 +54,7 @@ import org.springframework.web.bind.annotation.RestController;
  * неудачных и заблокированных входов. Токены, билеты, коды и {@code state} не логируются.
  */
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping(ApiPaths.AUTH)
 class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);

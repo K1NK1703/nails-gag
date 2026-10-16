@@ -13,12 +13,11 @@ import org.springframework.web.client.RestClient;
 
 /**
  * springdoc подключён как {@code developmentOnly} (спецификация API, §5.5): он есть только при {@code bootRun}, а на
- * рабочем classpath — в {@code app.jar} и образе — его нет, и схема API наружу не видна. Адреса заданы, как в профиле
- * {@code local}: даже с ними схемы нет.
+ * рабочем classpath — в {@code app.jar} и образе — его нет, и схема API наружу не видна. Без springdoc адреса отвечают
+ * {@code 404} при любых настройках, поэтому настоящая гарантия — проверка classpath; контекст общий с
+ * {@code ApplicationSmokeTest}.
  */
-@SpringBootTest(
-        webEnvironment = WebEnvironment.RANDOM_PORT,
-        properties = {"springdoc.api-docs.path=/api/openapi.json", "springdoc.swagger-ui.path=/api/docs"})
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @Import(PostgresTestcontainers.class)
 class OpenApiExposureTest {
 

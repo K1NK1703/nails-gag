@@ -109,7 +109,7 @@ SPRING_PROFILES_ACTIVE=local ./gradlew :nails-gag-app:bootRun   # поднима
 
 Подпакет без содержимого не создаётся (`command`/`event` есть не у всех модулей; `catalog` с одной подобластью оставляет `internal` плоским). Внутри `internal` подпакеты только по подобласти, не по типу классов; класс, нужный соседней подобласти, становится `public`, остальные остаются package-private.
 
-`nails-gag-api` публичного Java-API не имеет: в корне `gag.nails.api` только `package-info.java`, всё остальное — в `internal.<область>` (`auth`, `security`, `error`, `http`, `me`, `documents`).
+`nails-gag-api` публичного Java-API не имеет: в корне `gag.nails.api` только `package-info.java`, всё остальное — в `internal` (настройки модуля) и `internal.<область>` (`auth`, `security`, `error`, `http`, `me`, `documents`).
 
 ### HTTP API
 

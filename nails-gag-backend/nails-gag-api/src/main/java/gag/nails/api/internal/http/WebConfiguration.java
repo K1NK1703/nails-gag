@@ -6,8 +6,8 @@ import gag.nails.identity.model.Provider;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.convert.converter.Converter;
 import org.springframework.format.FormatterRegistry;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -20,8 +20,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
 
-    /** Перечисления, которые в пути пишутся по имени в нижнем регистре; так же их показывает схема OpenAPI. */
-    static final Set<Class<? extends Enum<?>>> LOWER_CASE_PATH_ENUMS = Set.of(Provider.class, DocumentKind.class);
+    /** Перечисления, которые в пути пишутся по имени в нижнем регистре: провайдер входа и документ. */
+    private static final List<LowerCaseEnum<?>> PATH_ENUMS =
+            List.of(new LowerCaseEnum<>(Provider.class), new LowerCaseEnum<>(DocumentKind.class));
+
+    /** Типы из {@link #PATH_ENUMS}; по ним же схема OpenAPI показывает значения в нижнем регистре. */
+    static final Set<Class<?>> LOWER_CASE_PATH_ENUMS =
+            PATH_ENUMS.stream().map(LowerCaseEnum::type).collect(Collectors.toUnmodifiableSet());
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
@@ -31,31 +36,17 @@ class WebConfiguration implements WebMvcConfigurer {
 
     @Override
     public void addFormatters(FormatterRegistry registry) {
-        registry.addConverter(new ProviderConverter());
-        registry.addConverter(new DocumentKindConverter());
+        PATH_ENUMS.forEach(pathEnum -> pathEnum.register(registry));
     }
 
     /**
-     * {@code yandex} → {@link Provider#YANDEX}. Шаблон адреса пропускает только известные имена, поэтому другое
-     * имя до конвертера не доходит, а даёт {@code 404}.
+     * {@code yandex} → {@code Provider.YANDEX}, {@code policy} → {@code DocumentKind.POLICY}. Шаблон адреса пропускает
+     * только известные имена, поэтому другое имя до конвертера не доходит, а даёт {@code 404}.
      */
-    private static final class ProviderConverter implements Converter<String, Provider> {
+    private record LowerCaseEnum<E extends Enum<E>>(Class<E> type) {
 
-        @Override
-        public Provider convert(String source) {
-            return Provider.valueOf(source.toUpperCase(Locale.ROOT));
-        }
-    }
-
-    /**
-     * {@code policy} → {@link DocumentKind#POLICY}. Как и у провайдера, шаблон адреса пропускает только известные
-     * имена.
-     */
-    private static final class DocumentKindConverter implements Converter<String, DocumentKind> {
-
-        @Override
-        public DocumentKind convert(String source) {
-            return DocumentKind.valueOf(source.toUpperCase(Locale.ROOT));
+        void register(FormatterRegistry registry) {
+            registry.addConverter(String.class, type, source -> Enum.valueOf(type, source.toUpperCase(Locale.ROOT)));
         }
     }
 }

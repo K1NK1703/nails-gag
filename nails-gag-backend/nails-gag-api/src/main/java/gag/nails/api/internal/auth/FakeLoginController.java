@@ -1,5 +1,6 @@
 package gag.nails.api.internal.auth;
 
+import gag.nails.api.internal.http.ApiPaths;
 import gag.nails.identity.testing.FakeProvider;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
  * не пропускает страж модуля входа.
  */
 @RestController
-@RequestMapping("/api/auth/fake")
+@RequestMapping(ApiPaths.AUTH + "/fake")
 @ConditionalOnProperty(name = "nails-gag.identity.fake-provider.enabled", havingValue = "true")
 class FakeLoginController {
 

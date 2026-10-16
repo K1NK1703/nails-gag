@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @Component
 public final class SessionCookie {
 
-    public static final String NAME = "ng_session";
+    static final String NAME = "ng_session";
 
     static final String PATH = "/api";
     static final Duration MAX_AGE = Duration.ofDays(90);
@@ -52,7 +52,7 @@ public final class SessionCookie {
     }
 
     /** Есть ли в запросе cookie сессии — годная или нет. */
-    public boolean sent(HttpServletRequest request) {
+    boolean sent(HttpServletRequest request) {
         var cookies = request.getCookies();
         return cookies != null && Arrays.stream(cookies).anyMatch(cookie -> NAME.equals(cookie.getName()));
     }
@@ -62,7 +62,7 @@ public final class SessionCookie {
      * запроса и не больше {@value #MAX_CANDIDATES}: соседний поддомен может подбросить cookie с тем же именем, и
      * браузер пришлёт обе. Значение другой формы в базу не идёт — оно заведомо не сессия.
      */
-    public List<String> candidates(HttpServletRequest request) {
+    List<String> candidates(HttpServletRequest request) {
         var cookies = request.getCookies();
         if (cookies == null) {
             return List.of();

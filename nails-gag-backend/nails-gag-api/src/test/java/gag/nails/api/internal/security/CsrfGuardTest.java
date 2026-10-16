@@ -12,11 +12,11 @@ class CsrfGuardTest extends ApiTestSupport {
 
     @Test
     void postWithoutHeaderIsRejected() {
-        rejected(client.post().uri(ECHO).header("Origin", ORIGIN).exchange());
+        rejected(client.post().uri(ECHO).header("Origin", SITE).exchange());
         // Остальные изменяющие методы — так же; фильтр отказывает раньше, чем выясняется, есть ли такой адрес.
-        rejected(client.put().uri(ECHO).header("Origin", ORIGIN).exchange());
-        rejected(client.patch().uri(ECHO).header("Origin", ORIGIN).exchange());
-        rejected(client.delete().uri(ECHO).header("Origin", ORIGIN).exchange());
+        rejected(client.put().uri(ECHO).header("Origin", SITE).exchange());
+        rejected(client.patch().uri(ECHO).header("Origin", SITE).exchange());
+        rejected(client.delete().uri(ECHO).header("Origin", SITE).exchange());
     }
 
     @Test
@@ -30,7 +30,7 @@ class CsrfGuardTest extends ApiTestSupport {
         rejected(client.post()
                 .uri(ECHO)
                 .header("X-Requested-With", REQUESTED_WITH)
-                .header("Origin", ORIGIN + ".evil.example")
+                .header("Origin", SITE + ".evil.example")
                 .exchange());
         // Origin: null — у песочницы и некоторых переходов; источник неизвестен.
         rejected(client.post()
@@ -45,7 +45,7 @@ class CsrfGuardTest extends ApiTestSupport {
         client.post()
                 .uri(ECHO)
                 .header("X-Requested-With", REQUESTED_WITH)
-                .header("Referer", ORIGIN + "/register")
+                .header("Referer", SITE + "/register")
                 .exchange()
                 .expectStatus()
                 .isOk();
@@ -53,7 +53,7 @@ class CsrfGuardTest extends ApiTestSupport {
         rejected(client.post()
                 .uri(ECHO)
                 .header("X-Requested-With", REQUESTED_WITH)
-                .header("Referer", ORIGIN + ".evil.example/register")
+                .header("Referer", SITE + ".evil.example/register")
                 .exchange());
     }
 

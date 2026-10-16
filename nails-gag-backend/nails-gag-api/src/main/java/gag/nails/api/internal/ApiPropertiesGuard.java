@@ -3,7 +3,6 @@ package gag.nails.api.internal;
 import gag.nails.common.error.InternalException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Base64;
 import java.util.Locale;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.env.Environment;
@@ -21,7 +20,6 @@ import org.springframework.stereotype.Component;
 class ApiPropertiesGuard implements InitializingBean {
 
     static final String PRODUCTION_PROFILE = "prod";
-    static final int LOGIN_STATE_KEY_BYTES = 32;
 
     private final Environment environment;
     private final ApiProperties properties;
@@ -34,7 +32,8 @@ class ApiPropertiesGuard implements InitializingBean {
     @Override
     public void afterPropertiesSet() {
         requireSiteOrigin(properties.siteOrigin());
-        requireLoginStateKey(properties.loginStateKey());
+        // Форма ключа: бросает, если он задан, но не base64 ровно 32 байт.
+        properties.loginStateKeyBytes();
         requireRateLimits(properties.rateLimits());
         requireRedirects(properties.redirects());
         if (environment.matchesProfiles(PRODUCTION_PROFILE)) {
@@ -115,22 +114,6 @@ class ApiPropertiesGuard implements InitializingBean {
     private static void requirePositive(String key, int value) {
         if (value <= 0) {
             throw new InternalException(key + " must be positive");
-        }
-    }
-
-    private static void requireLoginStateKey(String loginStateKey) {
-        if (loginStateKey.isBlank()) {
-            return;
-        }
-        var key = "nails-gag.api.login-state-key";
-        byte[] bytes;
-        try {
-            bytes = Base64.getDecoder().decode(loginStateKey);
-        } catch (IllegalArgumentException e) {
-            throw new InternalException(key + " is not valid base64", e);
-        }
-        if (bytes.length != LOGIN_STATE_KEY_BYTES) {
-            throw new InternalException(key + " must decode to exactly " + LOGIN_STATE_KEY_BYTES + " bytes");
         }
     }
 }

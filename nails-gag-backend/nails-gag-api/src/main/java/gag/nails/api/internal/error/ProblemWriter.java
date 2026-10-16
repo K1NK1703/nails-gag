@@ -15,9 +15,10 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 /**
- * Собирает {@link Problem} и пишет его в ответ. Публичный: фильтры защиты работают до {@code DispatcherServlet},
- * и {@code @RestControllerAdvice} их отказов ({@code 401}, {@code 403 common.csrf}, {@code 429}) не видит.
- * Тело пишется тем же mapper-ом, что и ответы контроллеров.
+ * Собирает {@link Problem} и пишет его в ответ. Публичный: фильтры защиты работают до {@code DispatcherServlet}, и
+ * {@code @RestControllerAdvice} их отказов ({@code 403 common.csrf}, {@code 429}) не видит. {@code 401} приходит не
+ * отсюда: его бросает резолвер актора, и отвечает {@link ProblemHandler}. Тело пишется тем же mapper-ом, что и ответы
+ * контроллеров.
  */
 @Component
 public class ProblemWriter {
@@ -33,11 +34,11 @@ public class ProblemWriter {
         this.json = json;
     }
 
-    public Problem problem(HttpServletRequest request, HttpStatusCode status, String code) {
+    Problem problem(HttpServletRequest request, HttpStatusCode status, String code) {
         return problem(request.getRequestURI(), status, code, Map.of(), List.of());
     }
 
-    public Problem problem(
+    Problem problem(
             String instance,
             HttpStatusCode status,
             String code,
@@ -65,7 +66,7 @@ public class ProblemWriter {
      * Пишет тело, если ответ ещё не начат: уже отправленные заголовки не перепишешь, тогда только DEBUG. Начатое, но не
      * отправленное тело сбрасывается. JSON сначала собирается в байты — Jackson не закрывает поток контейнера.
      */
-    public void write(HttpServletResponse response, Problem problem) throws IOException {
+    void write(HttpServletResponse response, Problem problem) throws IOException {
         if (response.isCommitted()) {
             log.debug("Response for {} already committed, problem {} not written", problem.instance(), problem.code());
             return;

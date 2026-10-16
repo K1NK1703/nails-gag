@@ -1,5 +1,8 @@
 package gag.nails.api.internal;
 
+import gag.nails.common.error.InternalException;
+import java.util.Base64;
+import java.util.Optional;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -7,7 +10,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * {@code nails-gag.api.*}. Публичный внутри модуля: нужен подпакетам {@code internal} (защита, вход). Форму
  * значений при старте проверяет {@link ApiPropertiesGuard}.
  *
- * @param siteOrigin origin сайта ({@code https://nails.gag}): с ним сверяется {@code Origin} изменяющих запросов,
+ * @param siteOrigin origin сайта ({@code https://nails-gag.ru}): с ним сверяется {@code Origin} изменяющих запросов,
  *     от него строятся переходы после входа
  * @param cookies атрибуты cookie слоя
  * @param loginStateKey ключ шифрования cookie этапа входа, base64 ровно 32 байт; пустой вне {@code prod} —
@@ -17,11 +20,37 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties("nails-gag.api")
 public record ApiProperties(
-        @DefaultValue("https://nails.gag") String siteOrigin,
+        @DefaultValue("https://nails-gag.ru") String siteOrigin,
         @DefaultValue Cookies cookies,
         @DefaultValue("") String loginStateKey,
         @DefaultValue RateLimits rateLimits,
         @DefaultValue Redirects redirects) {
+
+    /** Длина ключа {@code login-state-key} в байтах: AES-256. */
+    public static final int LOGIN_STATE_KEY_BYTES = 32;
+
+    /**
+     * Ключ шифрования cookie этапа входа в байтах; пусто, если он не задан. Одна проверка формы на всех: её зовут
+     * {@link ApiPropertiesGuard} при старте и cookie этапа входа, когда берёт ключ.
+     *
+     * @throws InternalException значение — не base64 или не ровно {@value #LOGIN_STATE_KEY_BYTES} байта
+     */
+    public Optional<byte[]> loginStateKeyBytes() {
+        if (loginStateKey.isBlank()) {
+            return Optional.empty();
+        }
+        var key = "nails-gag.api.login-state-key";
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(loginStateKey);
+        } catch (IllegalArgumentException e) {
+            throw new InternalException(key + " is not valid base64", e);
+        }
+        if (bytes.length != LOGIN_STATE_KEY_BYTES) {
+            throw new InternalException(key + " must decode to exactly " + LOGIN_STATE_KEY_BYTES + " bytes");
+        }
+        return Optional.of(bytes);
+    }
 
     /**
      * @param secure атрибут {@code Secure}; выключается только в профиле {@code local} ради

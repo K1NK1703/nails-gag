@@ -1,6 +1,7 @@
 package gag.nails.api.internal.security;
 
 import gag.nails.api.internal.error.ProblemWriter;
+import gag.nails.api.internal.http.ApiPaths;
 import gag.nails.api.internal.http.ApiRequestAttributes;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,7 +27,7 @@ class RateLimitFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
 
     static final String CODE = "common.rate_limited";
-    static final String AUTH_PATH = "/api/auth";
+    static final String AUTH_PATH = ApiPaths.AUTH;
 
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
 

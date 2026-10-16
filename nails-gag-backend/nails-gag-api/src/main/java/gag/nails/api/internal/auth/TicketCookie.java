@@ -1,6 +1,7 @@
 package gag.nails.api.internal.auth;
 
 import gag.nails.api.internal.ApiProperties;
+import gag.nails.api.internal.http.ApiPaths;
 import gag.nails.api.internal.security.SessionCookie;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Component;
 final class TicketCookie {
 
     static final String NAME = "ng_ticket";
-    static final String PATH = "/api/auth";
+    static final String PATH = ApiPaths.AUTH;
     static final Duration MAX_AGE = Duration.ofMinutes(30);
 
     private final boolean secure;

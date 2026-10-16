@@ -97,7 +97,7 @@ class ApiPropertiesGuardTest {
         runner.run(context -> {
             assertThat(context).hasNotFailed().hasSingleBean(ApiPropertiesGuard.class);
             var properties = context.getBean(ApiProperties.class);
-            assertThat(properties.siteOrigin()).isEqualTo("https://nails.gag");
+            assertThat(properties.siteOrigin()).isEqualTo("https://nails-gag.ru");
             assertThat(properties.cookies().secure()).isTrue();
             assertThat(properties.loginStateKey()).isEmpty();
             assertThat(properties.rateLimits()).isEqualTo(new ApiProperties.RateLimits(10, 60, 600));

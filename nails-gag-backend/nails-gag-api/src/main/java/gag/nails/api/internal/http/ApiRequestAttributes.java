@@ -11,8 +11,9 @@ public final class ApiRequestAttributes {
     public static final String AUTHENTICATED = "gag.nails.api.authenticated";
 
     /**
-     * Токен действующей сессии из cookie; кладёт фильтр сессии вместе с {@link #AUTHENTICATED}. Нужен выходу и
-     * повторной проверке сессии после привязки способа входа. В логи и ответы не попадает.
+     * Токен действующей сессии из cookie; кладёт фильтр сессии вместе с {@link #AUTHENTICATED}. Нужен выходу,
+     * закрытию прежней сессии при новом входе и повторной проверке сессии после привязки способа входа. В логи и
+     * ответы не попадает.
      */
     public static final String SESSION_TOKEN = "gag.nails.api.session-token";
 
