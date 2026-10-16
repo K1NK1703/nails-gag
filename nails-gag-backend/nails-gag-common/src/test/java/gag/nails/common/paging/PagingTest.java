@@ -30,6 +30,16 @@ class PagingTest {
     }
 
     @Test
+    void rejectsOffsetBeyondIntRange() {
+        assertThatThrownBy(() -> new Paging(Integer.MAX_VALUE / 2, 3))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).params()).containsEntry("field", "page"));
+
+        assertThat(new Paging(Integer.MAX_VALUE / Paging.MAX_SIZE, Paging.MAX_SIZE).offset())
+                .isLessThanOrEqualTo(Integer.MAX_VALUE);
+    }
+
+    @Test
     void mapKeepsPageMetadata() {
         var paged = Paged.of(List.of(1, 2), new Paging(2, 2), 5);
 

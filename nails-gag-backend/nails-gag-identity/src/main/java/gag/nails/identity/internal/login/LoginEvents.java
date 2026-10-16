@@ -54,7 +54,7 @@ public class LoginEvents {
     /** Постранично, в порядке {@link #latest}. */
     public Paged<LoginEventView> page(Paging paging) {
         var page = events.findAllByOrderByOccurredAtDescIdDesc(PageRequest.of(paging.page(), paging.size()));
-        return Paged.of(page.map(LoginEventEntity::toView).getContent(), paging, page.getTotalElements());
+        return Paged.of(page.getContent(), paging, page.getTotalElements()).map(LoginEventEntity::toView);
     }
 
     private static @Nullable String truncate(@Nullable String value, int max) {

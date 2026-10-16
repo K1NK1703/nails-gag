@@ -15,6 +15,7 @@ import gag.nails.common.time.SalonTimeZone;
 import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
 import java.util.List;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,15 +39,15 @@ public class DefaultDocumentVersionService implements DocumentVersionService {
     @Override
     @Transactional(readOnly = true)
     public DocumentVersionView current(DocumentKind kind) {
-        return currentEntity(kind).toView();
+        var today = salonTimeZone.dayOf(clock.instant());
+        return versions.findEffective(kind, today, Limit.of(1))
+                .orElseThrow(() -> new DocumentVersionMissingException(kind));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<DocumentVersionView> history(DocumentKind kind) {
-        return versions.findAllByKindOrderByEffectiveFromDesc(kind).stream()
-                .map(DocumentVersionEntity::toView)
-                .toList();
+        return versions.findHistory(kind);
     }
 
     @Override
@@ -76,12 +77,6 @@ public class DefaultDocumentVersionService implements DocumentVersionService {
 
     /** Для проверки согласий внутри модуля: версия действующей редакции. */
     public String currentVersion(DocumentKind kind) {
-        return currentEntity(kind).version();
-    }
-
-    private DocumentVersionEntity currentEntity(DocumentKind kind) {
-        var today = salonTimeZone.dayOf(clock.instant());
-        return versions.findFirstByKindAndEffectiveFromLessThanEqualOrderByEffectiveFromDescIdDesc(kind, today)
-                .orElseThrow(() -> new DocumentVersionMissingException(kind));
+        return current(kind).version();
     }
 }

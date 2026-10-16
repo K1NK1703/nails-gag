@@ -3,8 +3,8 @@ package gag.nails.common.paging;
 import gag.nails.common.error.ValidationException;
 
 /**
- * Страница списка. Отрицательный номер или размер вне диапазона — {@link ValidationException} с полем
- * {@code page} или {@code size}.
+ * Страница списка. Отрицательный номер, размер вне диапазона или страница дальше {@link Integer#MAX_VALUE}
+ * строк от начала — {@link ValidationException} с полем {@code page} или {@code size}.
  *
  * @param page номер страницы с нуля
  * @param size строк на странице, от 1 до {@link #MAX_SIZE}
@@ -19,6 +19,10 @@ public record Paging(int page, int size) {
         }
         if (size < 1 || size > MAX_SIZE) {
             throw new ValidationException("size", "must be between 1 and " + MAX_SIZE);
+        }
+        // Spring Data принимает смещение только в пределах int: дальше — сбой вместо ошибки запроса.
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new ValidationException("page", "is too large");
         }
     }
 

@@ -53,6 +53,6 @@ public class AccessJournal {
     /** Постранично, в порядке {@link #latest}. */
     Paged<AccessChangeView> page(Paging paging) {
         var page = changes.findAllByOrderByChangedAtDescIdDesc(PageRequest.of(paging.page(), paging.size()));
-        return Paged.of(page.map(AccessChangeEntity::toView).getContent(), paging, page.getTotalElements());
+        return Paged.of(page.getContent(), paging, page.getTotalElements()).map(AccessChangeEntity::toView);
     }
 }

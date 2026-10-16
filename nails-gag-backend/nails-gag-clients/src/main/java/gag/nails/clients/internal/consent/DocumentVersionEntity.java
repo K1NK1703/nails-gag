@@ -39,10 +39,6 @@ class DocumentVersionEntity {
         this.text = text;
     }
 
-    String version() {
-        return version;
-    }
-
     DocumentVersionView toView() {
         return new DocumentVersionView(id, kind, version, effectiveFrom);
     }

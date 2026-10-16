@@ -91,7 +91,7 @@ class DefaultClientQueries implements ClientQueries {
     public Paged<ClientView> search(String query, Paging paging, Actor actor) {
         actor.requireRead(Section.CLIENTS);
         var page = clients.search(searchPattern(query), PageRequest.of(paging.page(), paging.size()));
-        return Paged.of(page.map(ClientEntity::toView).getContent(), paging, page.getTotalElements());
+        return Paged.of(page.getContent(), paging, page.getTotalElements()).map(ClientEntity::toView);
     }
 
     @Override

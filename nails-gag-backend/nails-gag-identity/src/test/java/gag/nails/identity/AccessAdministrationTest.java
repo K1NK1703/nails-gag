@@ -377,10 +377,14 @@ class AccessAdministrationTest extends IdentityTestSupport {
         assertThat(first.items()).containsExactlyElementsOf(access.accessJournal(2, admin));
         assertThat(first.page()).isZero();
         assertThat(first.size()).isEqualTo(2);
-        assertThat(first.total()).isGreaterThanOrEqualTo(3);
-        assertThat(second.items().getFirst().kind()).isEqualTo(AccessChangeKind.ROLE_CREATED);
-        assertThat(second.items().getFirst().roleId()).isEqualTo(role.id());
-        assertThat(second.total()).isEqualTo(first.total());
+        assertThat(first.total()).isEqualTo(4);
+        assertThat(second.items())
+                .extracting(AccessChangeView::kind, AccessChangeView::roleId)
+                .containsExactly(
+                        tuple(AccessChangeKind.ROLE_CREATED, role.id()),
+                        tuple(AccessChangeKind.BOOTSTRAP, role("DEVELOPER").id()));
+        assertThat(second.page()).isEqualTo(1);
+        assertThat(second.total()).isEqualTo(4);
     }
 
     @Test
@@ -391,14 +395,19 @@ class AccessAdministrationTest extends IdentityTestSupport {
         assertThatThrownBy(() -> access.loginJournal(new Paging(0, 50), actor(client)))
                 .isInstanceOf(AccessDeniedException.class);
 
-        var page = access.loginJournal(new Paging(0, 1), admin);
+        var first = access.loginJournal(new Paging(0, 1), admin);
+        var second = access.loginJournal(new Paging(1, 1), admin);
 
-        assertThat(page.items())
+        assertThat(first.items())
                 .extracting(LoginEventView::accountId, LoginEventView::outcome)
                 .containsExactly(tuple(client.accountId(), LoginOutcome.REGISTERED));
-        assertThat(page.page()).isZero();
-        assertThat(page.size()).isEqualTo(1);
-        assertThat(page.total()).isGreaterThanOrEqualTo(2);
+        assertThat(first.page()).isZero();
+        assertThat(first.size()).isEqualTo(1);
+        assertThat(first.total()).isEqualTo(2);
+        assertThat(second.items())
+                .extracting(LoginEventView::accountId, LoginEventView::outcome)
+                .containsExactly(tuple(developer.accountId(), LoginOutcome.REGISTERED));
+        assertThat(second.total()).isEqualTo(2);
     }
 
     private static Map<Section, AccessLevel> allSections(Map<Section, AccessLevel> grants) {
