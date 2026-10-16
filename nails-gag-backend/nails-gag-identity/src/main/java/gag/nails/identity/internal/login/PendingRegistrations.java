@@ -6,6 +6,7 @@ import gag.nails.identity.internal.session.OpaqueTokens;
 import gag.nails.identity.model.Provider;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
@@ -70,18 +71,29 @@ public class PendingRegistrations {
      */
     PendingRegistrationEntity consume(String ticket, PendingPurpose purpose) {
         var hash = OpaqueTokens.hash(ticket);
-        var found = pending.findByTicketHash(hash).orElseThrow(RegistrationExpiredException::new);
-        if (found.purpose() != purpose || found.createdAt().plus(TTL).isBefore(clock.instant())) {
-            throw new RegistrationExpiredException();
-        }
+        var found = find(hash, purpose).orElseThrow(RegistrationExpiredException::new);
         if (pending.deleteByTicketHash(hash) == 0) {
             throw new RegistrationExpiredException();
         }
         return found;
     }
 
+    /**
+     * Билет без удаления, с теми же проверками, что у {@link #consume}: пусто, если билета нет, он выдан для
+     * другой цели, старше 30 минут или уже использован.
+     */
+    Optional<PendingRegistrationEntity> peek(String ticket, PendingPurpose purpose) {
+        return find(OpaqueTokens.hash(ticket), purpose);
+    }
+
     static ProviderProfile profileOf(PendingRegistrationEntity entity) {
         return new ProviderProfile(
                 entity.subject(), entity.phone(), entity.email(), entity.displayName(), entity.avatarUrl());
+    }
+
+    private Optional<PendingRegistrationEntity> find(byte[] hash, PendingPurpose purpose) {
+        return pending.findByTicketHash(hash)
+                .filter(found -> found.purpose() == purpose
+                        && !found.createdAt().plus(TTL).isBefore(clock.instant()));
     }
 }

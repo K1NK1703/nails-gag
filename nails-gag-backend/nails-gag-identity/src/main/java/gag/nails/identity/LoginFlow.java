@@ -17,8 +17,10 @@ import gag.nails.identity.model.LoginResult;
 import gag.nails.identity.model.LoginStart;
 import gag.nails.identity.model.LoginState;
 import gag.nails.identity.model.Provider;
+import gag.nails.identity.model.RegistrationPrefill;
 import gag.nails.identity.model.RegistrationRequired;
 import gag.nails.identity.model.SignedIn;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -61,6 +63,13 @@ public interface LoginFlow {
      *     параллельно с входом); сессии у заблокированного не остаётся
      */
     LoginResult complete(Provider provider, AuthorizationResponse response, LoginState state, ClientInfo client);
+
+    /**
+     * Подстановка для экрана регистрации по билету из {@link RegistrationRequired}: то же правило, что при
+     * выдаче билета (имя профиля; телефон профиля, иначе телефон найденной карточки). Билет не потребляется.
+     * Пусто, если билета нет, он выдан для привязки, использован или старше 30 минут.
+     */
+    Optional<RegistrationPrefill> registrationPrefill(String ticket);
 
     /**
      * Завершение регистрации по билету из {@link RegistrationRequired}. В одной транзакции: аккаунт и
