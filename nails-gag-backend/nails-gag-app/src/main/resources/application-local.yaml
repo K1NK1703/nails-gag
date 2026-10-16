@@ -22,6 +22,8 @@ nails-gag:
 
 # springdoc есть только при bootRun (developmentOnly): схема OpenAPI для фронта и Swagger UI.
 springdoc:
+  # Только адреса сайта: без /error и служебных.
+  paths-to-match: /api/**
   api-docs:
     path: /api/openapi.json
   swagger-ui:

@@ -4,10 +4,11 @@ import gag.nails.api.internal.security.SessionCookie;
 import gag.nails.common.actor.Actor;
 import gag.nails.identity.Accounts;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Профиль вошедшего (спецификация API, §7.1): чтение и удаление своего аккаунта. */
@@ -35,9 +36,9 @@ class MeController {
      * (последний администратор) cookie не трогает — человек остаётся вошедшим.
      */
     @DeleteMapping
-    ResponseEntity<Void> delete(Actor actor, HttpServletResponse response) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void delete(Actor actor, HttpServletResponse response) {
         accounts.delete(actor);
         sessionCookie.clear(response);
-        return ResponseEntity.noContent().build();
     }
 }

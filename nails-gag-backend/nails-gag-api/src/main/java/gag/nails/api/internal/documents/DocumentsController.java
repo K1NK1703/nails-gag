@@ -55,11 +55,13 @@ class DocumentsController {
         return ResponseEntity.ok().cacheControl(PUBLIC).body(documents.history(kind));
     }
 
+    /** Редакция с полным текстом; нужен уровень чтения раздела «Документы». */
     @GetMapping(KIND + "/versions/{version}")
     DocumentVersionText version(@PathVariable DocumentKind kind, @PathVariable String version, Actor actor) {
         return documents.version(kind, version, actor);
     }
 
+    /** Новая редакция документа; нужен уровень изменения раздела «Документы». */
     @PostMapping(KIND + "/versions")
     @ResponseStatus(HttpStatus.CREATED)
     DocumentVersionView addVersion(

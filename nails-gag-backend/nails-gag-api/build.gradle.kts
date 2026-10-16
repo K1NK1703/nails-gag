@@ -16,6 +16,9 @@ dependencies {
     // Лимиты частоты: корзины Bucket4j в памяти, устаревание ключей — Caffeine.
     implementation(libs.bucket4j.core)
     implementation(libs.caffeine)
+    // Настройка схемы OpenAPI (OpenApiConfiguration) компилируется против springdoc, а работает, только когда app
+    // подключает его при bootRun (developmentOnly); в рабочем classpath springdoc нет.
+    compileOnly(libs.springdoc.common)
 
     testImplementation(project(":nails-gag-test-support"))
     testImplementation(libs.spring.boot.resttestclient)

@@ -5,6 +5,7 @@ import gag.nails.clients.model.DocumentKind;
 import gag.nails.identity.model.Provider;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.format.FormatterRegistry;
@@ -18,6 +19,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  */
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
+
+    /** Перечисления, которые в пути пишутся по имени в нижнем регистре; так же их показывает схема OpenAPI. */
+    static final Set<Class<? extends Enum<?>>> LOWER_CASE_PATH_ENUMS = Set.of(Provider.class, DocumentKind.class);
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {

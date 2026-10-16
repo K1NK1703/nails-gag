@@ -14,7 +14,6 @@ import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
 import gag.nails.identity.error.RegistrationExpiredException;
-import gag.nails.identity.model.Authenticated;
 import gag.nails.identity.model.AuthorizationResponse;
 import gag.nails.identity.model.ClientInfo;
 import gag.nails.identity.model.LinkConfirmationRequired;
@@ -33,6 +32,7 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -199,7 +200,7 @@ class AuthController {
         }
         replaceSession(request, response, signedIn);
         ticketCookie.clear(response);
-        return meOf(signedIn.sessionToken());
+        return meOf(signedIn.sessionToken(), response);
     }
 
     /**
@@ -216,24 +217,24 @@ class AuthController {
             throw e;
         }
         ticketCookie.clear(response);
-        return meOf(ApiRequestAttributes.sessionToken(request).orElseThrow(UnauthenticatedException::new));
+        return meOf(ApiRequestAttributes.sessionToken(request).orElseThrow(UnauthenticatedException::new), response);
     }
 
     /** Выход: сессия закрывается, если она была, cookie снимается всегда — повтор безопасен. */
     @PostMapping("/logout")
-    ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logout(HttpServletRequest request, HttpServletResponse response) {
         ApiRequestAttributes.sessionToken(request).ifPresent(sessions::close);
         sessionCookie.clear(response);
         clearLeftoverTicket(request, response);
-        return ResponseEntity.noContent().build();
     }
 
     /** «Выйти на всех устройствах»: все сессии аккаунта, включая текущую. */
     @PostMapping("/logout-all")
-    ResponseEntity<Void> logoutAll(Actor actor, HttpServletResponse response) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logoutAll(Actor actor, HttpServletResponse response) {
         sessions.closeAll(actor);
         sessionCookie.clear(response);
-        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -264,13 +265,15 @@ class AuthController {
     /**
      * Профиль сессии по её токену, перечитанный заново: после регистрации и объединения аккаунтов актор запроса уже
      * не тот (карточки не было, или к аккаунту пришёл чужой способ входа). Сессии нет — например, карточку только что
-     * заблокировали — значит, и войти не вышло.
+     * заблокировали — значит, и войти не вышло: cookie сессии снимается, ответ {@code 401}.
      */
-    private Me meOf(String sessionToken) {
-        var actor = sessions.authenticate(sessionToken)
-                .map(Authenticated::actor)
-                .orElseThrow(UnauthenticatedException::new);
-        return me.of(actor);
+    private Me meOf(String sessionToken, HttpServletResponse response) {
+        var authenticated = sessions.authenticate(sessionToken);
+        if (authenticated.isEmpty()) {
+            sessionCookie.clear(response);
+            throw new UnauthenticatedException();
+        }
+        return me.of(authenticated.get().actor());
     }
 
     /**

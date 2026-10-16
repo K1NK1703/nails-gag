@@ -42,6 +42,8 @@ bucket4j-core = { module = "com.bucket4j:bucket4j_jdk17-core", version.ref = "bu
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
 # OpenAPI и Swagger UI для bootRun (developmentOnly в app): в app.jar и образ не попадает
 springdoc-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+# Только для компиляции настройки схемы в api (SpringDocUtils, ParameterCustomizer); в рабочий classpath не попадает
+springdoc-common = { module = "org.springdoc:springdoc-openapi-starter-common", version.ref = "springdoc" }
 
 spring-modulith-starter-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
 spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }
