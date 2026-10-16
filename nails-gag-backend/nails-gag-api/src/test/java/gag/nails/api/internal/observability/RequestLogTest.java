@@ -71,6 +71,24 @@ class RequestLogTest extends ApiTestSupport {
     }
 
     @Test
+    void unknownAddressLogsPathWithoutQuery(CapturedOutput output) {
+        var phone = uniquePhone();
+
+        client.get()
+                .uri("/api/nope?phone={phone}", phone)
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+
+        await().atMost(WAIT)
+                .untilAsserted(
+                        () -> assertThat(lines(output, "GET /api/nope -> ")).isNotEmpty());
+        assertThat(lines(output, "GET /api/nope -> "))
+                .allSatisfy(line -> assertThat(line.get("message")).asString().matches("GET /api/nope -> 404 \\d+ms"));
+        assertThat(output.getAll()).doesNotContain(phone.substring(1));
+    }
+
+    @Test
     void anonymousRequestHasNoAccount(CapturedOutput output) {
         client.get().uri("/api/me").exchange().expectStatus().isUnauthorized();
 
