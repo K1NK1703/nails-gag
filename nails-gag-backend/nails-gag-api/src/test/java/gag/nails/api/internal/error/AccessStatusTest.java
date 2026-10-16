@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
+import java.time.LocalDate;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 
 /** Не вошёл, нет прав, не существует (спецификация API, §4.6): ответ зависит от того, кто спросил. */
 @ApiTest
@@ -81,5 +84,43 @@ class AccessStatusTest extends ApiTestSupport {
                 .contains("\"code\":\"common.not_found\"")
                 .doesNotContain("\"params\"")
                 .doesNotContain(ProblemTestController.BOOKING_ID.toString());
+    }
+
+    @Test
+    void staffWithoutSectionGetsForbiddenOnRealEndpoint() {
+        var master = signInMaster();
+
+        as(master, csrf(client.post().uri("/api/documents/offer/versions")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(newOfferVersion())
+                .exchange()
+                .expectStatus()
+                .isForbidden()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.access_denied");
+    }
+
+    @Test
+    void clientOnStaffEndpointGetsNotFound() {
+        var customer = signInClient();
+
+        as(customer, csrf(client.post().uri("/api/documents/offer/versions")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(newOfferVersion())
+                .exchange()
+                .expectStatus()
+                .isNotFound()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.not_found")
+                .jsonPath("$.params")
+                .doesNotExist();
+    }
+
+    /** Годное тело новой редакции: отказ даёт модуль, а не проверка тела. */
+    private static Map<String, String> newOfferVersion() {
+        return Map.of(
+                "version", "denied", "effectiveFrom", LocalDate.of(2199, 1, 1).toString(), "text", "Текст");
     }
 }

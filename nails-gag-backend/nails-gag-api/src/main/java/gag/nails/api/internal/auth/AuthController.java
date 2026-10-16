@@ -2,6 +2,8 @@ package gag.nails.api.internal.auth;
 
 import gag.nails.api.internal.auth.LoginRedirects.Failure;
 import gag.nails.api.internal.http.ApiRequestAttributes;
+import gag.nails.api.internal.me.Me;
+import gag.nails.api.internal.me.MeAssembler;
 import gag.nails.api.internal.security.SessionCookie;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.UnauthenticatedException;
@@ -12,6 +14,7 @@ import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.LoginFailedException;
 import gag.nails.identity.error.ProviderUnavailableException;
 import gag.nails.identity.error.RegistrationExpiredException;
+import gag.nails.identity.model.Authenticated;
 import gag.nails.identity.model.AuthorizationResponse;
 import gag.nails.identity.model.ClientInfo;
 import gag.nails.identity.model.LinkConfirmationRequired;
@@ -62,6 +65,7 @@ class AuthController {
     private final LoginStateCookie loginStateCookie;
     private final TicketCookie ticketCookie;
     private final LoginRedirects redirects;
+    private final MeAssembler me;
 
     AuthController(
             LoginFlow loginFlow,
@@ -69,13 +73,15 @@ class AuthController {
             SessionCookie sessionCookie,
             LoginStateCookie loginStateCookie,
             TicketCookie ticketCookie,
-            LoginRedirects redirects) {
+            LoginRedirects redirects,
+            MeAssembler me) {
         this.loginFlow = loginFlow;
         this.sessions = sessions;
         this.sessionCookie = sessionCookie;
         this.loginStateCookie = loginStateCookie;
         this.ticketCookie = ticketCookie;
         this.redirects = redirects;
+        this.me = me;
     }
 
     /** Начало входа: адрес провайдера и зашифрованное состояние в cookie. Привязка — только с сессией. */
@@ -174,11 +180,11 @@ class AuthController {
     }
 
     /**
-     * Завершение регистрации по билету: открывается сессия, билет снимается. Ошибка формы и устаревшая версия политики
-     * билет не трогают — человек исправит форму и отправит снова.
+     * Завершение регистрации по билету: открывается сессия, билет снимается, ответ — профиль новой сессии. Ошибка формы
+     * и устаревшая версия политики билет не трогают — человек исправит форму и отправит снова.
      */
     @PostMapping("/registration")
-    ResponseEntity<Void> register(
+    Me register(
             @Valid @RequestBody CompleteRegistration command,
             ClientInfo client,
             HttpServletRequest request,
@@ -193,13 +199,15 @@ class AuthController {
         }
         replaceSession(request, response, signedIn);
         ticketCookie.clear(response);
-        return ResponseEntity.noContent().build();
+        return meOf(signedIn.sessionToken());
     }
 
-    /** Подтверждение объединения аккаунтов при привязке чужого способа входа; билет снимается. */
+    /**
+     * Подтверждение объединения аккаунтов при привязке чужого способа входа; билет снимается, ответ — профиль после
+     * объединения.
+     */
     @PostMapping("/link/confirm")
-    ResponseEntity<Void> confirmLink(
-            Actor actor, ClientInfo client, HttpServletRequest request, HttpServletResponse response) {
+    Me confirmLink(Actor actor, ClientInfo client, HttpServletRequest request, HttpServletResponse response) {
         var ticket = ticketCookie.read(request).orElseThrow(RegistrationExpiredException::new);
         try {
             loginFlow.confirmLink(ticket, actor, client);
@@ -208,7 +216,7 @@ class AuthController {
             throw e;
         }
         ticketCookie.clear(response);
-        return ResponseEntity.noContent().build();
+        return meOf(ApiRequestAttributes.sessionToken(request).orElseThrow(UnauthenticatedException::new));
     }
 
     /** Выход: сессия закрывается, если она была, cookie снимается всегда — повтор безопасен. */
@@ -238,12 +246,31 @@ class AuthController {
     }
 
     /**
-     * Новый вход в этом браузере: прежняя сессия, если запрос её нёс, закрывается — её cookie сейчас заменится, и
-     * открытой без владельца она остаться не должна.
+     * Новый вход в этом браузере: сначала cookie новой сессии, затем прежняя сессия, если запрос её нёс, закрывается —
+     * открытой без владельца она остаться не должна. Закрытие — по возможности: вход уже состоялся, и сбой здесь не
+     * должен его отменять (прежняя сессия истечёт сама). Токен в лог не пишется.
      */
     private void replaceSession(HttpServletRequest request, HttpServletResponse response, SignedIn signedIn) {
-        ApiRequestAttributes.sessionToken(request).ifPresent(sessions::close);
         sessionCookie.write(response, signedIn.sessionToken());
+        ApiRequestAttributes.sessionToken(request).ifPresent(previous -> {
+            try {
+                sessions.close(previous);
+            } catch (RuntimeException e) {
+                log.warn("previous session close failed: {}", e.getClass().getSimpleName());
+            }
+        });
+    }
+
+    /**
+     * Профиль сессии по её токену, перечитанный заново: после регистрации и объединения аккаунтов актор запроса уже
+     * не тот (карточки не было, или к аккаунту пришёл чужой способ входа). Сессии нет — например, карточку только что
+     * заблокировали — значит, и войти не вышло.
+     */
+    private Me meOf(String sessionToken) {
+        var actor = sessions.authenticate(sessionToken)
+                .map(Authenticated::actor)
+                .orElseThrow(UnauthenticatedException::new);
+        return me.of(actor);
     }
 
     /**

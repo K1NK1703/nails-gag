@@ -141,7 +141,7 @@ public abstract class ApiTestSupport {
             signedIn = register(
                             cookie(callback, TICKET_COOKIE).getValue(), new CompleteRegistration(name, phone, policy))
                     .expectStatus()
-                    .isNoContent()
+                    .isOk()
                     .expectBody()
                     .returnResult();
         } else {

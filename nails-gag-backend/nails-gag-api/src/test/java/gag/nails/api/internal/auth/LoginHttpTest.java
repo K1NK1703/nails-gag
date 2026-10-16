@@ -2,6 +2,7 @@ package gag.nails.api.internal.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.jayway.jsonpath.JsonPath;
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
 import gag.nails.clients.ClientService;
@@ -14,6 +15,7 @@ import gag.nails.identity.model.LoginPurpose;
 import gag.nails.identity.model.Provider;
 import gag.nails.identity.testing.FakeProfile;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
@@ -152,8 +154,10 @@ class LoginHttpTest extends ApiTestSupport {
 
         var result = register(ticket, registration(profile, currentPolicy()))
                 .expectStatus()
-                .isNoContent()
+                .isOk()
                 .expectBody()
+                .jsonPath("$.client.firstName")
+                .isEqualTo(Objects.requireNonNull(profile.displayName()))
                 .returnResult();
 
         var session = cookie(result, SESSION_COOKIE);
@@ -161,6 +165,14 @@ class LoginHttpTest extends ApiTestSupport {
         assertThat(session.getMaxAge()).isEqualTo(Duration.ofDays(90));
         var actor = sessions.authenticate(session.getValue()).orElseThrow().actor();
         assertThat(actor.clientId()).isNotNull();
+        // Ответ — профиль новой сессии, как его отдаёт GET /api/me.
+        var me = JsonPath.parse(new String(Objects.requireNonNull(result.getResponseBody()), StandardCharsets.UTF_8));
+        assertThat(me.read("$.account.id", String.class))
+                .isEqualTo(actor.accountId().toString());
+        assertThat(me.read("$.account.clientId", String.class))
+                .isEqualTo(actor.clientId().toString());
+        assertThat(me.read("$.client.id", String.class))
+                .isEqualTo(actor.clientId().toString());
         assertCleared(cookie(result, TICKET_COOKIE), "/api/auth");
         // Билет потреблён: повтор с той же cookie — просрочен, и cookie снимается.
         var replay = register(ticket, registration(profile, currentPolicy()))
@@ -185,7 +197,7 @@ class LoginHttpTest extends ApiTestSupport {
                 .body(registration(profile, currentPolicy()))
                 .exchange()
                 .expectStatus()
-                .isNoContent()
+                .isOk()
                 .expectBody()
                 .returnResult();
 
@@ -238,7 +250,7 @@ class LoginHttpTest extends ApiTestSupport {
                 .returnResult();
         assertThat(invalid.getResponseCookies().getFirst(TICKET_COOKIE)).isNull();
 
-        register(ticket, registration(profile, currentPolicy())).expectStatus().isNoContent();
+        register(ticket, registration(profile, currentPolicy())).expectStatus().isOk();
     }
 
     @Test
@@ -493,8 +505,12 @@ class LoginHttpTest extends ApiTestSupport {
                 .cookie(TICKET_COOKIE, ticket)
                 .exchange()
                 .expectStatus()
-                .isNoContent()
+                .isOk()
                 .expectBody()
+                .jsonPath("$.account.id")
+                .isEqualTo(first.accountId().toString())
+                .jsonPath("$.account.loginMethods.length()")
+                .isEqualTo(2)
                 .returnResult();
 
         assertCleared(cookie(confirmed, TICKET_COOKIE), "/api/auth");

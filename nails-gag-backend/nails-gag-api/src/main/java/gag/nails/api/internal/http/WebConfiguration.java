@@ -1,6 +1,7 @@
 package gag.nails.api.internal.http;
 
 import gag.nails.api.internal.security.CurrentActorResolver;
+import gag.nails.clients.model.DocumentKind;
 import gag.nails.identity.model.Provider;
 import java.util.List;
 import java.util.Locale;
@@ -12,7 +13,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Аргументы контроллеров слоя: {@code Actor}/{@code Optional<Actor>} вошедшего и {@code ClientInfo} запроса;
- * провайдер входа в пути ({@code /api/auth/yandex/…}) — по имени в нижнем регистре.
+ * провайдер входа ({@code /api/auth/yandex/…}) и документ ({@code /api/documents/policy/…}) в пути — по имени в
+ * нижнем регистре.
  */
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
@@ -26,6 +28,7 @@ class WebConfiguration implements WebMvcConfigurer {
     @Override
     public void addFormatters(FormatterRegistry registry) {
         registry.addConverter(new ProviderConverter());
+        registry.addConverter(new DocumentKindConverter());
     }
 
     /**
@@ -37,6 +40,18 @@ class WebConfiguration implements WebMvcConfigurer {
         @Override
         public Provider convert(String source) {
             return Provider.valueOf(source.toUpperCase(Locale.ROOT));
+        }
+    }
+
+    /**
+     * {@code policy} → {@link DocumentKind#POLICY}. Как и у провайдера, шаблон адреса пропускает только известные
+     * имена.
+     */
+    private static final class DocumentKindConverter implements Converter<String, DocumentKind> {
+
+        @Override
+        public DocumentKind convert(String source) {
+            return DocumentKind.valueOf(source.toUpperCase(Locale.ROOT));
         }
     }
 }
