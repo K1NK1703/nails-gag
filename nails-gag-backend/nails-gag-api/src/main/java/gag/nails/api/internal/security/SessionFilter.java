@@ -10,6 +10,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -31,7 +33,10 @@ class SessionFilter extends OncePerRequestFilter {
         this.cookie = cookie;
     }
 
-    /** Первое из значений cookie, у которого есть живая сессия; нашлось — атрибуты запроса заполнены. */
+    /**
+     * Вошедший по первому из значений cookie, у которого есть живая сессия; нашёлся — атрибуты запроса заполнены.
+     * Пусто, если ни одно значение не годно.
+     */
     private Optional<Authenticated> authenticate(HttpServletRequest request) {
         for (var token : cookie.candidates(request)) {
             var authenticated = sessions.authenticate(token);
@@ -47,22 +52,22 @@ class SessionFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        if (!cookie.sent(request)) {
-            chain.doFilter(request, response);
-            return;
+        MDC.@Nullable MDCCloseable tagged = null;
+        if (cookie.sent(request)) {
+            var authenticated = authenticate(request);
+            if (authenticated.isPresent()) {
+                var accountId = authenticated.get().account().id();
+                tagged = RequestTelemetry.tagAccount(request, accountId);
+            } else {
+                cookie.clear(response);
+            }
         }
-        var authenticated = authenticate(request);
-        if (authenticated.isEmpty()) {
-            cookie.clear(response);
-            chain.doFilter(request, response);
-            return;
-        }
-        var tagged = RequestTelemetry.tagAccount(
-                request, authenticated.get().account().id());
         try {
             chain.doFilter(request, response);
         } finally {
-            tagged.close();
+            if (tagged != null) {
+                tagged.close();
+            }
         }
     }
 }

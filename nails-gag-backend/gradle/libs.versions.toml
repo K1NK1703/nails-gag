@@ -38,9 +38,9 @@ datasource-micrometer = { module = "net.ttddyy.observation:datasource-micrometer
 spring-boot-docker-compose = { module = "org.springframework.boot:spring-boot-docker-compose" }
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
-# @AutoConfigureTracing: в тестах Boot экспорт трасс выключен, аннотация включает его
+# @AutoConfigureTracing: в тестах Boot экспорт трасс выключен, аннотация включает его (версия из BOM Spring Boot)
 spring-boot-micrometer-tracing-test = { module = "org.springframework.boot:spring-boot-micrometer-tracing-test" }
-# InMemorySpanExporter для проверки трасс в тестах (версия из BOM Spring Boot)
+# InMemorySpanExporter и InMemoryLogRecordExporter для проверки трасс и логов в тестах (версия из BOM Spring Boot)
 opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing" }
 spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
 # RestTestClient и @AutoConfigureRestTestClient для HTTP-тестов модуля api

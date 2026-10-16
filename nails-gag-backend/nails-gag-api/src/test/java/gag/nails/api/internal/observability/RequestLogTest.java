@@ -22,6 +22,8 @@ import org.springframework.test.context.TestPropertySource;
  * статус и время; у вошедшего — поле {@code accountId}. Консоль — в JSON (ECS), как в приложении.
  */
 @ApiTest
+// У тестов api нет application.yaml приложения, и консоль у них текстовая; JSON включён, чтобы проверять поля строки
+// (accountId) так, как их видит сборщик логов в работе.
 @TestPropertySource(properties = "logging.structured.format.console=ecs")
 @ExtendWith(OutputCaptureExtension.class)
 class RequestLogTest extends ApiTestSupport {
