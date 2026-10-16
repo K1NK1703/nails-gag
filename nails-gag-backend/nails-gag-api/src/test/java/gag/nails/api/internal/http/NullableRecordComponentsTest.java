@@ -2,6 +2,7 @@ package gag.nails.api.internal.http;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.media.Schema;
@@ -10,7 +11,10 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
-/** {@code null} в схеме OpenAPI 3.1 по {@code @Nullable} компонентов записи — без контекста, на своём реестре. */
+/**
+ * Компоненты записи в схеме OpenAPI 3.1: все обязательны, {@code @Nullable} допускают {@code null} — без контекста, на
+ * своём реестре.
+ */
 class NullableRecordComponentsTest {
 
     enum Level {
@@ -29,7 +33,41 @@ class NullableRecordComponentsTest {
             Inner requiredInner,
             @JsonProperty("renamed_note") @Nullable String note) {}
 
-    private final Schema<?> sample = sample();
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    record Sparse(String code, @Nullable String detail) {}
+
+    record PartlyOmitted(
+            String always,
+
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable
+            String omitted) {}
+
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    record Explicit(String value, @Nullable String other) {}
+
+    private final Schema<?> sample = schema(Sample.class);
+
+    @Test
+    void allComponentsAreRequired() {
+        assertThat(sample.getRequired())
+                .containsExactlyInAnyOrder(
+                        "required", "text", "level", "requiredLevel", "inner", "requiredInner", "renamed_note");
+        assertThat(schema(Explicit.class).getRequired()).containsExactlyInAnyOrder("value", "other");
+    }
+
+    @Test
+    void recordWithoutAlwaysInclusionIsLeftAsIs() {
+        var sparse = schema(Sparse.class);
+
+        assertThat(sparse.getRequired()).isNullOrEmpty();
+        Schema<?> detail = sparse.getProperties().get("detail");
+        assertThat(detail.getTypes()).containsExactlyInAnyOrder("string", "null");
+    }
+
+    @Test
+    void componentWithOwnInclusionIsOptional() {
+        assertThat(schema(PartlyOmitted.class).getRequired()).containsExactly("always");
+    }
 
     @Test
     void nullableScalarGetsNullType() {
@@ -69,9 +107,9 @@ class NullableRecordComponentsTest {
         return new ArrayList<>(property(name).getEnum());
     }
 
-    private static Schema<?> sample() {
+    private static Schema<?> schema(Class<? extends Record> type) {
         var converters = new ModelConverters(true);
         converters.addConverter(new NullableRecordComponents());
-        return converters.readAll(Sample.class).get("Sample");
+        return converters.readAll(type).get(type.getSimpleName());
     }
 }

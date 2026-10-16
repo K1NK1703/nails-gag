@@ -1,5 +1,6 @@
 package gag.nails.api.internal.http;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.core.converter.AnnotatedType;
 import io.swagger.v3.core.converter.ModelConverter;
@@ -7,6 +8,7 @@ import io.swagger.v3.core.converter.ModelConverterContext;
 import io.swagger.v3.core.util.Json;
 import io.swagger.v3.oas.models.media.Schema;
 import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,13 +16,18 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
- * {@code null} в схеме OpenAPI 3.1 (спецификация API, §4.2): поле записи, чей тип помечен {@link Nullable}, допускает
- * {@code null}, и типы фронта получаются {@code string | null}. springdoc сам эту пометку не видит: {@code @Nullable}
- * из jspecify — аннотация типа, а не объявления. Остальные поля не меняются.
+ * Поля записей в схеме OpenAPI 3.1 (спецификация API, §4.2): JSON слоя пишет каждый компонент записи, {@code null} —
+ * явно, поэтому все поля обязательны ({@code required}), а помеченные {@link Nullable} ещё и допускают {@code null}.
+ * Тип фронта получается {@code lastName: string | null}, а не {@code lastName?: string}. springdoc сам пометку не
+ * видит: {@code @Nullable} из jspecify — аннотация типа, а не объявления.
  *
  * <p>Скалярное поле получает {@code "null"} в массиве {@code type} (и в {@code enum}, если он есть); ссылка на схему
  * заменяется на {@code oneOf} из неё и {@code {"type": "null"}}. Смотрятся только записи — ответы и тела запросов
  * слоя и модулей; имя поля — как у Jackson, с учётом {@link JsonProperty}.
+ *
+ * <p>Тела запросов — так же: фронт отправляет все поля, отсутствующее значение — явным {@code null} (Jackson его
+ * принимает). Обязательность не ставится записи с {@link JsonInclude} не {@code ALWAYS} (тело ошибки {@code Problem}
+ * опускает пустое — его список задан вручную) и полю, у которого такая аннотация своя.
  */
 final class NullableRecordComponents implements ModelConverter {
 
@@ -40,6 +47,7 @@ final class NullableRecordComponents implements ModelConverter {
             var model = model(schema, context);
             if (model != null && model.getProperties() != null) {
                 markNullable(type, model);
+                markRequired(type, model);
             }
         }
         return schema;
@@ -65,6 +73,26 @@ final class NullableRecordComponents implements ModelConverter {
                 model.getProperties().put(name, nullable(property));
             }
         }
+    }
+
+    /** Запись или поле, которые Jackson может опустить, не обязательны; порядок списка swagger задаёт сам. */
+    private static void markRequired(Class<?> type, Schema<?> model) {
+        if (!alwaysIncluded(type.getAnnotation(JsonInclude.class))) {
+            return;
+        }
+        var required = Arrays.stream(type.getRecordComponents())
+                .filter(component -> alwaysIncluded(component.getAccessor().getAnnotation(JsonInclude.class)))
+                .map(NullableRecordComponents::jsonName)
+                .filter(model.getProperties()::containsKey)
+                .toList();
+        model.setRequired(required.isEmpty() ? null : required);
+    }
+
+    /** {@code USE_DEFAULTS} — как у mapper слоя, а он пишет всё ({@link JsonConfiguration}). */
+    private static boolean alwaysIncluded(@Nullable JsonInclude inclusion) {
+        return inclusion == null
+                || inclusion.value() == JsonInclude.Include.ALWAYS
+                || inclusion.value() == JsonInclude.Include.USE_DEFAULTS;
     }
 
     /** {@link JsonProperty} не нацелена на компонент записи: Java переносит её на метод доступа и поле. */

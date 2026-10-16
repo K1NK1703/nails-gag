@@ -115,8 +115,9 @@ class OpenApiConfiguration {
     }
 
     /**
-     * {@code Problem} и {@code FieldError} — схемы по записям, как у ответов; обязательны поля, которые есть в каждом
-     * теле ошибки. {@code title}, {@code params}, {@code errors} и {@code traceId} бывают опущены.
+     * {@code Problem} и {@code FieldError} — схемы по записям, как у ответов. {@code Problem} опускает пустое
+     * ({@code NON_EMPTY}), и {@link NullableRecordComponents} его обязательность не трогает: обязательны поля, которые
+     * есть в каждом теле ошибки, а {@code title}, {@code params}, {@code errors} и {@code traceId} бывают опущены.
      */
     private static void addProblemSchemas(OpenAPI openApi) {
         if (openApi.getComponents() == null) {
@@ -126,8 +127,6 @@ class OpenApiConfiguration {
         ModelConverters.getInstance(true).readAll(Problem.class).forEach(components::addSchemas);
         Schema<?> problem = components.getSchemas().get("Problem");
         problem.setRequired(List.of("type", "status", "instance", "code"));
-        Schema<?> fieldError = components.getSchemas().get("FieldError");
-        fieldError.setRequired(List.of("field", "reason"));
     }
 
     /**

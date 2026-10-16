@@ -49,6 +49,26 @@ class OpenApiSchemaTest extends ApiTestSupport {
     }
 
     /**
+     * Ответ пишет каждый компонент записи, {@code null} — явно (§4.2): все поля обязательны, и тип фронта —
+     * {@code lastName: string | null}, а не {@code lastName?: …}. Тела запросов — так же. {@code Problem} опускает пустое
+     * и сохраняет свой список.
+     */
+    @Test
+    void recordComponentsAreRequired() {
+        var schemas = openApi().path("components").path("schemas");
+
+        assertThat(required(schemas.path("ClientView")))
+                .containsExactlyInAnyOrderElementsOf(
+                        schemas.path("ClientView").path("properties").propertyNames())
+                .contains("lastName", "accountId");
+        assertThat(required(schemas.path("Me"))).containsExactlyInAnyOrder("account", "client");
+        assertThat(required(schemas.path("NewDocumentVersion")))
+                .containsExactlyInAnyOrder("version", "effectiveFrom", "text");
+        assertThat(required(schemas.path("Problem"))).containsExactlyInAnyOrder("type", "status", "instance", "code");
+        assertThat(required(schemas.path("FieldError"))).containsExactlyInAnyOrder("field", "reason");
+    }
+
+    /**
      * Компонент записи с {@code @Nullable} допускает {@code null} (типы фронта — {@code string | null}, спецификация
      * API, §4.2), остальные — нет. Ссылка на схему — через {@code oneOf} с {@code null}.
      */
@@ -182,6 +202,10 @@ class OpenApiSchemaTest extends ApiTestSupport {
         return Arrays.stream(constants)
                 .map(constant -> WebConfiguration.kebabCase(constant.name()))
                 .toList();
+    }
+
+    private static List<String> required(JsonNode schema) {
+        return schema.path("required").values().stream().map(JsonNode::asString).toList();
     }
 
     /** {@code type} схемы как список: в OpenAPI 3.1 это строка или массив строк. */
