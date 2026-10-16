@@ -4,8 +4,10 @@ import gag.nails.clients.DocumentVersionService;
 import gag.nails.clients.command.AddDocumentVersion;
 import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
+import gag.nails.clients.error.DocumentVersionNotFoundException;
 import gag.nails.clients.internal.error.DocumentVersionMissingException;
 import gag.nails.clients.model.DocumentKind;
+import gag.nails.clients.model.DocumentVersionText;
 import gag.nails.clients.model.DocumentVersionView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
@@ -13,6 +15,7 @@ import gag.nails.common.time.SalonTimeZone;
 import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
 import java.util.List;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,15 +39,24 @@ public class DefaultDocumentVersionService implements DocumentVersionService {
     @Override
     @Transactional(readOnly = true)
     public DocumentVersionView current(DocumentKind kind) {
-        return currentEntity(kind).toView();
+        var today = salonTimeZone.dayOf(clock.instant());
+        return versions.findEffective(kind, today, Limit.of(1))
+                .orElseThrow(() -> new DocumentVersionMissingException(kind));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<DocumentVersionView> history(DocumentKind kind) {
-        return versions.findAllByKindOrderByEffectiveFromDesc(kind).stream()
-                .map(DocumentVersionEntity::toView)
-                .toList();
+        return versions.findHistory(kind);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentVersionText version(DocumentKind kind, String version, Actor actor) {
+        actor.requireRead(Section.DOCUMENTS);
+        return versions.findByKindAndVersion(kind, version)
+                .map(DocumentVersionEntity::toVersionText)
+                .orElseThrow(() -> new DocumentVersionNotFoundException(kind, version));
     }
 
     @Override
@@ -58,18 +70,13 @@ public class DefaultDocumentVersionService implements DocumentVersionService {
         if (versions.existsByKindAndEffectiveFrom(kind, command.effectiveFrom())) {
             throw new DocumentVersionDateTakenException(kind, command.effectiveFrom());
         }
-        return versions.save(new DocumentVersionEntity(kind, command.version(), command.effectiveFrom()))
+        return versions.save(
+                        new DocumentVersionEntity(kind, command.version(), command.effectiveFrom(), command.text()))
                 .toView();
     }
 
     /** Для проверки согласий внутри модуля: версия действующей редакции. */
     public String currentVersion(DocumentKind kind) {
-        return currentEntity(kind).version();
-    }
-
-    private DocumentVersionEntity currentEntity(DocumentKind kind) {
-        var today = salonTimeZone.dayOf(clock.instant());
-        return versions.findFirstByKindAndEffectiveFromLessThanEqualOrderByEffectiveFromDescIdDesc(kind, today)
-                .orElseThrow(() -> new DocumentVersionMissingException(kind));
+        return current(kind).version();
     }
 }

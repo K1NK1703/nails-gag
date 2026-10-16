@@ -11,8 +11,10 @@ import java.time.LocalDate;
  *
  * @param version метка версии, как она показана на сайте (например, {@code 2026-09-25}); уникальна в рамках документа
  * @param effectiveFrom день, с которого редакция действует; у документа не бывает двух редакций с одной датой
+ * @param text полный текст редакции, как он показан на сайте
  */
 public record AddDocumentVersion(
         @NotNull DocumentKind kind,
         @NotBlank @Size(max = 64) String version,
-        @NotNull LocalDate effectiveFrom) {}
+        @NotNull LocalDate effectiveFrom,
+        @NotBlank @Size(max = 200_000) String text) {}

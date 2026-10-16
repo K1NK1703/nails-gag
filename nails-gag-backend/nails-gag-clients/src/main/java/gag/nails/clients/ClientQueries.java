@@ -7,6 +7,8 @@ import gag.nails.clients.model.ConsentView;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.common.paging.Paged;
+import gag.nails.common.paging.Paging;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -54,6 +56,9 @@ public interface ClientQueries {
      * пустой запрос — все клиенты по алфавиту. Обезличенные карточки не возвращаются.
      */
     List<ClientView> search(String query, Actor actor);
+
+    /** То же, что {@link #search(String, Actor)}, постранично; порядок тот же, {@code total} — все совпавшие. */
+    Paged<ClientView> search(String query, Paging paging, Actor actor);
 
     /**
      * Нужен уровень чтения раздела «Клиенты».

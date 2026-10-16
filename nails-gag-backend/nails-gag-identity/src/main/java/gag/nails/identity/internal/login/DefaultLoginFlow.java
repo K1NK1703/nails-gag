@@ -16,10 +16,12 @@ import gag.nails.identity.model.LoginResult;
 import gag.nails.identity.model.LoginStart;
 import gag.nails.identity.model.LoginState;
 import gag.nails.identity.model.Provider;
+import gag.nails.identity.model.RegistrationPrefill;
 import gag.nails.identity.model.SignedIn;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
@@ -90,6 +92,11 @@ class DefaultLoginFlow implements LoginFlow {
             writer.rejectIfBlocked(signedIn, provider, client);
         }
         return result;
+    }
+
+    @Override
+    public Optional<RegistrationPrefill> registrationPrefill(String ticket) {
+        return writer.registrationPrefill(ticket);
     }
 
     @Override

@@ -12,8 +12,12 @@ import gag.nails.clients.model.ConsentView;
 import gag.nails.common.error.ValidationException;
 import gag.nails.identity.command.CompleteRegistration;
 import gag.nails.identity.error.RegistrationExpiredException;
+import gag.nails.identity.model.LinkConfirmationRequired;
 import gag.nails.identity.model.LoginEventView;
 import gag.nails.identity.model.LoginOutcome;
+import gag.nails.identity.model.LoginPurpose;
+import gag.nails.identity.model.Provider;
+import gag.nails.identity.model.RegistrationPrefill;
 import gag.nails.identity.model.RegistrationRequired;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.testsupport.ModuleTest;
@@ -173,5 +177,51 @@ class RegistrationTest extends IdentityTestSupport {
         assertThat(loginJournal())
                 .extracting(LoginEventView::outcome)
                 .containsExactly(LoginOutcome.SIGNED_IN, LoginOutcome.REGISTERED);
+    }
+
+    @Test
+    void prefillByTicketMatchesRegistrationRequired() {
+        var verified = registrationRequired(new FakeProfile("u1", "+79211234567", null, "Аня", null));
+        clients.create(new CreateClient("Мария", null, null, "+79215550000", "m@example.com", null), master);
+        var byCard = registrationRequired(new FakeProfile("u2", null, "m@example.com", "Маша", null));
+
+        assertThat(verified.prefill()).isEqualTo(new RegistrationPrefill("Аня", "+79211234567", true));
+        assertThat(loginFlow.registrationPrefill(verified.ticket())).contains(verified.prefill());
+        assertThat(byCard.prefill()).isEqualTo(new RegistrationPrefill("Маша", "+79215550000", false));
+        assertThat(loginFlow.registrationPrefill(byCard.ticket())).contains(byCard.prefill());
+    }
+
+    @Test
+    void prefillIsEmptyAfterRegistration() {
+        var required = registrationRequired(profile("u1", "+79211234567"));
+        assertThat(loginFlow.registrationPrefill(required.ticket())).contains(required.prefill());
+
+        // Чтение подстановки билет не потребляет: регистрация по нему проходит.
+        loginFlow.completeRegistration(
+                required.ticket(), new CompleteRegistration("Анна", "+79211234567", POLICY_VERSION), CLIENT);
+
+        assertThat(loginFlow.registrationPrefill(required.ticket())).isEmpty();
+        assertThat(loginFlow.registrationPrefill("unknown")).isEmpty();
+    }
+
+    @Test
+    void prefillIsEmptyForExpiredTicket() {
+        var required = registrationRequired(profile("u1", "+79211234567"));
+        clock.advance(Duration.ofMinutes(31));
+
+        assertThat(loginFlow.registrationPrefill(required.ticket())).isEmpty();
+    }
+
+    @Test
+    void prefillIsEmptyForLinkTicket() {
+        var first = signInFirstTime(profile("yandex-1", "+79211234567"));
+        signInFirstTime(profile("vk-2", "+79215550000"));
+        var start = loginFlow.start(Provider.FAKE, LoginPurpose.LINK, actor(first));
+
+        var result = complete(profile("vk-2", "+79215550000"), start.state());
+
+        assertThat(result).isInstanceOf(LinkConfirmationRequired.class);
+        assertThat(loginFlow.registrationPrefill(((LinkConfirmationRequired) result).ticket()))
+                .isEmpty();
     }
 }

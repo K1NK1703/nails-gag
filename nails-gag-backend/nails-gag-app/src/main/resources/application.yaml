@@ -31,8 +31,38 @@ nails-gag:
         client-id: ""
         client-secret: ""
         redirect-uri: ""
+  api:
+    # Origin сайта: с ним сверяется Origin изменяющих запросов (CSRF), от него строятся переходы после входа.
+    # Абсолютный, без пути и завершающего слэша; https (http — только для localhost).
+    site-origin: https://nails-gag.ru
+    cookies:
+      # Атрибут Secure у cookie слоя; false только в профиле local, иначе браузер не сохранит их на http://localhost.
+      secure: true
+    # Ключ шифрования cookie этапа входа: base64, ровно 32 байта. В prod обязателен; вне prod пустой ключ
+    # заменяется случайным при старте. Задавать через переменную окружения, не в файле.
+    login-state-key: ""
+    # Лимиты частоты запросов в минуту: вход (/api/auth/**) и анонимные — по IP, с сессией — по аккаунту.
+    rate-limits:
+      auth-per-minute: 10
+      anonymous-per-minute: 60
+      authenticated-per-minute: 600
+    # Пути на сайте, куда обратный вызов провайдера отправляет браузер.
+    redirects:
+      signed-in: /cabinet
+      registration: /register
+      link-confirm: /cabinet/account?link=confirm
+      linked: /cabinet/account?link=done
+      # К пути добавляется ?error=failed|blocked|provider.
+      failure: /login
+
+server:
+  # IP и схема клиента из X-Forwarded-* — только от прокси из частных сетей (RemoteIpValve Tomcat).
+  forward-headers-strategy: native
 
 management:
+  server:
+    # Actuator на отдельном порту, который прокси наружу не публикует.
+    port: 8081
   endpoints:
     web:
       exposure:

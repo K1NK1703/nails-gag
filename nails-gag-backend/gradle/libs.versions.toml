@@ -7,6 +7,10 @@ opentelemetryInstrumentation = "2.28.1-alpha"
 palantirJavaFormat = "2.100.0"
 spotless = "8.10.3"
 foojay = "1.0.0"
+# Лимиты частоты API; не входит в BOM Spring Boot
+bucket4j = "8.21.0"
+# Схема OpenAPI и Swagger UI только при локальном запуске; 3.x — для Spring Boot 4, не входит в BOM
+springdoc = "3.1.1"
 
 [libraries]
 # BOM-ы: версии всего остального из Spring Boot и Spring Modulith
@@ -21,6 +25,8 @@ spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
 spring-boot-starter-liquibase = { module = "org.springframework.boot:spring-boot-starter-liquibase" }
+# Иерархия исключений доступа к данным (PessimisticLockingFailureException) для HTTP-слоя без JPA
+spring-tx = { module = "org.springframework:spring-tx" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-starter-opentelemetry = { module = "org.springframework.boot:spring-boot-starter-opentelemetry" }
 # Boot не связывает Logback с SdkLoggerProvider сам; логи в OTLP уходят через этот appender
@@ -29,6 +35,15 @@ spring-boot-docker-compose = { module = "org.springframework.boot:spring-boot-do
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
+# RestTestClient и @AutoConfigureRestTestClient для HTTP-тестов модуля api
+spring-boot-resttestclient = { module = "org.springframework.boot:spring-boot-resttestclient" }
+# Лимиты частоты API: корзины Bucket4j в памяти, устаревание ключей — Caffeine (версия из BOM Spring Boot)
+bucket4j-core = { module = "com.bucket4j:bucket4j_jdk17-core", version.ref = "bucket4j" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
+# OpenAPI и Swagger UI для bootRun (developmentOnly в app): в app.jar и образ не попадает
+springdoc-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+# Только для компиляции настройки схемы в api (SpringDocUtils, ParameterCustomizer); в рабочий classpath не попадает
+springdoc-common = { module = "org.springdoc:springdoc-openapi-starter-common", version.ref = "springdoc" }
 
 spring-modulith-starter-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
 spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }

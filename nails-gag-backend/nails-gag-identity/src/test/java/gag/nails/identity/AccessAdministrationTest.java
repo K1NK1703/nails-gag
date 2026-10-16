@@ -9,6 +9,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.common.paging.Paging;
 import gag.nails.identity.command.CreateRole;
 import gag.nails.identity.command.UpdateRole;
 import gag.nails.identity.error.AccountNotFoundException;
@@ -354,6 +355,59 @@ class AccessAdministrationTest extends IdentityTestSupport {
         assertThatThrownBy(() -> access.accessJournal(0, admin)).isInstanceOf(ValidationException.class);
         assertThatThrownBy(() -> access.accessJournal(501, admin)).isInstanceOf(ValidationException.class);
         assertThatThrownBy(() -> access.loginJournal(0, admin)).isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    void accessJournalPagesNewestFirst() {
+        var staff = signInFirstTime(profile("staff", "+79211234567"));
+        clock.advance(Duration.ofMinutes(1));
+        var role = access.createRole(
+                new CreateRole("ASSISTANT", "Помощник", Map.of(Section.CATALOG, AccessLevel.READ)), admin);
+        clock.advance(Duration.ofMinutes(1));
+        access.assignRole(staff.accountId(), role.id(), admin);
+        clock.advance(Duration.ofMinutes(1));
+        access.setOverride(staff.accountId(), Section.FINANCE, AccessLevel.READ, admin);
+
+        var first = access.accessJournal(new Paging(0, 2), admin);
+        var second = access.accessJournal(new Paging(1, 2), admin);
+
+        assertThat(first.items())
+                .extracting(AccessChangeView::kind)
+                .containsExactly(AccessChangeKind.OVERRIDE_SET, AccessChangeKind.ROLE_ASSIGNED);
+        assertThat(first.items()).containsExactlyElementsOf(access.accessJournal(2, admin));
+        assertThat(first.page()).isZero();
+        assertThat(first.size()).isEqualTo(2);
+        assertThat(first.total()).isEqualTo(4);
+        assertThat(second.items())
+                .extracting(AccessChangeView::kind, AccessChangeView::roleId)
+                .containsExactly(
+                        tuple(AccessChangeKind.ROLE_CREATED, role.id()),
+                        tuple(AccessChangeKind.BOOTSTRAP, role("DEVELOPER").id()));
+        assertThat(second.page()).isEqualTo(1);
+        assertThat(second.total()).isEqualTo(4);
+    }
+
+    @Test
+    void loginJournalPagesNeedAccessRead() {
+        clock.advance(Duration.ofMinutes(1));
+        var client = signInFirstTime(profile("client", "+79215550000"));
+
+        assertThatThrownBy(() -> access.loginJournal(new Paging(0, 50), actor(client)))
+                .isInstanceOf(AccessDeniedException.class);
+
+        var first = access.loginJournal(new Paging(0, 1), admin);
+        var second = access.loginJournal(new Paging(1, 1), admin);
+
+        assertThat(first.items())
+                .extracting(LoginEventView::accountId, LoginEventView::outcome)
+                .containsExactly(tuple(client.accountId(), LoginOutcome.REGISTERED));
+        assertThat(first.page()).isZero();
+        assertThat(first.size()).isEqualTo(1);
+        assertThat(first.total()).isEqualTo(2);
+        assertThat(second.items())
+                .extracting(LoginEventView::accountId, LoginEventView::outcome)
+                .containsExactly(tuple(developer.accountId(), LoginOutcome.REGISTERED));
+        assertThat(second.total()).isEqualTo(2);
     }
 
     private static Map<Section, AccessLevel> allSections(Map<Section, AccessLevel> grants) {

@@ -44,6 +44,7 @@ import gag.nails.identity.model.RegistrationPrefill;
 import gag.nails.identity.model.RegistrationRequired;
 import gag.nails.identity.model.SignedIn;
 import java.time.Clock;
+import java.util.Optional;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
@@ -161,6 +162,20 @@ class LoginWriter {
     }
 
     /**
+     * Подстановка по билету регистрации; билет не потребляется. Правило то же, что при выдаче билета
+     * ({@link #prefill}): карточка, найденная при входе, перечитывается по сохранённому в билете id.
+     */
+    @Transactional(readOnly = true)
+    Optional<RegistrationPrefill> registrationPrefill(String ticket) {
+        return pendings.peek(ticket, PendingPurpose.REGISTER).map(pending -> {
+            var card = Optional.ofNullable(pending.clientId())
+                    .flatMap(clientQueries::byId)
+                    .orElse(null);
+            return prefill(PendingRegistrations.profileOf(pending), card);
+        });
+    }
+
+    /**
      * Подтверждение объединения. Билет привязан к аккаунту, который его получил; способ входа должен
      * всё ещё принадлежать тому же другому аккаунту (ничей — просто привязывается). У аккаунта вошедшего
      * должна быть карточка, если она есть у другого: иначе объединять нечего, а карточка другого
@@ -244,9 +259,17 @@ class LoginWriter {
     private RegistrationRequired registrationRequired(
             Provider provider, ProviderProfile profile, @Nullable ClientView card) {
         var ticket = pendings.issueRegistration(provider, profile, card == null ? null : card.id());
+        return new RegistrationRequired(ticket, prefill(profile, card));
+    }
+
+    /**
+     * Подстановка на экран регистрации — одно правило для выдачи билета и чтения по нему: имя из профиля;
+     * телефон профиля, а без него — телефон найденной карточки; подтверждённым считается только телефон
+     * профиля.
+     */
+    private static RegistrationPrefill prefill(ProviderProfile profile, @Nullable ClientView card) {
         var phone = profile.phone() != null ? profile.phone() : card == null ? null : card.phone();
-        return new RegistrationRequired(
-                ticket, new RegistrationPrefill(profile.displayName(), phone, profile.phone() != null));
+        return new RegistrationPrefill(profile.displayName(), phone, profile.phone() != null);
     }
 
     private LoginResult link(@Nullable UUID accountId, Provider provider, ProviderProfile profile, ClientInfo client) {

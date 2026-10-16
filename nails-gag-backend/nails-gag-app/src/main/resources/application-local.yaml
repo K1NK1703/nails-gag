@@ -14,3 +14,17 @@ nails-gag:
   identity:
     fake-provider:
       enabled: true
+  api:
+    # Vite отдаёт сайт на 5173 и проксирует /api на 8080.
+    site-origin: http://localhost:5173
+    cookies:
+      secure: false
+
+# springdoc есть только при bootRun (developmentOnly): схема OpenAPI для фронта и Swagger UI.
+springdoc:
+  # Только адреса сайта: без /error и служебных.
+  paths-to-match: /api/**
+  api-docs:
+    path: /api/openapi.json
+  swagger-ui:
+    path: /api/docs

@@ -7,6 +7,8 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.InternalException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.common.paging.Paged;
+import gag.nails.common.paging.Paging;
 import gag.nails.common.persistence.ConstraintViolations;
 import gag.nails.common.validation.CommandValidator;
 import gag.nails.identity.AccessAdministration;
@@ -226,10 +228,24 @@ class DefaultAccessAdministration implements AccessAdministration {
 
     @Override
     @Transactional(readOnly = true)
+    public Paged<AccessChangeView> accessJournal(Paging paging, Actor actor) {
+        actor.requireRead(Section.ACCESS);
+        return journal.page(paging);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<LoginEventView> loginJournal(int limit, Actor actor) {
         actor.requireRead(Section.ACCESS);
         requireLimit(limit);
         return loginEvents.latest(limit);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Paged<LoginEventView> loginJournal(Paging paging, Actor actor) {
+        actor.requireRead(Section.ACCESS);
+        return loginEvents.page(paging);
     }
 
     private AccountAccessView view(AccountEntity account) {
