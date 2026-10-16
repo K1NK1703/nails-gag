@@ -17,8 +17,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Лимиты частоты (спецификация API, §5.3). Корзина: вход ({@code /api/auth/**}) — по IP; запрос с сессией — по
  * аккаунту (известен после {@link SessionFilter}, поэтому этот фильтр после него); остальное — по IP. IP — уже
- * разобранный Tomcat-ом адрес клиента, IPv6 — с точностью до сети /64. Превышение — {@code 429 common.rate_limited} с {@code Retry-After} в целых
- * секундах до пополнения, округлённых вверх. В лог — только вид корзины: ни IP, ни аккаунта.
+ * разобранный Tomcat-ом адрес клиента, IPv6 — с точностью до сети /64. Превышение —
+ * {@code 429 common.rate_limited} с {@code Retry-After} в целых секундах до пополнения, округлённых вверх. В лог —
+ * только вид корзины: ни IP, ни аккаунта.
  */
 class RateLimitFilter extends OncePerRequestFilter {
 

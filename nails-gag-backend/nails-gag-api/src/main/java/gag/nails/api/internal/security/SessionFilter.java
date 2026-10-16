@@ -13,8 +13,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Cookie {@code ng_session} → {@link Sessions#authenticate} → атрибуты запроса
  * {@link ApiRequestAttributes#AUTHENTICATED} и {@link ApiRequestAttributes#SESSION_TOKEN}. Если cookie с этим именем
  * несколько, проверяются первые две ({@link SessionCookie#candidates}), берётся первая живая. Сессии не нашлось
- * (закрыта, истекла, подделана, значение не похоже на токен) — cookie снимается в ответе, запрос идёт дальше анонимным: нужна ли сессия, решает
- * контроллер сигнатурой ({@link CurrentActorResolver}). Токен не логируется.
+ * (закрыта, истекла, подделана, значение не похоже на токен) — cookie снимается в ответе, запрос идёт дальше
+ * анонимным: нужна ли сессия, решает контроллер сигнатурой ({@link CurrentActorResolver}). Токен не логируется.
  */
 class SessionFilter extends OncePerRequestFilter {
 

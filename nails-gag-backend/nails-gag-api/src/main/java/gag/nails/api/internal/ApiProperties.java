@@ -23,7 +23,10 @@ public record ApiProperties(
         @DefaultValue RateLimits rateLimits,
         @DefaultValue Redirects redirects) {
 
-    /** @param secure атрибут {@code Secure}; выключается только в профиле {@code local} ради {@code http://localhost} */
+    /**
+     * @param secure атрибут {@code Secure}; выключается только в профиле {@code local} ради
+     *     {@code http://localhost}
+     */
     public record Cookies(@DefaultValue("true") boolean secure) {}
 
     /**

@@ -73,13 +73,16 @@ final class RateLimits {
 
     /**
      * Ключ корзины по адресу клиента: IPv4 — сам адрес (в том числе записанный как IPv6 {@code ::ffff:a.b.c.d}), IPv6
-     * — его сеть /64 ({@code 2001:db8:1:2::/64}), иначе смена адреса внутри своей сети обходила бы лимит. Разбор —
-     * только литерала, без обращения к DNS; не разобралось — строка как есть.
+     * — его сеть /64 ({@code 2001:db8:1:2::/64}), иначе смена адреса внутри своей сети обходила бы лимит. Зона IPv6
+     * ({@code %eth0}) отбрасывается: адрес клиента она не меняет. Разбор — только литерала, без обращения к DNS; не
+     * разобралось — строка как есть.
      */
     static String ipKey(String ip) {
+        var zone = ip.indexOf('%');
+        var literal = zone < 0 ? ip : ip.substring(0, zone);
         InetAddress address;
         try {
-            address = InetAddress.ofLiteral(ip);
+            address = InetAddress.ofLiteral(literal);
         } catch (IllegalArgumentException e) {
             return ip;
         }

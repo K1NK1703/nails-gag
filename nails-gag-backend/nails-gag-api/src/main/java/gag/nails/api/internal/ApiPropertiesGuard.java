@@ -13,9 +13,9 @@ import org.springframework.stereotype.Component;
  * Проверка настроек HTTP-слоя при старте. {@code site-origin} — абсолютный URI без пути, запроса и данных
  * пользователя, {@code https} ({@code http} допустим только для {@code localhost}), в том виде, в каком браузер
  * шлёт {@code Origin}: строчные схема и хост, без порта по умолчанию — с ним заголовок сверяется побуквенно.
- * {@code login-state-key}, если задан, — base64 ровно 32 байт; лимиты частоты положительны. При профиле {@code prod} ещё нужны непустой ключ
- * (иначе cookie этапа входа не переживают перезапуск) и {@code cookies.secure=true}.
- * Нарушение — {@link InternalException}, приложение не стартует.
+ * {@code login-state-key}, если задан, — base64 ровно 32 байт; лимиты частоты положительны. При профиле
+ * {@code prod} ещё нужны непустой ключ (иначе cookie этапа входа не переживают перезапуск) и
+ * {@code cookies.secure=true}. Нарушение — {@link InternalException}, приложение не стартует.
  */
 @Component
 class ApiPropertiesGuard implements InitializingBean {

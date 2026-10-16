@@ -27,4 +27,13 @@ class RateLimitsTest {
         assertThat(RateLimits.ipKey("2001:db8:1:2::1")).isNotEqualTo(RateLimits.ipKey("2001:db8:1:3::1"));
         assertThat(RateLimits.ipKey("2001:db8:1:2::1")).isNotEqualTo(RateLimits.ipKey("2001:db9:1:2::1"));
     }
+
+    @Test
+    void ipv6ZoneIdIsIgnored() {
+        // Зона (%eth0, %25) не меняет адрес клиента: иначе каждая зона давала бы свою корзину.
+        assertThat(RateLimits.ipKey("2001:db8:1:2::1%eth0"))
+                .isEqualTo(RateLimits.ipKey("2001:db8:1:2::1%2"))
+                .isEqualTo("2001:db8:1:2::/64");
+        assertThat(RateLimits.ipKey("fe80::1%eth0")).isEqualTo(RateLimits.ipKey("fe80::2%eth1"));
+    }
 }
