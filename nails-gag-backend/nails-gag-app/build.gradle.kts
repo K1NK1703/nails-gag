@@ -20,6 +20,7 @@ dependencies {
     implementation(libs.spring.boot.starter.actuator)
     implementation(libs.spring.boot.starter.opentelemetry)
     implementation(libs.opentelemetry.logback.appender)
+    implementation(libs.datasource.micrometer)
     implementation(libs.spring.modulith.starter.core)
     runtimeOnly(libs.postgresql)
 
@@ -36,6 +37,8 @@ dependencies {
     testImplementation(libs.spring.modulith.starter.test)
     testImplementation(libs.spring.modulith.docs)
     testImplementation(libs.archunit.junit5)
+    testImplementation(libs.spring.boot.micrometer.tracing.test)
+    testImplementation(libs.opentelemetry.sdk.testing)
 }
 
 springBoot {

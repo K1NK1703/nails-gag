@@ -14,12 +14,20 @@ import org.springframework.stereotype.Component;
  * Отдаёт записи Logback в OpenTelemetry: Spring Boot настраивает экспорт логов по OTLP, но сам
  * Logback с ним не связывает. Appender добавляется в код, а не в {@code logback-spring.xml}, чтобы
  * не терять штатную настройку консоли Boot (переключение JSON/текст через
- * {@code logging.structured.format.console}). Без адреса экспорта записи никуда не уходят.
+ * {@code logging.structured.format.console}). Без адреса экспорта записи никуда не уходят. Из MDC в атрибуты
+ * записи идёт {@code accountId} вошедшего — в Loki по нему ищутся запросы человека; {@code traceId} и
+ * {@code spanId} appender берёт из контекста трассы сам.
  */
 @Component
 class OpenTelemetryLogbackBridge implements InitializingBean, DisposableBean {
 
     private static final String APPENDER_NAME = "OTEL";
+
+    /**
+     * Ключ MDC с аккаунтом вошедшего — {@code RequestTelemetry.MDC_ACCOUNT_ID} модуля {@code api}. Строкой: внутренние
+     * пакеты {@code api} из {@code app} не видны.
+     */
+    private static final String MDC_ACCOUNT_ID = "accountId";
 
     private final OpenTelemetry openTelemetry;
     private final OpenTelemetryAppender appender = new OpenTelemetryAppender();
@@ -40,6 +48,7 @@ class OpenTelemetryLogbackBridge implements InitializingBean, DisposableBean {
         appender.setName(APPENDER_NAME);
         appender.setContext(root.getLoggerContext());
         appender.setOpenTelemetry(openTelemetry);
+        appender.setCaptureMdcAttributes(MDC_ACCOUNT_ID);
         appender.start();
         root.addAppender(appender);
     }

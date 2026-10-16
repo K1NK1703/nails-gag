@@ -80,6 +80,13 @@ management:
         # Иначе OtlpMeterRegistry шлёт метрики на localhost:4318 по умолчанию; включает профиль observability.
         enabled: false
 
+jdbc:
+  # span-ы SQL (datasource-micrometer): только выполнение запросов, без получения соединений и чтения строк.
+  includes: QUERY
+  datasource-proxy:
+    # Значения параметров в span-ы не пишутся: там телефоны и другие данные людей. Текст запроса — с плейсхолдерами.
+    include-parameter-values: false
+
 logging:
   structured:
     format:
