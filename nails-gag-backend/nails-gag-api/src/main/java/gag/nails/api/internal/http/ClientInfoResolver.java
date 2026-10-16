@@ -16,7 +16,7 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  * ({@code server.forward-headers-strategy: native}), заголовку от посторонних адресов не верят. {@code User-Agent}
  * обрезается до {@value #USER_AGENT_MAX_LENGTH} символов — столько хранит журнал.
  */
-class ClientInfoResolver implements HandlerMethodArgumentResolver {
+final class ClientInfoResolver implements HandlerMethodArgumentResolver {
 
     static final int USER_AGENT_MAX_LENGTH = 512;
 

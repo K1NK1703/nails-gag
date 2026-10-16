@@ -17,7 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Лимиты частоты (спецификация API, §5.3). Корзина: вход ({@code /api/auth/**}) — по IP; запрос с сессией — по
  * аккаунту (известен после {@link SessionFilter}, поэтому этот фильтр после него); остальное — по IP. IP — уже
- * разобранный Tomcat-ом адрес клиента. Превышение — {@code 429 common.rate_limited} с {@code Retry-After} в целых
+ * разобранный Tomcat-ом адрес клиента, IPv6 — с точностью до сети /64. Превышение — {@code 429 common.rate_limited} с {@code Retry-After} в целых
  * секундах до пополнения, округлённых вверх. В лог — только вид корзины: ни IP, ни аккаунта.
  */
 class RateLimitFilter extends OncePerRequestFilter {
@@ -45,15 +45,15 @@ class RateLimitFilter extends OncePerRequestFilter {
         var authenticated = ApiRequestAttributes.authenticated(request);
         if (isAuthPath(request)) {
             kind = RateLimits.Kind.AUTH;
-            id = request.getRemoteAddr();
+            id = ip(request);
         } else if (authenticated.isPresent()) {
             kind = RateLimits.Kind.ACCOUNT;
             id = authenticated.get().account().id().toString();
         } else {
             kind = RateLimits.Kind.ANONYMOUS;
-            id = request.getRemoteAddr();
+            id = ip(request);
         }
-        var probe = limits.tryConsume(kind, Objects.requireNonNullElse(id, ""));
+        var probe = limits.tryConsume(kind, id);
         if (probe.isConsumed()) {
             chain.doFilter(request, response);
             return;
@@ -64,9 +64,14 @@ class RateLimitFilter extends OncePerRequestFilter {
         problems.write(request, response, HttpStatus.TOO_MANY_REQUESTS, CODE);
     }
 
+    private static String ip(HttpServletRequest request) {
+        return RateLimits.ipKey(Objects.requireNonNullElse(request.getRemoteAddr(), ""));
+    }
+
     /**
      * Путь, нормализованный контейнером (без {@code //}, {@code ..} и процентного кодирования), — чтобы вход не
-     * ушёл в общую корзину из-за другого написания того же адреса.
+     * ушёл в общую корзину из-за другого написания того же адреса. Сам {@code /api/auth} — тоже вход,
+     * {@code /api/authx} — нет.
      */
     private static boolean isAuthPath(HttpServletRequest request) {
         var pathInfo = request.getPathInfo();

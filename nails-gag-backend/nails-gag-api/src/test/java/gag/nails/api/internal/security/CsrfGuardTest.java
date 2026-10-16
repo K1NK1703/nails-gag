@@ -13,6 +13,10 @@ class CsrfGuardTest extends ApiTestSupport {
     @Test
     void postWithoutHeaderIsRejected() {
         rejected(client.post().uri(ECHO).header("Origin", ORIGIN).exchange());
+        // Остальные изменяющие методы — так же; фильтр отказывает раньше, чем выясняется, есть ли такой адрес.
+        rejected(client.put().uri(ECHO).header("Origin", ORIGIN).exchange());
+        rejected(client.patch().uri(ECHO).header("Origin", ORIGIN).exchange());
+        rejected(client.delete().uri(ECHO).header("Origin", ORIGIN).exchange());
     }
 
     @Test
@@ -27,6 +31,12 @@ class CsrfGuardTest extends ApiTestSupport {
                 .uri(ECHO)
                 .header("X-Requested-With", REQUESTED_WITH)
                 .header("Origin", ORIGIN + ".evil.example")
+                .exchange());
+        // Origin: null — у песочницы и некоторых переходов; источник неизвестен.
+        rejected(client.post()
+                .uri(ECHO)
+                .header("X-Requested-With", REQUESTED_WITH)
+                .header("Origin", "null")
                 .exchange());
     }
 
@@ -68,6 +78,8 @@ class CsrfGuardTest extends ApiTestSupport {
     @Test
     void getWithoutHeaderPasses() {
         client.get().uri("/api/test/maybe").exchange().expectStatus().isOk();
+        client.head().uri("/api/test/maybe").exchange().expectStatus().isOk();
+        client.options().uri("/api/test/maybe").exchange().expectStatus().isOk();
     }
 
     @Test

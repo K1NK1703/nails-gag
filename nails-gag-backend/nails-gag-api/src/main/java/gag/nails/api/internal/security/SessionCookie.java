@@ -6,7 +6,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.Optional;
+import java.util.List;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
@@ -19,12 +20,18 @@ import org.springframework.stereotype.Component;
  * входа и выхода.
  */
 @Component
-public class SessionCookie {
+public final class SessionCookie {
 
     public static final String NAME = "ng_session";
 
     static final String PATH = "/api";
     static final Duration MAX_AGE = Duration.ofDays(90);
+
+    /** Сколько значений cookie с этим именем проверяется по базе, не больше. */
+    static final int MAX_CANDIDATES = 2;
+
+    /** Форма токена сессии: 32 случайных байта в base64url без дополнения — 43 символа. */
+    private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9_-]{43}");
 
     private final boolean secure;
 
@@ -32,17 +39,28 @@ public class SessionCookie {
         this.secure = properties.cookies().secure();
     }
 
-    /** Токен из cookie запроса; пустое значение — как отсутствие. */
-    public Optional<String> read(HttpServletRequest request) {
+    /** Есть ли в запросе cookie сессии — годная или нет. */
+    public boolean sent(HttpServletRequest request) {
+        var cookies = request.getCookies();
+        return cookies != null && Arrays.stream(cookies).anyMatch(cookie -> NAME.equals(cookie.getName()));
+    }
+
+    /**
+     * Значения cookie сессии, похожие на токен {@code Sessions} (32 байта в base64url без {@code =}), в порядке
+     * запроса и не больше {@value #MAX_CANDIDATES}: соседний поддомен может подбросить cookie с тем же именем, и
+     * браузер пришлёт обе. Значение другой формы в базу не идёт — оно заведомо не сессия.
+     */
+    public List<String> candidates(HttpServletRequest request) {
         var cookies = request.getCookies();
         if (cookies == null) {
-            return Optional.empty();
+            return List.of();
         }
         return Arrays.stream(cookies)
                 .filter(cookie -> NAME.equals(cookie.getName()))
                 .map(Cookie::getValue)
-                .filter(value -> value != null && !value.isEmpty())
-                .findFirst();
+                .filter(value -> value != null && TOKEN.matcher(value).matches())
+                .limit(MAX_CANDIDATES)
+                .toList();
     }
 
     public void write(HttpServletResponse response, String token) {

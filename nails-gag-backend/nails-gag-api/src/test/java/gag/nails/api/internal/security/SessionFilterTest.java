@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 @ApiTest
@@ -63,6 +64,45 @@ class SessionFilterTest extends ApiTestSupport {
         assertThat(cleared.isHttpOnly()).isTrue();
         assertThat(cleared.isSecure()).isTrue();
         assertThat(cleared.getSameSite()).isEqualTo("Lax");
+    }
+
+    /**
+     * Соседний поддомен может подбросить вторую cookie с тем же именем, и браузер пришлёт обе. Живая сессия находится
+     * среди первых двух значений, а cookie при этом не снимается.
+     */
+    @Test
+    void duplicateCookieUsesTheLiveOne() {
+        var session = signInClient();
+        var stale = "A".repeat(43);
+
+        for (var header : List.of(
+                SESSION_COOKIE + "=" + stale + "; " + SESSION_COOKIE + "=" + session.cookie(),
+                SESSION_COOKIE + "=" + session.cookie() + "; " + SESSION_COOKIE + "=" + stale)) {
+            var result = client.get()
+                    .uri("/api/test/whoami")
+                    .header("Cookie", header)
+                    .exchange()
+                    .expectStatus()
+                    .isOk()
+                    .expectBody()
+                    .jsonPath("$.accountId")
+                    .isEqualTo(session.accountId().toString())
+                    .returnResult();
+            assertThat(result.getResponseCookies().getFirst(SESSION_COOKIE)).isNull();
+        }
+
+        // Ни одно значение не годится — cookie снимается.
+        var result = client.get()
+                .uri("/api/test/maybe")
+                .header("Cookie", SESSION_COOKIE + "=" + stale + "; " + SESSION_COOKIE + "=" + "B".repeat(43))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.accountId")
+                .isEmpty()
+                .returnResult();
+        assertThat(cookie(result, SESSION_COOKIE).getMaxAge()).isEqualTo(Duration.ZERO);
     }
 
     @Test

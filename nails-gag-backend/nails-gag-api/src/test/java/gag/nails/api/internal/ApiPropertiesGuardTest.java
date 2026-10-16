@@ -50,6 +50,12 @@ class ApiPropertiesGuardTest {
                         Base64.getEncoder().encodeToString(new byte[33]),
                         "not base64!")
                 .forEach(key -> assertStopsTheApplication("nails-gag.api.login-state-key=" + key));
+        // Лимит частоты неверной формы — тоже: нулевой или отрицательный закрыл бы адреса совсем.
+        List.of("auth-per-minute", "anonymous-per-minute", "authenticated-per-minute")
+                .forEach(limit -> {
+                    assertStopsTheApplication("nails-gag.api.rate-limits." + limit + "=0");
+                    assertStopsTheApplication("nails-gag.api.rate-limits." + limit + "=-1");
+                });
     }
 
     @Test

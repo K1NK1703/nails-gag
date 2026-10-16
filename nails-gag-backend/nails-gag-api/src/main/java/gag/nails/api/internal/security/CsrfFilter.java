@@ -16,9 +16,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Защита от CSRF без токенов (спецификация API, §5.2) для всех методов, кроме {@code GET}, {@code HEAD} и
- * {@code OPTIONS}: заголовок {@code X-Requested-With: nails.gag} (произвольный заголовок кросс-сайтовый запрос без
- * CORS не поставит) и источник запроса — {@code Origin} равен {@code site-origin}, а без {@code Origin} —
- * {@code Referer} с путём на нём; нет ни того ни другого — отказ. {@code Sec-Fetch-Site}, если прислан, должен быть
+ * {@code OPTIONS}. Два барьера. Первый — заголовок {@code X-Requested-With: nails.gag}: чужой сайт не может добавить
+ * свой заголовок к запросу без CORS-предзапроса, а предзапрос наш сервер не разрешает. Второй — источник запроса:
+ * {@code Origin} равен {@code site-origin}, а если {@code Origin} нет — {@code Referer} начинается с
+ * {@code site-origin + "/"}; нет ни того ни другого — отказ. {@code Sec-Fetch-Site}, если прислан, должен быть
  * {@code same-origin}. Отказ — {@code 403 common.csrf}.
  */
 class CsrfFilter extends OncePerRequestFilter {

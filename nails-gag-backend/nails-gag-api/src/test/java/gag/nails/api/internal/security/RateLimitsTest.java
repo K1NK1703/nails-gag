@@ -1,0 +1,30 @@
+package gag.nails.api.internal.security;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+class RateLimitsTest {
+
+    @Test
+    void ipv4AddressIsItsOwnKey() {
+        assertThat(RateLimits.ipKey("198.51.100.7")).isEqualTo("198.51.100.7");
+        assertThat(RateLimits.ipKey("198.51.100.8")).isNotEqualTo(RateLimits.ipKey("198.51.100.7"));
+        // IPv4, записанный как IPv6, — тот же клиент.
+        assertThat(RateLimits.ipKey("::ffff:198.51.100.7")).isEqualTo("198.51.100.7");
+    }
+
+    @Test
+    void ipv6AddressesOfOneSlash64ShareAKey() {
+        assertThat(RateLimits.ipKey("2001:db8:1:2::1"))
+                .isEqualTo(RateLimits.ipKey("2001:db8:1:2:ffff:ffff:ffff:ffff"))
+                .isEqualTo(RateLimits.ipKey("2001:0db8:0001:0002:0:0:0:abcd"))
+                .isEqualTo("2001:db8:1:2::/64");
+    }
+
+    @Test
+    void ipv6AddressesOfDifferentSlash64HaveDifferentKeys() {
+        assertThat(RateLimits.ipKey("2001:db8:1:2::1")).isNotEqualTo(RateLimits.ipKey("2001:db8:1:3::1"));
+        assertThat(RateLimits.ipKey("2001:db8:1:2::1")).isNotEqualTo(RateLimits.ipKey("2001:db9:1:2::1"));
+    }
+}

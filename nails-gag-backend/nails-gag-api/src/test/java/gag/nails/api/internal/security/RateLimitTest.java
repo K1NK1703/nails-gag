@@ -10,18 +10,32 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient.ResponseSpec;
 
-/** Маленькие лимиты; у каждого теста свои IP и аккаунты, корзины не пересекаются. */
+/**
+ * Маленькие лимиты; у каждого теста свои IP и аккаунты, корзины не пересекаются. Это обязательно: часы перед каждым
+ * тестом возвращаются назад, а Bucket4j при времени, идущем назад, корзину не пополняет — чужая пустая корзина
+ * осталась бы пустой.
+ */
 @ApiTest
 @TestPropertySource(
         properties = {
-            "nails-gag.api.rate-limits.auth-per-minute=3",
-            "nails-gag.api.rate-limits.anonymous-per-minute=5",
-            "nails-gag.api.rate-limits.authenticated-per-minute=7"
+            RateLimitTest.AUTH_PER_MINUTE,
+            RateLimitTest.ANONYMOUS_PER_MINUTE,
+            RateLimitTest.AUTHENTICATED_PER_MINUTE
         })
 class RateLimitTest extends ApiTestSupport {
 
-    private static final int ANONYMOUS = 5;
+    /** Те же настройки берёт {@link SecurityHeadersTest}: контекст общий. */
+    static final String AUTH_PER_MINUTE = "nails-gag.api.rate-limits.auth-per-minute=3";
+
+    static final String ANONYMOUS_PER_MINUTE = "nails-gag.api.rate-limits.anonymous-per-minute=5";
+    static final String AUTHENTICATED_PER_MINUTE = "nails-gag.api.rate-limits.authenticated-per-minute=7";
+
+    static final int AUTH = 3;
+    static final int ANONYMOUS = 5;
     private static final int AUTHENTICATED = 7;
+
+    /** Адрес входа, которого нет: {@code 404}, но запрос в корзину входа засчитывается. */
+    private static final String AUTH_ADDRESS = "/api/auth/x";
 
     @Test
     void anonymousIpIsLimitedWithRetryAfter() {
@@ -79,6 +93,71 @@ class RateLimitTest extends ApiTestSupport {
         clock.advance(Duration.ofMinutes(1));
 
         anonymous("198.51.100.4").expectStatus().isOk();
+    }
+
+    @Test
+    void authPathsHaveTheirOwnBucket() {
+        for (var i = 0; i < AUTH; i++) {
+            get(AUTH_ADDRESS, "198.51.100.10").expectStatus().isNotFound();
+        }
+
+        get(AUTH_ADDRESS, "198.51.100.10")
+                .expectStatus()
+                .isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
+                .expectHeader()
+                .value(
+                        "Retry-After",
+                        retryAfter -> assertThat(Long.parseLong(retryAfter)).isPositive())
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.rate_limited");
+        // Остальные адреса с того же IP считаются в другой корзине.
+        anonymous("198.51.100.10").expectStatus().isOk();
+    }
+
+    @Test
+    void signedInRequestToAuthPathUsesIpBucket() {
+        var session = signInClient();
+
+        for (var i = 0; i < AUTH; i++) {
+            as(session, client.get().uri(AUTH_ADDRESS))
+                    .header("X-Forwarded-For", "198.51.100.11")
+                    .exchange()
+                    .expectStatus()
+                    .isNotFound();
+        }
+        as(session, client.get().uri(AUTH_ADDRESS))
+                .header("X-Forwarded-For", "198.51.100.11")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+
+        // Корзина входа — по IP: с другого адреса тот же человек проходит, и корзина аккаунта не тронута.
+        as(session, client.get().uri(AUTH_ADDRESS))
+                .header("X-Forwarded-For", "198.51.100.12")
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+        signedIn(session, "198.51.100.11").expectStatus().isOk();
+    }
+
+    @Test
+    void authPathClassification() {
+        // Сам /api/auth — адрес входа.
+        for (var i = 0; i < AUTH; i++) {
+            get("/api/auth", "198.51.100.13").expectStatus().isNotFound();
+        }
+        get("/api/auth", "198.51.100.13").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+
+        // /api/authx — нет: общая корзина анонима, в ней больше запросов.
+        for (var i = 0; i < ANONYMOUS; i++) {
+            get("/api/authx", "198.51.100.14").expectStatus().isNotFound();
+        }
+        get("/api/authx", "198.51.100.14").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    private ResponseSpec get(String uri, String ip) {
+        return client.get().uri(uri).header("X-Forwarded-For", ip).exchange();
     }
 
     private ResponseSpec anonymous(String ip) {
