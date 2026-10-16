@@ -13,6 +13,9 @@ dependencies {
     implementation(libs.spring.boot.starter.validation)
     // Взаимная блокировка в БД приходит как PessimisticLockingFailureException и отвечает 503 common.busy.
     implementation(libs.spring.tx)
+    // Лимиты частоты: корзины Bucket4j в памяти, устаревание ключей — Caffeine.
+    implementation(libs.bucket4j.core)
+    implementation(libs.caffeine)
 
     testImplementation(project(":nails-gag-test-support"))
     testImplementation(libs.spring.boot.resttestclient)

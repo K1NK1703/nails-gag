@@ -2,9 +2,11 @@ package gag.nails.api.internal.error;
 
 import gag.nails.booking.error.BookingNotFoundException;
 import gag.nails.booking.error.LimitReachedException;
+import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.InternalException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.identity.model.ClientInfo;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -15,6 +17,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Optional;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -77,6 +80,30 @@ class ProblemTestController {
         response.sendError(HttpStatus.CONTENT_TOO_LARGE.value());
     }
 
+    /** Адрес, которому нужна сессия. */
+    @GetMapping("/whoami")
+    Caller whoami(Actor actor, ClientInfo client) {
+        return new Caller(actor.accountId(), actor.isStaff(), client.ip());
+    }
+
+    /** Адрес, работающий и без входа. */
+    @GetMapping("/maybe")
+    Caller maybe(Optional<Actor> actor, ClientInfo client) {
+        return caller(actor, client);
+    }
+
+    /** Изменяющий адрес без обязательной сессии: на нём проверяется защита от CSRF. */
+    @PostMapping("/echo")
+    Caller echo(Optional<Actor> actor, ClientInfo client) {
+        return caller(actor, client);
+    }
+
+    /** Модуль отказал в доступе: ответ зависит от того, кто спросил. */
+    @GetMapping("/denied")
+    void denied(Optional<Actor> actor) {
+        throw new AccessDeniedException();
+    }
+
     /** Бросает исключение по имени: так тест видит, во что его превращает обработчик. */
     @GetMapping("/throw/{kind}")
     void fail(@PathVariable String kind) {
@@ -90,6 +117,18 @@ class ProblemTestController {
             default -> throw new InternalException(SECRET);
         }
     }
+
+    private static Caller caller(Optional<Actor> actor, ClientInfo client) {
+        return new Caller(
+                actor.map(Actor::accountId).orElse(null),
+                actor.map(Actor::isStaff).orElse(false),
+                client.ip());
+    }
+
+    record Caller(
+            @Nullable UUID accountId,
+            boolean staff,
+            @Nullable String ip) {}
 
     record JsonSample(
             Instant instant,

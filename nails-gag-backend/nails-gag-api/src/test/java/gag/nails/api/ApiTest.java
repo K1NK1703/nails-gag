@@ -21,6 +21,7 @@ import org.springframework.test.context.TestExecutionListeners.MergeMode;
  * транзакции фиксируются по-настоящему и данные между тестами не откатываются: каждый тест заводит своих людей
  * ({@link ApiTestSupport#uniqueSubject()}, {@link ApiTestSupport#uniquePhone()}) и не опирается на пустую базу.
  * Лимиты частоты подняты, чтобы тесты не упирались в них; {@code api-developer} — разработчик на весь прогон.
+ * Адрес клиента берётся из {@code X-Forwarded-For}, как за nginx: тест подставляет IP этим заголовком.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -32,7 +33,9 @@ import org.springframework.test.context.TestExecutionListeners.MergeMode;
             "nails-gag.api.site-origin=http://localhost",
             "nails-gag.api.rate-limits.auth-per-minute=100000",
             "nails-gag.api.rate-limits.anonymous-per-minute=100000",
-            "nails-gag.api.rate-limits.authenticated-per-minute=100000"
+            "nails-gag.api.rate-limits.authenticated-per-minute=100000",
+            // Как в application.yaml приложения: IP клиента — из X-Forwarded-For от доверенного прокси (localhost).
+            "server.forward-headers-strategy=native"
         })
 @AutoConfigureRestTestClient
 @ActiveProfiles("test")

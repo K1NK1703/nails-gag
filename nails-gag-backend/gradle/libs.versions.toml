@@ -7,6 +7,8 @@ opentelemetryInstrumentation = "2.28.1-alpha"
 palantirJavaFormat = "2.100.0"
 spotless = "8.10.3"
 foojay = "1.0.0"
+# Лимиты частоты API; не входит в BOM Spring Boot
+bucket4j = "8.21.0"
 
 [libraries]
 # BOM-ы: версии всего остального из Spring Boot и Spring Modulith
@@ -33,6 +35,9 @@ spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-star
 spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
 # RestTestClient и @AutoConfigureRestTestClient для HTTP-тестов модуля api
 spring-boot-resttestclient = { module = "org.springframework.boot:spring-boot-resttestclient" }
+# Лимиты частоты API: корзины Bucket4j в памяти, устаревание ключей — Caffeine (версия из BOM Spring Boot)
+bucket4j-core = { module = "com.bucket4j:bucket4j_jdk17-core", version.ref = "bucket4j" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
 
 spring-modulith-starter-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
 spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }
