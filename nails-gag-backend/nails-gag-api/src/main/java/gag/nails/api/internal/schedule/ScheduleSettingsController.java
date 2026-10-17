@@ -26,7 +26,9 @@ class ScheduleSettingsController {
         this.settings = settings;
     }
 
-    /** Текущие настройки. Модулю актор не нужен, адресу — нужна сессия. */
+    /**
+     * Текущие настройки. Модулю актор не нужен: параметр {@code actor} лишь требует сессию — без неё {@code 401}.
+     */
     @GetMapping
     ScheduleSettingsView settings(Actor actor) {
         return settings.settings();

@@ -17,6 +17,7 @@ import gag.nails.identity.testing.FakeProvider;
 import gag.nails.testsupport.MutableClock;
 import java.net.URI;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -32,8 +33,15 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.test.web.servlet.client.ExchangeResult;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.springframework.test.web.servlet.client.RestTestClient.RequestHeadersSpec;
+import tools.jackson.databind.JsonNode;
 
-/** Общая обвязка HTTP-тестов {@code api}: клиент, сервисы модулей для подготовки данных, уникальные люди. */
+/**
+ * Общая обвязка HTTP-тестов {@code api}: клиент, сервисы модулей для подготовки данных, уникальные люди, чтение ответов.
+ *
+ * <p>Тело запроса — команда модуля типизированной записью ({@code new CreateDayTemplate(…)}): её поля сверит
+ * компилятор. Тела слоя {@code api} закрыты в пакетах областей, поэтому их тест пишет картой ({@code Map.of("date", …)})
+ * — так же, как их пришлёт фронт.
+ */
 public abstract class ApiTestSupport {
 
     /** Служебный заголовок, который ждёт защита от CSRF. */
@@ -237,6 +245,28 @@ public abstract class ApiTestSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(command)
                 .exchange();
+    }
+
+    /** Тело успешного ответа {@code 200}. */
+    protected static JsonNode json(RequestHeadersSpec<?> spec) {
+        return json(spec, HttpStatus.OK);
+    }
+
+    /** Тело ответа с ожидаемым статусом; другой статус или пустое тело — провал теста. */
+    protected static JsonNode json(RequestHeadersSpec<?> spec, HttpStatus status) {
+        return Objects.requireNonNull(spec.exchange()
+                .expectStatus()
+                .isEqualTo(status)
+                .expectBody(JsonNode.class)
+                .returnResult()
+                .getResponseBody());
+    }
+
+    /** Идентификаторы элементов JSON-массива по порядку; элемент без {@code id} — провал теста. */
+    protected static List<UUID> ids(JsonNode items) {
+        return items.values().stream()
+                .map(item -> UUID.fromString(item.path("id").asString()))
+                .toList();
     }
 
     /** Куда ответ отправляет браузер. */

@@ -435,22 +435,6 @@ class ClientsApiTest extends ApiTestSupport {
                 .body(Map.of("sourceId", sourceId));
     }
 
-    /** Тело успешного ответа {@code 200}. */
-    private static JsonNode json(RequestHeadersSpec<?> spec) {
-        return Objects.requireNonNull(spec.exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody(JsonNode.class)
-                .returnResult()
-                .getResponseBody());
-    }
-
-    private static List<UUID> ids(JsonNode items) {
-        return items.values().stream()
-                .map(item -> UUID.fromString(item.path("id").asString()))
-                .toList();
-    }
-
     /** Запись клиента на свободный слот нового дня, её ставит разработчик. */
     private BookingView book(UUID clientId) {
         var developer = developerActor();
