@@ -5,24 +5,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
 import gag.nails.clients.model.DocumentKind;
+import gag.nails.common.actor.Section;
 import gag.nails.identity.model.Provider;
 import io.swagger.v3.oas.models.PathItem;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Схема OpenAPI, из которой фронт получает типы (спецификация API, §11): тело ошибки, ответ обратного вызова,
  * скрытые аргументы слоя, перечисления в пути, {@code null} в полях. springdoc подключён только к тестам {@code api} и
- * включён только здесь ({@link ApiTest} его выключает), адреса — как в {@code application-local.yaml}. Тестовые адреса
+ * включён только здесь ({@link ApiTest} его выключает), настройки — как в {@code application-local.yaml}. Тестовые адреса
  * ({@code /api/test/**}) в проверки не входят: в рабочем приложении их нет.
  */
 @ApiTest
@@ -31,11 +37,19 @@ import tools.jackson.databind.json.JsonMapper;
             "springdoc.api-docs.enabled=true",
             "springdoc.api-docs.version=openapi_3_1",
             "springdoc.api-docs.path=/api/openapi.json",
-            "springdoc.paths-to-match=/api/**"
+            "springdoc.paths-to-match=/api/**",
+            "springdoc.default-produces-media-type=application/json"
         })
 class OpenApiSchemaTest extends ApiTestSupport {
 
     private static final String PROBLEM_REF = "#/components/schemas/Problem";
+
+    /** Переменная пути с регулярным выражением ({@code {provider:yandex|vk|fake}}): в схеме — только имя. */
+    private static final Pattern PATH_VARIABLE_REGEX = Pattern.compile("\\{([^}:]+):[^}]*}");
+
+    @Autowired
+    @Qualifier("requestMappingHandlerMapping")
+    RequestMappingHandlerMapping handlerMapping;
 
     /** Ключи операций в элементе {@code paths}: имена методов HTTP в нижнем регистре. */
     private static final Set<String> HTTP_METHODS = Arrays.stream(PathItem.HttpMethod.values())
@@ -170,6 +184,74 @@ class OpenApiSchemaTest extends ApiTestSupport {
             assertThat(scope.path("in").asString()).isEqualTo("query");
             assertThat(enumValues(scope)).containsExactly("active", "history");
         });
+    }
+
+    /**
+     * Схема полная: в ней каждый адрес {@code /api/**} контроллеров приложения с его методом и ничего сверх них — фронт
+     * не останется без типа для адреса. Тестовые адреса ({@code /api/test/**}) и {@code /error} в счёт не идут, адреса
+     * springdoc ({@code /api/openapi.json}) — тоже: их контроллеры не из приложения.
+     */
+    @Test
+    void everyApiControllerIsInSchema() {
+        var mapped = new HashSet<String>();
+        handlerMapping.getHandlerMethods().forEach((info, method) -> {
+            if (!method.getBeanType().getPackageName().startsWith("gag.nails.")) {
+                return;
+            }
+            for (var pattern : info.getPatternValues()) {
+                if (pattern.startsWith("/api/") && !pattern.startsWith("/api/test/")) {
+                    var path = PATH_VARIABLE_REGEX.matcher(pattern).replaceAll("{$1}");
+                    info.getMethodsCondition()
+                            .getMethods()
+                            .forEach(httpMethod -> mapped.add(httpMethod.name().toLowerCase(Locale.ROOT) + " " + path));
+                }
+            }
+        });
+
+        var documented = operations(openApi()).stream().map(Operation::name).toList();
+
+        assertThat(mapped).hasSizeGreaterThan(80);
+        assertThat(documented).doesNotHaveDuplicates().containsExactlyInAnyOrderElementsOf(mapped);
+    }
+
+    /** Раздел админки в пути — через дефис, как его принимает адрес: {@code …/overrides/booking-settings}. */
+    @Test
+    void sectionPathIsKebabCase() {
+        var sections = parameters(operations(openApi()), "section");
+
+        assertThat(sections).hasSize(2);
+        sections.forEach(section -> {
+            assertThat(section.path("in").asString()).isEqualTo("path");
+            assertThat(enumValues(section)).containsExactlyElementsOf(kebabCase(Section.values()));
+        });
+    }
+
+    /**
+     * Успешные ответы — {@code application/json}, а не {@code *}{@code /*} springdoc по умолчанию: генератор типов
+     * фронта берёт тип ответа по типу содержимого. Ответы без тела ({@code 204}, {@code 303}) содержимого не имеют.
+     */
+    @Test
+    void successResponsesAreJson() {
+        var operations = operations(openApi());
+        var withBody = 0;
+
+        for (var operation : operations) {
+            for (var response : operation.node().path("responses").properties()) {
+                if (response.getKey().equals("default")) {
+                    continue;
+                }
+                var content = response.getValue().path("content");
+                if (content.isMissingNode()) {
+                    assertThat(response.getKey()).as(operation.name()).isIn("204", "303");
+                    continue;
+                }
+                withBody++;
+                assertThat(content.propertyNames())
+                        .as(operation.name() + " " + response.getKey())
+                        .containsExactly("application/json");
+            }
+        }
+        assertThat(withBody).isGreaterThan(operations.size() / 2);
     }
 
     /** Операция схемы: {@code name} — метод и адрес для сообщений проверок. */

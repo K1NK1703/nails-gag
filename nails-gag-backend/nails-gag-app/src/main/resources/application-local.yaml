@@ -24,6 +24,8 @@ nails-gag:
 springdoc:
   # Только адреса сайта: без /error и служебных.
   paths-to-match: /api/**
+  # Тип успешных ответов в схеме — JSON, а не */*: по нему генератор типов фронта находит тело ответа.
+  default-produces-media-type: application/json
   api-docs:
     # По умолчанию у springdoc 3; настройка схемы в api (null в полях — массив типов) рассчитана только на 3.1.
     version: openapi_3_1
