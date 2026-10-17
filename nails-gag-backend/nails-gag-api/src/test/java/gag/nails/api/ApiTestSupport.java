@@ -2,7 +2,14 @@ package gag.nails.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import gag.nails.catalog.CatalogService;
+import gag.nails.catalog.command.CreateService;
+import gag.nails.catalog.model.ServiceKind;
+import gag.nails.catalog.model.ServiceView;
+import gag.nails.clients.ClientService;
 import gag.nails.clients.DocumentVersionService;
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Actor;
 import gag.nails.identity.AccessAdministration;
@@ -12,7 +19,10 @@ import gag.nails.identity.model.LoginPurpose;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.identity.testing.FakeProvider;
 import gag.nails.testsupport.MutableClock;
+import java.math.BigDecimal;
 import java.net.URI;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -28,8 +38,15 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.test.web.servlet.client.ExchangeResult;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.springframework.test.web.servlet.client.RestTestClient.RequestHeadersSpec;
+import tools.jackson.databind.JsonNode;
 
-/** Общая обвязка HTTP-тестов {@code api}: клиент, сервисы модулей для подготовки данных, уникальные люди. */
+/**
+ * Общая обвязка HTTP-тестов {@code api}: клиент, сервисы модулей для подготовки данных, уникальные люди, чтение ответов.
+ *
+ * <p>Тело запроса — команда модуля типизированной записью ({@code new CreateDayTemplate(…)}): её поля сверит
+ * компилятор. Тела слоя {@code api} закрыты в пакетах областей, поэтому их тест пишет картой ({@code Map.of("date", …)})
+ * — так же, как их пришлёт фронт.
+ */
 public abstract class ApiTestSupport {
 
     /** Служебный заголовок, который ждёт защита от CSRF. */
@@ -57,6 +74,14 @@ public abstract class ApiTestSupport {
     private static final AtomicLong PHONES =
             new AtomicLong(ThreadLocalRandom.current().nextLong(900_000_000L));
 
+    /**
+     * Счётчик дней для слотов. Статический — общий для всех классов тестов прогона, поэтому день не выдаётся дважды,
+     * даже когда классы делят базу: у каждого закэшированного контекста свой контейнер PostgreSQL, и тесты одного
+     * контекста видят слоты друг друга. Случайное начало в 60–2000 днях от часов лишь разносит дни по календарю.
+     */
+    private static final AtomicLong DAYS =
+            new AtomicLong(ThreadLocalRandom.current().nextLong(60, 2000));
+
     /** Телефон разработчика: один на прогон, чтобы повторный вход не менял его способ входа. */
     private static final String DEVELOPER_PHONE = uniquePhone();
 
@@ -83,10 +108,19 @@ public abstract class ApiTestSupport {
     protected DocumentVersionService documents;
 
     @Autowired
+    protected ClientService clientService;
+
+    @Autowired
     protected Sessions sessions;
 
     @Autowired
+    protected CatalogService catalog;
+
+    @Autowired
     protected MutableClock clock;
+
+    /** Актор разработчика этого теста: JUnit создаёт экземпляр класса на каждый тест. */
+    private @Nullable Actor developerActor;
 
     /**
      * Вошедший: {@code cookie} — значение cookie {@code ng_session} (токен сессии), {@code accountId} — его
@@ -221,6 +255,39 @@ public abstract class ApiTestSupport {
                 .exchange();
     }
 
+    /** Тело успешного ответа {@code 200}. */
+    protected static JsonNode json(RequestHeadersSpec<?> spec) {
+        return json(spec, HttpStatus.OK);
+    }
+
+    /** Тело ответа с ожидаемым статусом; другой статус или пустое тело — провал теста. */
+    protected static JsonNode json(RequestHeadersSpec<?> spec, HttpStatus status) {
+        return Objects.requireNonNull(spec.exchange()
+                .expectStatus()
+                .isEqualTo(status)
+                .expectBody(JsonNode.class)
+                .returnResult()
+                .getResponseBody());
+    }
+
+    /** Ответ — ошибка с данным статусом и кодом. */
+    protected static void expectProblem(RequestHeadersSpec<?> spec, HttpStatus status, String code) {
+        assertThat(field(json(spec, status), "code").asString()).isEqualTo(code);
+    }
+
+    /** Поле объекта; его отсутствие — провал теста, а не пустое значение. */
+    protected static JsonNode field(JsonNode node, String name) {
+        assertThat(node.has(name)).as("field " + name + " in " + node).isTrue();
+        return node.get(name);
+    }
+
+    /** Идентификаторы элементов JSON-массива по порядку; элемент без {@code id} — провал теста. */
+    protected static List<UUID> ids(JsonNode items) {
+        return items.values().stream()
+                .map(item -> UUID.fromString(item.path("id").asString()))
+                .toList();
+    }
+
     /** Куда ответ отправляет браузер. */
     protected static URI location(ExchangeResult result) {
         var location = result.getResponseHeaders().getLocation();
@@ -256,6 +323,16 @@ public abstract class ApiTestSupport {
         return signIn(new FakeProfile(subject, uniquePhone(), null, "Клиент " + subject, null));
     }
 
+    /** Актор разработчика для подготовки данных через модули; вход — один раз на тест. */
+    protected Actor developerActor() {
+        var developer = developerActor;
+        if (developer == null) {
+            developer = actor(signInDeveloper());
+            developerActor = developer;
+        }
+        return developer;
+    }
+
     /** Актор вошедшего, как его видит модуль на этом запросе. */
     protected Actor actor(Session session) {
         return sessions.authenticate(session.cookie()).orElseThrow().actor();
@@ -269,6 +346,45 @@ public abstract class ApiTestSupport {
     /** Телефон, которого ещё нет в базе этого прогона: {@code +79} и девять цифр. */
     protected static String uniquePhone() {
         return "+79%09d".formatted(PHONES.getAndIncrement() % 1_000_000_000L);
+    }
+
+    /** День, которого ещё не выдавал этот прогон: слотов соседних тестов на нём нет (счётчик дней — выше). */
+    protected LocalDate freshDay() {
+        return LocalDate.now(clock).plusDays(DAYS.getAndIncrement());
+    }
+
+    /**
+     * Фамилия, которой ещё нет в базе: латинские буквы после «Тест», без цифр — поиск клиентов не примет её за начало
+     * телефона.
+     */
+    protected static String uniqueLastName() {
+        var random = ThreadLocalRandom.current();
+        var name = new StringBuilder("Тест");
+        for (var i = 0; i < 12; i++) {
+            name.append((char) ('a' + random.nextInt(26)));
+        }
+        return name.toString();
+    }
+
+    /** Карточка клиента без аккаунта с новым телефоном, её заводит разработчик. */
+    protected ClientView createClient(String lastName) {
+        return clientService.create(
+                new CreateClient("Анна", lastName, null, uniquePhone(), null, null), developerActor());
+    }
+
+    /** Новая основная услуга за 1500,00 на 60 минут; её заводит разработчик. */
+    protected ServiceView mainService() {
+        return catalog.create(
+                new CreateService(
+                        ServiceKind.MAIN,
+                        "Услуга " + UUID.randomUUID(),
+                        "Описание",
+                        new BigDecimal("1500.00"),
+                        60,
+                        "Маникюр",
+                        false,
+                        false),
+                developerActor());
     }
 
     /** Cookie из {@code Set-Cookie} ответа со значением и атрибутами; её отсутствие — провал теста. */

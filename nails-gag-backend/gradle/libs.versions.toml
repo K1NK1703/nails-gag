@@ -11,6 +11,8 @@ foojay = "1.0.0"
 bucket4j = "8.21.0"
 # Схема OpenAPI и Swagger UI только при локальном запуске; 3.x — для Spring Boot 4, не входит в BOM
 springdoc = "3.1.1"
+# span-ы SQL в трассах; 2.x собрана под Spring Boot 4.1, не входит в BOM
+datasourceMicrometer = "2.3.0"
 
 [libraries]
 # BOM-ы: версии всего остального из Spring Boot и Spring Modulith
@@ -31,9 +33,15 @@ spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-
 spring-boot-starter-opentelemetry = { module = "org.springframework.boot:spring-boot-starter-opentelemetry" }
 # Boot не связывает Logback с SdkLoggerProvider сам; логи в OTLP уходят через этот appender
 opentelemetry-logback-appender = { module = "io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0", version.ref = "opentelemetryInstrumentation" }
+# span-ы SQL: DataSource оборачивается прокси, каждый запрос — наблюдение Micrometer, вложенное в span запроса
+datasource-micrometer = { module = "net.ttddyy.observation:datasource-micrometer-spring-boot", version.ref = "datasourceMicrometer" }
 spring-boot-docker-compose = { module = "org.springframework.boot:spring-boot-docker-compose" }
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+# @AutoConfigureTracing: в тестах Boot экспорт трасс выключен, аннотация включает его (версия из BOM Spring Boot)
+spring-boot-micrometer-tracing-test = { module = "org.springframework.boot:spring-boot-micrometer-tracing-test" }
+# InMemorySpanExporter и InMemoryLogRecordExporter для проверки трасс и логов в тестах (версия из BOM Spring Boot)
+opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing" }
 spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
 # RestTestClient и @AutoConfigureRestTestClient для HTTP-тестов модуля api
 spring-boot-resttestclient = { module = "org.springframework.boot:spring-boot-resttestclient" }

@@ -22,4 +22,6 @@ dependencies {
 
     testImplementation(project(":nails-gag-test-support"))
     testImplementation(libs.spring.boot.resttestclient)
+    // OpenApiSchemaTest проверяет схему, которую при bootRun отдаёт springdoc; в рабочий classpath он не попадает.
+    testImplementation(libs.springdoc.webmvc.ui)
 }

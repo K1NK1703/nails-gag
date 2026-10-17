@@ -14,6 +14,13 @@ export default defineConfig(({ isSsrBuild, mode }) => ({
       generateScopedName: '[name]_[local]_[hash:base64:5]',
     },
   },
+  server: {
+    // Один origin, как за nginx: браузер шлёт cookie сессии и проходит проверку Origin без CORS.
+    // site-origin бэкенда в профиле local — http://localhost:5173.
+    proxy: {
+      '/api': 'http://localhost:8080',
+    },
+  },
   build: {
     // public/ нужен только клиентской сборке, в dist-ssr он лишний.
     copyPublicDir: !isSsrBuild,

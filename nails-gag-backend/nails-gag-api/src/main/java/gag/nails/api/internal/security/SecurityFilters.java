@@ -2,6 +2,7 @@ package gag.nails.api.internal.security;
 
 import gag.nails.api.internal.ApiProperties;
 import gag.nails.api.internal.error.ProblemWriter;
+import gag.nails.api.internal.observability.RequestLogFilter;
 import gag.nails.identity.Sessions;
 import jakarta.servlet.Filter;
 import java.time.Clock;
@@ -11,10 +12,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 
 /**
- * Цепочка защиты {@code /api/*} (спецификация API, §5.0): заголовки → сессия → лимиты → CSRF. Сами фильтры — не
- * бины: иначе Spring Boot зарегистрировал бы их второй раз, на все адреса. Порядок — после фильтров Spring Boot
- * (наблюдение HTTP с порядком {@code HIGHEST_PRECEDENCE + 1} уже положило {@code traceId} в MDC, и отказы фильтров
- * его несут), но до {@code DispatcherServlet}.
+ * Цепочка {@code /api/*} (спецификация API, §5.0, §13): заголовки → сессия → журнал запросов → лимиты → CSRF. Журнал
+ * стоит сразу после сессии: строка запроса несёт {@code accountId} вошедшего и пишется и для отказов лимита
+ * ({@code 429}) и CSRF ({@code 403}). Сами фильтры — не бины: иначе Spring Boot зарегистрировал бы их второй раз, на
+ * все адреса. Порядок — после фильтров Spring Boot (наблюдение HTTP с порядком {@code HIGHEST_PRECEDENCE + 1} уже
+ * положило {@code traceId} в MDC, и отказы фильтров его несут), но до {@code DispatcherServlet}.
  */
 @Configuration(proxyBeanMethods = false)
 class SecurityFilters {
@@ -22,8 +24,9 @@ class SecurityFilters {
     static final String URL_PATTERN = "/api/*";
     static final int HEADERS_ORDER = Ordered.HIGHEST_PRECEDENCE + 100;
     static final int SESSION_ORDER = HEADERS_ORDER + 1;
-    static final int RATE_LIMIT_ORDER = HEADERS_ORDER + 2;
-    static final int CSRF_ORDER = HEADERS_ORDER + 3;
+    static final int REQUEST_LOG_ORDER = HEADERS_ORDER + 2;
+    static final int RATE_LIMIT_ORDER = HEADERS_ORDER + 3;
+    static final int CSRF_ORDER = HEADERS_ORDER + 4;
 
     @Bean
     FilterRegistrationBean<SecurityHeadersFilter> securityHeadersFilter() {
@@ -33,6 +36,11 @@ class SecurityFilters {
     @Bean
     FilterRegistrationBean<SessionFilter> sessionFilter(Sessions sessions, SessionCookie cookie) {
         return registration(new SessionFilter(sessions, cookie), SESSION_ORDER);
+    }
+
+    @Bean
+    FilterRegistrationBean<RequestLogFilter> requestLogFilter() {
+        return registration(new RequestLogFilter(), REQUEST_LOG_ORDER);
     }
 
     @Bean
