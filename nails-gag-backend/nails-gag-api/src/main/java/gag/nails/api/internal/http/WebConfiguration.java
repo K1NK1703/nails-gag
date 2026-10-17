@@ -1,6 +1,5 @@
 package gag.nails.api.internal.http;
 
-import gag.nails.api.internal.clients.BookingScope;
 import gag.nails.api.internal.security.CurrentActorResolver;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Section;

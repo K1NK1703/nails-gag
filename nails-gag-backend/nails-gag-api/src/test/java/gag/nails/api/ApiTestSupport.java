@@ -2,7 +2,10 @@ package gag.nails.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import gag.nails.clients.ClientService;
 import gag.nails.clients.DocumentVersionService;
+import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Actor;
 import gag.nails.identity.AccessAdministration;
@@ -59,8 +62,9 @@ public abstract class ApiTestSupport {
             new AtomicLong(ThreadLocalRandom.current().nextLong(900_000_000L));
 
     /**
-     * Счётчик дней для слотов: случайное начало в 60–2000 днях от часов, чтобы прогоны на одной базе не сталкивались
-     * слотами, а день каждого теста был свободен.
+     * Счётчик дней для слотов. Статический — общий для всех классов тестов прогона, поэтому день не выдаётся дважды,
+     * даже когда классы делят базу: у каждого закэшированного контекста свой контейнер PostgreSQL, и тесты одного
+     * контекста видят слоты друг друга. Случайное начало в 60–2000 днях от часов лишь разносит дни по календарю.
      */
     private static final AtomicLong DAYS =
             new AtomicLong(ThreadLocalRandom.current().nextLong(60, 2000));
@@ -91,10 +95,16 @@ public abstract class ApiTestSupport {
     protected DocumentVersionService documents;
 
     @Autowired
+    protected ClientService clientService;
+
+    @Autowired
     protected Sessions sessions;
 
     @Autowired
     protected MutableClock clock;
+
+    /** Актор разработчика этого теста: JUnit создаёт экземпляр класса на каждый тест. */
+    private @Nullable Actor developerActor;
 
     /**
      * Вошедший: {@code cookie} — значение cookie {@code ng_session} (токен сессии), {@code accountId} — его
@@ -264,6 +274,16 @@ public abstract class ApiTestSupport {
         return signIn(new FakeProfile(subject, uniquePhone(), null, "Клиент " + subject, null));
     }
 
+    /** Актор разработчика для подготовки данных через модули; вход — один раз на тест. */
+    protected Actor developerActor() {
+        var developer = developerActor;
+        if (developer == null) {
+            developer = actor(signInDeveloper());
+            developerActor = developer;
+        }
+        return developer;
+    }
+
     /** Актор вошедшего, как его видит модуль на этом запросе. */
     protected Actor actor(Session session) {
         return sessions.authenticate(session.cookie()).orElseThrow().actor();
@@ -279,9 +299,28 @@ public abstract class ApiTestSupport {
         return "+79%09d".formatted(PHONES.getAndIncrement() % 1_000_000_000L);
     }
 
-    /** День, которого ещё не выдавал этот прогон: на нём нет слотов соседних тестов. */
+    /** День, которого ещё не выдавал этот прогон: слотов соседних тестов на нём нет (счётчик дней — выше). */
     protected LocalDate freshDay() {
         return LocalDate.now(clock).plusDays(DAYS.getAndIncrement());
+    }
+
+    /**
+     * Фамилия, которой ещё нет в базе: латинские буквы после «Тест», без цифр — поиск клиентов не примет её за начало
+     * телефона.
+     */
+    protected static String uniqueLastName() {
+        var random = ThreadLocalRandom.current();
+        var name = new StringBuilder("Тест");
+        for (var i = 0; i < 12; i++) {
+            name.append((char) ('a' + random.nextInt(26)));
+        }
+        return name.toString();
+    }
+
+    /** Карточка клиента без аккаунта с новым телефоном, её заводит разработчик. */
+    protected ClientView createClient(String lastName) {
+        return clientService.create(
+                new CreateClient("Анна", lastName, null, uniquePhone(), null, null), developerActor());
     }
 
     /** Cookie из {@code Set-Cookie} ответа со значением и атрибутами; её отсутствие — провал теста. */

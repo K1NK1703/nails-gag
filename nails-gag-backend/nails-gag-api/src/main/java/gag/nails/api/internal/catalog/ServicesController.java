@@ -49,31 +49,39 @@ class ServicesController {
         return queries.get(id);
     }
 
-    /** Новая услуга становится последней в прайсе. */
+    /** Новая услуга становится последней в прайсе; нужен уровень изменения раздела «Каталог». */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     ServiceView create(@Valid @RequestBody CreateService body, Actor actor) {
         return catalog.create(body, actor);
     }
 
+    /** Правка услуги; вид услуги не меняется. Нужен уровень изменения раздела «Каталог». */
     @PatchMapping("/{id}")
     ServiceView update(@PathVariable UUID id, @Valid @RequestBody UpdateService body, Actor actor) {
         return catalog.update(id, body, actor);
     }
 
+    /** Скрытая услуга снова доступна для новых записей; нужен уровень изменения раздела «Каталог». */
     @PostMapping("/{id}/activate")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void activate(@PathVariable UUID id, Actor actor) {
         catalog.activate(id, actor);
     }
 
-    /** Скрытая услуга остаётся в истории записей, но недоступна для новых. */
+    /**
+     * Скрытая услуга остаётся в истории записей, но недоступна для новых; нужен уровень изменения раздела «Каталог».
+     */
     @PostMapping("/{id}/deactivate")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void deactivate(@PathVariable UUID id, Actor actor) {
         catalog.deactivate(id, actor);
     }
 
+    /**
+     * Порядок прайса: перечисленные услуги — первыми в порядке списка, остальные — за ними в прежнем порядке. Нужен
+     * уровень изменения раздела «Каталог»; повтор в списке — {@code 400}.
+     */
     @PutMapping("/order")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void reorder(@Valid @RequestBody ReorderServices body, Actor actor) {

@@ -103,11 +103,9 @@ class ServicesApiTest extends ApiTestSupport {
         var master = signInMaster();
         var title = uniqueTitle();
 
-        var created = as(
-                        master,
-                        csrf(client.post().uri("/api/services"))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(createCommand(title, true)))
+        var created = as(master, csrf(client.post().uri("/api/services")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(createCommand(title, true))
                 .exchange()
                 .expectStatus()
                 .isCreated()
@@ -119,18 +117,10 @@ class ServicesApiTest extends ApiTestSupport {
         assertThat(created.active()).isTrue();
 
         var newTitle = uniqueTitle();
-        as(
-                        master,
-                        csrf(client.patch().uri("/api/services/{id}", created.id()))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(new UpdateService(
-                                        newTitle,
-                                        "Новое описание",
-                                        new BigDecimal("1800.00"),
-                                        90,
-                                        "Маникюр",
-                                        true,
-                                        false)))
+        as(master, csrf(client.patch().uri("/api/services/{id}", created.id())))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new UpdateService(
+                        newTitle, "Новое описание", new BigDecimal("1800.00"), 90, "Маникюр", true, false))
                 .exchange()
                 .expectStatus()
                 .isOk()
@@ -158,11 +148,9 @@ class ServicesApiTest extends ApiTestSupport {
         var first = createService(true);
         var second = createService(true);
 
-        as(
-                        signInMaster(),
-                        csrf(client.put().uri("/api/services/order"))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(Map.of("orderedServiceIds", List.of(second.id(), first.id()))))
+        as(signInMaster(), csrf(client.put().uri("/api/services/order")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("orderedServiceIds", List.of(second.id(), first.id())))
                 .exchange()
                 .expectStatus()
                 .isNoContent();
@@ -173,11 +161,9 @@ class ServicesApiTest extends ApiTestSupport {
 
     @Test
     void clientCannotCreate() {
-        as(
-                        signInClient(),
-                        csrf(client.post().uri("/api/services"))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(createCommand(uniqueTitle(), true)))
+        as(signInClient(), csrf(client.post().uri("/api/services")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(createCommand(uniqueTitle(), true))
                 .exchange()
                 .expectStatus()
                 .isNotFound()
@@ -209,12 +195,12 @@ class ServicesApiTest extends ApiTestSupport {
 
     /** Активная основная услуга, заведённая разработчиком. */
     private ServiceView createService(boolean showOnLanding) {
-        return catalog.create(createCommand(uniqueTitle(), showOnLanding), actor(signInDeveloper()));
+        return catalog.create(createCommand(uniqueTitle(), showOnLanding), developerActor());
     }
 
     private ServiceView createInactiveService() {
         var service = createService(false);
-        catalog.deactivate(service.id(), actor(signInDeveloper()));
+        catalog.deactivate(service.id(), developerActor());
         return service;
     }
 

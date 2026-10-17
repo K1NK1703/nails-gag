@@ -1,5 +1,6 @@
 package gag.nails.api.internal.clients;
 
+import gag.nails.api.internal.http.BookingScope;
 import gag.nails.api.internal.http.SetMasterNote;
 import gag.nails.booking.BookingQueries;
 import gag.nails.booking.model.BookingView;
@@ -41,29 +42,36 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/clients")
 class ClientsController {
 
+    /** Номер страницы поиска по умолчанию — первая. */
+    private static final String FIRST_PAGE = "0";
+
+    /** Размер страницы поиска по умолчанию; наибольший — {@link Paging#MAX_SIZE}, больше — {@code 400}. */
+    private static final String DEFAULT_PAGE_SIZE = "50";
+
     private final ClientQueries queries;
     private final ClientService clients;
-    private final BookingQueries bookings;
+    private final BookingQueries bookingQueries;
 
-    ClientsController(ClientQueries queries, ClientService clients, BookingQueries bookings) {
+    ClientsController(ClientQueries queries, ClientService clients, BookingQueries bookingQueries) {
         this.queries = queries;
         this.clients = clients;
-        this.bookings = bookings;
+        this.bookingQueries = bookingQueries;
     }
 
     /**
      * Поиск по имени, фамилии, телефону и номеру для связи, постранично; без {@code query} — все клиенты по алфавиту.
-     * Номер и размер страницы проверяет {@link Paging}.
+     * Нужен уровень чтения раздела «Клиенты». Номер и размер страницы проверяет {@link Paging}.
      */
     @GetMapping
     Paged<ClientView> search(
             @RequestParam(defaultValue = "") @Size(max = 100) String query,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(defaultValue = FIRST_PAGE) int page,
+            @RequestParam(defaultValue = DEFAULT_PAGE_SIZE) int size,
             Actor actor) {
         return queries.search(query, new Paging(page, size), actor);
     }
 
+    /** Карточка без аккаунта; нужен уровень изменения раздела «Клиенты». Занятый телефон — {@code 409}. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     ClientView create(@Valid @RequestBody CreateClient body, Actor actor) {
@@ -71,9 +79,11 @@ class ClientsController {
     }
 
     /**
-     * Карточка с тем, что к ней прилагается. Права на карточку проверяет первое чтение; заметку и причину блокировки
-     * читает только сотрудник с чтением «Клиентов» — клиенту они не видны. Последнее изменение признака предоплаты
-     * модуль отдаёт без проверки прав: оно читается после проверенного чтения карточки.
+     * Карточка с тем, что к ней прилагается, — четыре чтения модуля подряд, а не один снимок: между ними карточку могут
+     * изменить. Права проверяет модуль на каждом чтении: карточку — сотруднику с чтением «Клиентов» или самому
+     * клиенту; заметку и причину блокировки читает только такой сотрудник — клиенту они не видны и не запрашиваются.
+     * Последнее изменение признака предоплаты модуль отдаёт без проверки прав, поэтому оно читается последним, после
+     * проверенного чтения карточки.
      */
     @GetMapping("/{id}")
     ClientDetails details(@PathVariable UUID id, Actor actor) {
@@ -86,6 +96,7 @@ class ClientsController {
                 queries.lastPrepaymentChange(id).orElse(null));
     }
 
+    /** Правка данных карточки, кроме телефона; изменение раздела «Клиенты» или сам клиент. */
     @PatchMapping("/{id}")
     ClientView update(@PathVariable UUID id, @Valid @RequestBody UpdateClient body, Actor actor) {
         return clients.update(id, body, actor);
@@ -97,11 +108,16 @@ class ClientsController {
         return clients.changePhone(id, body.phone(), actor);
     }
 
+    /**
+     * Номер для связи: не подтверждён и не уникален. Изменение раздела «Клиенты» или сам клиент; {@code null} стирает
+     * номер.
+     */
     @PutMapping("/{id}/contact-phone")
     ClientView changeContactPhone(@PathVariable UUID id, @Valid @RequestBody ChangeContactPhone body, Actor actor) {
         return clients.changeContactPhone(id, body.phone(), actor);
     }
 
+    /** Заметка мастера целиком; нужен уровень изменения раздела «Клиенты». Пустая строка стирает заметку. */
     @PutMapping("/{id}/note")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void updateMasterNote(@PathVariable UUID id, @Valid @RequestBody SetMasterNote body, Actor actor) {
@@ -127,24 +143,34 @@ class ClientsController {
         return queries.prepaymentHistory(id, actor);
     }
 
+    /**
+     * Признак обязательной предоплаты вручную; нужен уровень изменения раздела «Клиенты». Каждый вызов попадает в
+     * журнал признака, даже если значение не поменялось.
+     */
     @PutMapping("/{id}/prepayment-required")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void setPrepaymentRequired(@PathVariable UUID id, @Valid @RequestBody SetPrepaymentRequired body, Actor actor) {
         clients.setPrepaymentRequired(id, body.required(), body.comment(), actor);
     }
 
-    /** Повторная блокировка меняет причину. */
+    /** Блокировка: клиент не сможет входить и записываться сам. Повторная блокировка меняет причину. */
     @PostMapping("/{id}/block")
     ClientView block(@PathVariable UUID id, @Valid @RequestBody BlockClient body, Actor actor) {
         return clients.block(id, body.reason(), actor);
     }
 
+    /** Снятие блокировки, причина стирается; незаблокированный клиент остаётся как есть. */
     @PostMapping("/{id}/unblock")
     ClientView unblock(@PathVariable UUID id, Actor actor) {
         return clients.unblock(id, actor);
     }
 
-    /** {@code {id}} — выживающая карточка, если аккаунт не только у второй; кто остался — в ответе. */
+    /**
+     * Объединение двух карточек одного человека; нужен уровень изменения раздела «Клиенты». Остаётся карточка
+     * {@code {id}}, кроме одного случая: аккаунт входа есть только у {@code sourceId} — тогда остаётся она. Вторая
+     * карточка удаляется, её журналы и недостающие данные переходят оставшейся. В ответе — {@code survivorId}
+     * (оставшаяся) и {@code removedId} (удалённая).
+     */
     @PostMapping("/{id}/merge")
     MergeResult merge(@PathVariable UUID id, @Valid @RequestBody MergeClients body, Actor actor) {
         return clients.merge(body.sourceId(), id, actor);
@@ -154,8 +180,8 @@ class ClientsController {
     @GetMapping("/{id}/bookings")
     List<BookingView> bookings(@PathVariable UUID id, @RequestParam BookingScope scope, Actor actor) {
         return switch (scope) {
-            case ACTIVE -> bookings.activeOfClient(id, actor);
-            case HISTORY -> bookings.historyOfClient(id, actor);
+            case ACTIVE -> bookingQueries.activeOfClient(id, actor);
+            case HISTORY -> bookingQueries.historyOfClient(id, actor);
         };
     }
 }

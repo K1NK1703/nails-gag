@@ -1,15 +1,15 @@
 package gag.nails.api.internal.documents;
 
+import static gag.nails.api.internal.http.CacheControls.PUBLIC;
+
 import gag.nails.clients.DocumentVersionService;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.clients.model.DocumentVersionText;
 import gag.nails.clients.model.DocumentVersionView;
 import gag.nails.common.actor.Actor;
 import jakarta.validation.Valid;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,10 +30,6 @@ import org.springframework.web.bind.annotation.RestController;
 class DocumentsController {
 
     private static final String KIND = "/{kind:policy|offer}";
-
-    /** Публичные списки: ответ один для всех, свой {@code Cache-Control} заменяет {@code no-store} фильтра. */
-    private static final CacheControl PUBLIC =
-            CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic();
 
     private final DocumentVersionService documents;
 

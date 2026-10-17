@@ -11,15 +11,12 @@ import gag.nails.catalog.CatalogService;
 import gag.nails.catalog.command.CreateService;
 import gag.nails.catalog.model.ServiceKind;
 import gag.nails.clients.ClientQueries;
-import gag.nails.clients.ClientService;
 import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.command.RecordConsent;
 import gag.nails.clients.command.UpdateClient;
-import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.DocumentKind;
-import gag.nails.common.actor.Actor;
 import gag.nails.schedule.ScheduleService;
 import java.math.BigDecimal;
 import java.time.LocalTime;
@@ -28,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,15 +35,12 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * Клиенты (спецификация API, §7.4): карточки и их журналы — сотруднику по разделу «Клиенты», свои — клиенту; заметка
- * и причина блокировки клиенту не видны. Права проверяет модуль.
+ * и причина блокировки клиенту не видны. Права проверяет модуль; постраничность поиска — в {@code PagingTest}.
  */
 @ApiTest
 class ClientsApiTest extends ApiTestSupport {
 
     private static final LocalTime NOON = LocalTime.of(12, 0);
-
-    @Autowired
-    ClientService clientService;
 
     @Autowired
     ClientQueries clientQueries;
@@ -62,39 +55,35 @@ class ClientsApiTest extends ApiTestSupport {
     BookingService bookings;
 
     @Test
-    void searchIsPagedForStaff() {
-        var lastName = uniqueName();
-        for (var i = 0; i < 3; i++) {
-            createClient(lastName);
-        }
+    void staffFindsClientByPhoneAndContactPhone() {
+        var master = signInMaster();
+        var target = createClient(uniqueLastName());
+        var contactPhone = uniquePhone();
+        clientService.changeContactPhone(target.id(), contactPhone, developerActor());
 
-        as(signInMaster(), client.get().uri("/api/clients?query={query}&size=2", lastName))
+        assertThat(searchIds(master, Objects.requireNonNull(target.phone()))).contains(target.id());
+        assertThat(searchIds(master, contactPhone)).contains(target.id());
+    }
+
+    @Test
+    void clientCannotSearch() {
+        as(signInClient(), client.get().uri("/api/clients?query={query}", uniqueLastName()))
                 .exchange()
                 .expectStatus()
-                .isOk()
+                .isNotFound()
                 .expectBody()
-                .jsonPath("$.items.length()")
-                .isEqualTo(2)
-                .jsonPath("$.items[0].lastName")
-                .isEqualTo(lastName)
-                .jsonPath("$.page")
-                .isEqualTo(0)
-                .jsonPath("$.size")
-                .isEqualTo(2)
-                .jsonPath("$.total")
-                .isEqualTo(3);
+                .jsonPath("$.code")
+                .isEqualTo("common.not_found");
     }
 
     @Test
     void masterCreatesClient() {
         var phone = uniquePhone();
-        var lastName = uniqueName();
+        var lastName = uniqueLastName();
 
-        as(
-                        signInMaster(),
-                        csrf(client.post().uri("/api/clients"))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(new CreateClient("Анна", lastName, null, phone, null, null)))
+        as(signInMaster(), csrf(client.post().uri("/api/clients")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CreateClient("Анна", lastName, null, phone, null, null))
                 .exchange()
                 .expectStatus()
                 .isCreated()
@@ -113,8 +102,8 @@ class ClientsApiTest extends ApiTestSupport {
     void clientReadsOwnCardWithoutStaffFields() {
         var customer = signInClient();
         var clientId = actor(customer).requireClientId();
-        clientService.updateMasterNote(clientId, "Только для мастера", developer());
-        clientService.setPrepaymentRequired(clientId, true, "Поздняя отмена", developer());
+        clientService.updateMasterNote(clientId, "Только для мастера", developerActor());
+        clientService.setPrepaymentRequired(clientId, true, "Поздняя отмена", developerActor());
 
         var details = details(customer, clientId);
 
@@ -129,9 +118,9 @@ class ClientsApiTest extends ApiTestSupport {
 
     @Test
     void staffSeesNoteAndBlockReason() {
-        var target = createClient(uniqueName());
-        clientService.updateMasterNote(target.id(), "Любит френч", developer());
-        clientService.block(target.id(), "Не пришла трижды", developer());
+        var target = createClient(uniqueLastName());
+        clientService.updateMasterNote(target.id(), "Любит френч", developerActor());
+        clientService.block(target.id(), "Не пришла трижды", developerActor());
 
         var details = details(signInMaster(), target.id());
 
@@ -145,13 +134,11 @@ class ClientsApiTest extends ApiTestSupport {
     void clientUpdatesOwnCard() {
         var customer = signInClient();
         var clientId = actor(customer).requireClientId();
-        var lastName = uniqueName();
+        var lastName = uniqueLastName();
 
-        as(
-                        customer,
-                        csrf(client.patch().uri("/api/clients/{id}", clientId))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(new UpdateClient("Мария", lastName, null, null, null)))
+        as(customer, csrf(client.patch().uri("/api/clients/{id}", clientId)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new UpdateClient("Мария", lastName, null, null, null))
                 .exchange()
                 .expectStatus()
                 .isOk()
@@ -164,7 +151,7 @@ class ClientsApiTest extends ApiTestSupport {
 
     @Test
     void clientCannotReadForeignCard() {
-        var foreign = createClient(uniqueName());
+        var foreign = createClient(uniqueLastName());
 
         as(signInClient(), client.get().uri("/api/clients/{id}", foreign.id()))
                 .exchange()
@@ -176,14 +163,11 @@ class ClientsApiTest extends ApiTestSupport {
     }
 
     @Test
-    void changePhone() {
-        var target = createClient(uniqueName());
+    void staffChangesPhoneWrittenInAnyForm() {
+        var target = createClient(uniqueLastName());
         var phone = uniquePhone();
-        var written = "8" + phone.substring(2);
 
-        as(signInMaster(), csrf(client.post().uri("/api/clients/{id}/phone", target.id())))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("phone", written))
+        changePhone(signInMaster(), target.id(), "8" + phone.substring(2))
                 .exchange()
                 .expectStatus()
                 .isOk()
@@ -193,9 +177,23 @@ class ClientsApiTest extends ApiTestSupport {
     }
 
     @Test
-    void contactPhone() {
+    void clientCannotChangeOwnPhone() {
+        var customer = signInClient();
+        var clientId = actor(customer).requireClientId();
+
+        changePhone(customer, clientId, uniquePhone())
+                .exchange()
+                .expectStatus()
+                .isNotFound()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.not_found");
+    }
+
+    @Test
+    void staffSetsAndClearsContactPhone() {
         var master = signInMaster();
-        var target = createClient(uniqueName());
+        var target = createClient(uniqueLastName());
         var phone = uniquePhone();
 
         putContactPhone(master, target.id(), phone)
@@ -211,8 +209,8 @@ class ClientsApiTest extends ApiTestSupport {
     }
 
     @Test
-    void note() {
-        var target = createClient(uniqueName());
+    void staffReplacesMasterNote() {
+        var target = createClient(uniqueLastName());
 
         as(signInMaster(), csrf(client.put().uri("/api/clients/{id}/note", target.id())))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -221,11 +219,11 @@ class ClientsApiTest extends ApiTestSupport {
                 .expectStatus()
                 .isNoContent();
 
-        assertThat(clientQueries.masterNote(target.id(), developer())).contains("Аллергия на гель");
+        assertThat(clientQueries.masterNote(target.id(), developerActor())).contains("Аллергия на гель");
     }
 
     @Test
-    void consentsReadAndRecord() {
+    void clientRecordsAndReadsOwnConsents() {
         var customer = signInClient();
         var clientId = actor(customer).requireClientId();
         var offer = documents.current(DocumentKind.OFFER).version();
@@ -251,9 +249,9 @@ class ClientsApiTest extends ApiTestSupport {
     }
 
     @Test
-    void prepaymentFlagAndHistory() {
+    void staffSetsPrepaymentFlagAndSeesItInHistory() {
         var master = signInMaster();
-        var target = createClient(uniqueName());
+        var target = createClient(uniqueLastName());
 
         as(master, csrf(client.put().uri("/api/clients/{id}/prepayment-required", target.id())))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -283,20 +281,18 @@ class ClientsApiTest extends ApiTestSupport {
     }
 
     @Test
-    void blockAndUnblock() {
+    void staffBlocksAndUnblocks() {
         var master = signInMaster();
-        var target = createClient(uniqueName());
+        var target = createClient(uniqueLastName());
 
-        as(master, csrf(client.post().uri("/api/clients/{id}/block", target.id())))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("reason", "Грубила"))
+        block(master, target.id(), "Грубила")
                 .exchange()
                 .expectStatus()
                 .isOk()
                 .expectBody()
                 .jsonPath("$.blocked")
                 .isEqualTo(true);
-        assertThat(clientQueries.blockReason(target.id(), developer())).contains("Грубила");
+        assertThat(clientQueries.blockReason(target.id(), developerActor())).contains("Грубила");
 
         as(master, csrf(client.post().uri("/api/clients/{id}/unblock", target.id())))
                 .exchange()
@@ -308,13 +304,41 @@ class ClientsApiTest extends ApiTestSupport {
     }
 
     @Test
-    void merge() {
-        var survivor = createClient(uniqueName());
-        var removed = createClient(uniqueName());
+    void clientCannotBlock() {
+        var target = createClient(uniqueLastName());
 
-        as(signInMaster(), csrf(client.post().uri("/api/clients/{id}/merge", survivor.id())))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("sourceId", removed.id()))
+        block(signInClient(), target.id(), "Чужая карточка")
+                .exchange()
+                .expectStatus()
+                .isNotFound()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.not_found");
+        assertThat(clientQueries.byId(target.id()).orElseThrow().blocked()).isFalse();
+    }
+
+    @Test
+    void blockReasonLongerThan500IsRejected() {
+        var target = createClient(uniqueLastName());
+
+        block(signInMaster(), target.id(), "x".repeat(501))
+                .exchange()
+                .expectStatus()
+                .isBadRequest()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.validation")
+                .jsonPath("$.errors[0].field")
+                .isEqualTo("reason");
+        assertThat(clientQueries.byId(target.id()).orElseThrow().blocked()).isFalse();
+    }
+
+    @Test
+    void mergeKeepsCardInPathAndRemovesSource() {
+        var survivor = createClient(uniqueLastName());
+        var removed = createClient(uniqueLastName());
+
+        merge(signInMaster(), survivor.id(), removed.id())
                 .exchange()
                 .expectStatus()
                 .isOk()
@@ -328,29 +352,42 @@ class ClientsApiTest extends ApiTestSupport {
     }
 
     @Test
-    void bookingsByScope() {
+    void clientCannotMerge() {
+        var customer = signInClient();
+        var other = createClient(uniqueLastName());
+
+        merge(customer, actor(customer).requireClientId(), other.id())
+                .exchange()
+                .expectStatus()
+                .isNotFound()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("common.not_found");
+        assertThat(clientQueries.byId(other.id())).isPresent();
+    }
+
+    @Test
+    void bookingsAreSplitIntoActiveAndHistory() {
         var master = signInMaster();
-        var target = createClient(uniqueName());
+        var target = createClient(uniqueLastName());
         var booking = book(target.id());
 
         assertThat(bookingIds(master, target.id(), "active")).containsExactly(booking.id());
         assertThat(bookingIds(master, target.id(), "history")).isEmpty();
 
-        bookings.cancel(booking.id(), developer());
+        bookings.cancel(booking.id(), developerActor());
 
         assertThat(bookingIds(master, target.id(), "active")).isEmpty();
         assertThat(bookingIds(master, target.id(), "history")).containsExactly(booking.id());
     }
 
     @Test
-    void phoneTakenConflicts() {
-        var taken = createClient(uniqueName());
+    void takenPhoneConflicts() {
+        var taken = createClient(uniqueLastName());
 
-        as(
-                        signInMaster(),
-                        csrf(client.post().uri("/api/clients"))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(new CreateClient("Анна", uniqueName(), null, taken.phone(), null, null)))
+        as(signInMaster(), csrf(client.post().uri("/api/clients")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CreateClient("Анна", uniqueLastName(), null, taken.phone(), null, null))
                 .exchange()
                 .expectStatus()
                 .isEqualTo(HttpStatus.CONFLICT)
@@ -359,32 +396,23 @@ class ClientsApiTest extends ApiTestSupport {
                 .isEqualTo("clients.phone_taken");
     }
 
-    @Test
-    void blockReasonLongerThan500IsRejected() {
-        var target = createClient(uniqueName());
-
-        as(signInMaster(), csrf(client.post().uri("/api/clients/{id}/block", target.id())))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("reason", "x".repeat(501)))
-                .exchange()
-                .expectStatus()
-                .isBadRequest()
-                .expectBody()
-                .jsonPath("$.code")
-                .isEqualTo("common.validation")
-                .jsonPath("$.errors[0].field")
-                .isEqualTo("reason");
-        assertThat(clientQueries.byId(target.id()).orElseThrow().blocked()).isFalse();
+    private JsonNode details(Session session, UUID clientId) {
+        return json(as(session, client.get().uri("/api/clients/{id}", clientId)));
     }
 
-    private JsonNode details(Session session, UUID clientId) {
-        RequestHeadersSpec<?> spec = as(session, client.get().uri("/api/clients/{id}", clientId));
-        return Objects.requireNonNull(spec.exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody(JsonNode.class)
-                .returnResult()
-                .getResponseBody());
+    private List<UUID> searchIds(Session session, String query) {
+        return ids(json(as(session, client.get().uri("/api/clients?query={query}", query)))
+                .path("items"));
+    }
+
+    private List<UUID> bookingIds(Session session, UUID clientId, String scope) {
+        return ids(json(as(session, client.get().uri("/api/clients/{id}/bookings?scope={scope}", clientId, scope))));
+    }
+
+    private RequestHeadersSpec<?> changePhone(Session session, UUID clientId, String phone) {
+        return as(session, csrf(client.post().uri("/api/clients/{id}/phone", clientId)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("phone", phone));
     }
 
     private RequestHeadersSpec<?> putContactPhone(Session session, UUID clientId, @Nullable String phone) {
@@ -395,23 +423,37 @@ class ClientsApiTest extends ApiTestSupport {
                 .body(body);
     }
 
-    private List<UUID> bookingIds(Session session, UUID clientId, String scope) {
-        RequestHeadersSpec<?> spec =
-                as(session, client.get().uri("/api/clients/{id}/bookings?scope={scope}", clientId, scope));
-        var body = Objects.requireNonNull(spec.exchange()
+    private RequestHeadersSpec<?> block(Session session, UUID clientId, String reason) {
+        return as(session, csrf(client.post().uri("/api/clients/{id}/block", clientId)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("reason", reason));
+    }
+
+    private RequestHeadersSpec<?> merge(Session session, UUID targetId, UUID sourceId) {
+        return as(session, csrf(client.post().uri("/api/clients/{id}/merge", targetId)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("sourceId", sourceId));
+    }
+
+    /** Тело успешного ответа {@code 200}. */
+    private static JsonNode json(RequestHeadersSpec<?> spec) {
+        return Objects.requireNonNull(spec.exchange()
                 .expectStatus()
                 .isOk()
                 .expectBody(JsonNode.class)
                 .returnResult()
                 .getResponseBody());
-        return body.values().stream()
-                .map(booking -> UUID.fromString(booking.path("id").asString()))
+    }
+
+    private static List<UUID> ids(JsonNode items) {
+        return items.values().stream()
+                .map(item -> UUID.fromString(item.path("id").asString()))
                 .toList();
     }
 
     /** Запись клиента на свободный слот нового дня, её ставит разработчик. */
     private BookingView book(UUID clientId) {
-        var developer = developer();
+        var developer = developerActor();
         var service = catalog.create(
                 new CreateService(
                         ServiceKind.MAIN,
@@ -426,23 +468,5 @@ class ClientsApiTest extends ApiTestSupport {
         var slot = schedule.addSlot(freshDay(), NOON, developer);
         return bookings.createByMaster(
                 new CreateBooking(clientId, slot.id(), service.id(), List.of(), null), false, developer);
-    }
-
-    private ClientView createClient(String lastName) {
-        return clientService.create(new CreateClient("Анна", lastName, null, uniquePhone(), null, null), developer());
-    }
-
-    private Actor developer() {
-        return actor(signInDeveloper());
-    }
-
-    /** Фамилия, которой ещё нет в базе: только буквы, чтобы поиск не принял её за телефон. */
-    private static String uniqueName() {
-        var random = ThreadLocalRandom.current();
-        var name = new StringBuilder("Тест");
-        for (var i = 0; i < 12; i++) {
-            name.append((char) ('a' + random.nextInt(26)));
-        }
-        return name.toString();
     }
 }

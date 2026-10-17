@@ -2,11 +2,7 @@ package gag.nails.api.internal.http;
 
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
-import gag.nails.clients.ClientService;
-import gag.nails.clients.command.CreateClient;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Постраничные списки (спецификация API, §4.4) на примере {@code GET /api/clients}: параметры {@code page} и
@@ -14,9 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 @ApiTest
 class PagingTest extends ApiTestSupport {
-
-    @Autowired
-    ClientService clientService;
 
     @Test
     void sizeOverLimitIsRejected() {
@@ -34,9 +27,8 @@ class PagingTest extends ApiTestSupport {
     @Test
     void secondPageHasRestAndTotal() {
         var lastName = uniqueLastName();
-        var developer = actor(signInDeveloper());
         for (var i = 0; i < 3; i++) {
-            clientService.create(new CreateClient("Анна", lastName, null, uniquePhone(), null, null), developer);
+            createClient(lastName);
         }
 
         as(signInMaster(), client.get().uri("/api/clients?query={query}&page=1&size=2", lastName))
@@ -80,10 +72,5 @@ class PagingTest extends ApiTestSupport {
                 .isEqualTo("common.validation")
                 .jsonPath("$.errors[0].field")
                 .isEqualTo("query");
-    }
-
-    /** Фамилия, которой ещё нет в базе: только буквы, чтобы поиск не принял её за телефон. */
-    private static String uniqueLastName() {
-        return "Страница" + UUID.randomUUID().toString().replaceAll("[^a-f]", "");
     }
 }
