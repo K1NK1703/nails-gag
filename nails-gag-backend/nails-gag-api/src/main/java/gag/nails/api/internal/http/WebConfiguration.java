@@ -14,7 +14,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.format.FormatterRegistry;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -46,26 +45,21 @@ class WebConfiguration implements WebMvcConfigurer {
     }
 
     /**
-     * Те же правила в службе преобразований — для её прямых вызовов; аргументы контроллеров разбирают редакторы
-     * ({@link #registerKebabCaseEditors}).
-     */
-    @Override
-    public void addFormatters(FormatterRegistry registry) {
-        KEBAB_CASE_ENUMS.forEach(kebabCaseEnum -> kebabCaseEnum.register(registry));
-    }
-
-    /**
-     * Перечисления из {@link #KEBAB_CASE_ENUMS} для аргументов контроллеров ({@code @PathVariable},
-     * {@code @RequestParam}): редактор на каждый тип, неверное значение — {@link ValidationException} с именем
-     * параметра. Конвертеров из {@link #addFormatters} для этого мало: их отказ Spring проглатывает и пробует
-     * {@code Enum.valueOf}, так что имя константы Java ({@code BOOKING_SETTINGS}) прошло бы. С редактором службу
-     * преобразований Spring не вызывает и обходного пути нет.
+     * Перечисления из {@link #KEBAB_CASE_ENUMS} для аргументов контроллеров: редактор на каждый тип — единственный путь
+     * разбора, конвертеров в службе преобразований у них нет. Конвертер не подошёл бы: его отказ Spring проглатывает и
+     * пробует {@code Enum.valueOf}, так что имя константы Java ({@code BOOKING_SETTINGS}) прошло бы; при редакторе
+     * службу преобразований Spring не вызывает. Неверное значение — {@link ValidationException}, поле — имя объекта
+     * привязки: у {@code @PathVariable} и {@code @RequestParam} это имя параметра ({@code @ModelAttribute} слой не
+     * использует). Списки перечислений через запятую ({@code List<Section>}) не поддерживаются и не используются.
      *
-     * @param binder привязка одного аргумента; её {@code objectName} — имя параметра
+     * <p>Аргументы разбираются по порядку, {@code Actor} — последний: неверное перечисление в пути даёт {@code 400} ещё
+     * до проверки сессии, как и тело с {@code @Valid}.
+     *
+     * @param binder привязка одного аргумента
      */
     static void registerKebabCaseEditors(WebDataBinder binder) {
-        var parameter = binder.getObjectName();
-        KEBAB_CASE_ENUMS.forEach(kebabCaseEnum -> kebabCaseEnum.registerEditor(binder, parameter));
+        var field = binder.getObjectName();
+        KEBAB_CASE_ENUMS.forEach(kebabCaseEnum -> kebabCaseEnum.registerEditor(binder, field));
     }
 
     /** Имя константы в адресе: {@code BOOKING_SETTINGS} → {@code booking-settings}. */
@@ -87,19 +81,15 @@ class WebConfiguration implements WebMvcConfigurer {
             return new KebabCaseEnum<>(type, constants);
         }
 
-        void register(FormatterRegistry registry) {
-            registry.addConverter(String.class, type, source -> parse(source, type.getSimpleName()));
-        }
-
         /**
          * Исключение редактора Spring не оборачивает: {@link ValidationException} доходит до {@code ProblemHandler} как
-         * есть, поэтому поле в нём — имя параметра.
+         * есть, с полем {@code field}.
          */
-        void registerEditor(WebDataBinder binder, String parameter) {
+        void registerEditor(WebDataBinder binder, String field) {
             binder.registerCustomEditor(type, new PropertyEditorSupport() {
                 @Override
                 public void setAsText(String text) {
-                    setValue(parse(text, parameter));
+                    setValue(parse(text, field));
                 }
             });
         }

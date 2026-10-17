@@ -21,7 +21,10 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.ResolvableType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -45,20 +48,26 @@ class OpenApiSchemaTest extends ApiTestSupport {
 
     private static final String PROBLEM_REF = "#/components/schemas/Problem";
 
-    /** {@code operationId}: {@code <контроллер>_<метод>}, обе части — camelCase с маленькой буквы. */
-    private static final Pattern OPERATION_ID = Pattern.compile("[a-z][A-Za-z]*_[a-z][A-Za-z0-9]*");
+    /**
+     * {@code operationId}: {@code <контроллер>_<метод>}, обе части — идентификаторы Java в camelCase с маленькой буквы
+     * (цифры допустимы в обеих).
+     */
+    private static final Pattern OPERATION_ID = Pattern.compile("[a-z][A-Za-z0-9]*_[a-z][A-Za-z0-9]*");
 
     /** Переменная пути с регулярным выражением ({@code {provider:yandex|vk|fake}}): в схеме — только имя. */
     private static final Pattern PATH_VARIABLE_REGEX = Pattern.compile("\\{([^}:]+):[^}]*}");
-
-    @Autowired
-    @Qualifier("requestMappingHandlerMapping")
-    RequestMappingHandlerMapping handlerMapping;
 
     /** Ключи операций в элементе {@code paths}: имена методов HTTP в нижнем регистре. */
     private static final Set<String> HTTP_METHODS = Arrays.stream(PathItem.HttpMethod.values())
             .map(method -> method.name().toLowerCase(Locale.ROOT))
             .collect(Collectors.toUnmodifiableSet());
+
+    @Autowired
+    @Qualifier("requestMappingHandlerMapping")
+    RequestMappingHandlerMapping handlerMapping;
+
+    @Autowired
+    JsonMapper jsonMapper;
 
     /** springdoc 3 по умолчанию пишет OpenAPI 3.1: {@code null} в полях — массив типов, а не {@code nullable}. */
     @Test
@@ -200,7 +209,7 @@ class OpenApiSchemaTest extends ApiTestSupport {
 
         var documented = operations(openApi()).stream().map(Operation::name).toList();
 
-        assertThat(mapped).hasSizeGreaterThan(80);
+        assertThat(mapped).contains("get /api/me", "put /api/access/accounts/{id}/overrides/{section}");
         assertThat(documented).doesNotHaveDuplicates().containsExactlyInAnyOrderElementsOf(mapped);
     }
 
@@ -208,6 +217,8 @@ class OpenApiSchemaTest extends ApiTestSupport {
      * {@code operationId} — {@code <контроллер>_<метод>}: имя класса контроллера без {@code Controller} с маленькой
      * буквы и имя метода Java ({@code ServicesController.create} → {@code services_create}). Имя не зависит от порядка
      * обхода контроллеров, как суффиксы {@code create_1} у springdoc, и по нему тип операции фронта находится в коде.
+     * Ожидаемое имя тест считает сам ({@link #expectedOperationId}), а не берёт из {@code OpenApiConfiguration}:
+     * повтор формулы намеренный, иначе тест проверял бы формулу ею же. Явные имена ниже закрепляют её смысл.
      */
     @Test
     void operationIdsAreControllerAndMethod() {
@@ -219,10 +230,16 @@ class OpenApiSchemaTest extends ApiTestSupport {
         assertThat(ids.values())
                 .doesNotHaveDuplicates()
                 .allMatch(id -> OPERATION_ID.matcher(id).matches());
-        assertThat(ids).containsExactlyInAnyOrderEntriesOf(controllerOperations());
+        var expected = new HashMap<String, String>();
+        controllerOperations().forEach((name, method) -> expected.put(name, expectedOperationId(method)));
+        assertThat(ids).containsExactlyInAnyOrderEntriesOf(expected);
         assertThat(ids)
                 .containsEntry("post /api/services", "services_create")
-                .containsEntry("put /api/access/accounts/{id}/overrides/{section}", "staffAccess_setOverride");
+                .containsEntry("put /api/access/accounts/{id}/overrides/{section}", "staffAccess_setOverride")
+                .containsEntry("put /api/booking-settings", "bookingSettings_update")
+                .containsEntry("post /api/bookings/{id}/prepayment/received", "bookingActions_markPrepaymentReceived")
+                .containsEntry("get /api/access/login-journal", "accessJournal_loginJournal")
+                .containsEntry("get /api/auth/{provider}/callback", "auth_callback");
     }
 
     /** Раздел админки в пути — через дефис, как его принимает адрес: {@code …/overrides/booking-settings}. */
@@ -230,7 +247,11 @@ class OpenApiSchemaTest extends ApiTestSupport {
     void sectionPathIsKebabCase() {
         var sections = parameters(operations(openApi()), "section");
 
-        assertThat(sections).hasSize(2);
+        var withSection = controllerOperations().keySet().stream()
+                .filter(name -> name.contains("{section}"))
+                .count();
+        assertThat(withSection).isPositive();
+        assertThat(sections).hasSize((int) withSection);
         sections.forEach(section -> {
             assertThat(section.path("in").asString()).isEqualTo("path");
             assertThat(enumValues(section)).containsExactlyElementsOf(kebabCase(Section.values()));
@@ -239,57 +260,70 @@ class OpenApiSchemaTest extends ApiTestSupport {
 
     /**
      * Успешные ответы — {@code application/json}, а не {@code *}{@code /*} springdoc по умолчанию: генератор типов
-     * фронта берёт тип ответа по типу содержимого. Ответы без тела ({@code 204}, {@code 303}) содержимого не имеют.
+     * фронта берёт тип ответа по типу содержимого. Метод контроллера без тела ответа ({@code void},
+     * {@code ResponseEntity<Void>}) — ответ {@code 204} или {@code 303} без содержимого.
      */
     @Test
     void successResponsesAreJson() {
-        var operations = operations(openApi());
-        var withBody = 0;
+        var handlers = controllerOperations();
 
-        for (var operation : operations) {
+        for (var operation : operations(openApi())) {
+            var hasBody = hasBody(handlers.get(operation.name()));
             for (var response : operation.node().path("responses").properties()) {
                 if (response.getKey().equals("default")) {
                     continue;
                 }
+                var name = operation.name() + " " + response.getKey();
                 var content = response.getValue().path("content");
-                if (content.isMissingNode()) {
-                    assertThat(response.getKey()).as(operation.name()).isIn("204", "303");
-                    continue;
+                if (hasBody) {
+                    assertThat(content.propertyNames()).as(name).containsExactly("application/json");
+                } else {
+                    assertThat(content.isMissingNode()).as(name).isTrue();
+                    assertThat(response.getKey()).as(name).isIn("204", "303");
                 }
-                withBody++;
-                assertThat(content.propertyNames())
-                        .as(operation.name() + " " + response.getKey())
-                        .containsExactly("application/json");
             }
         }
-        assertThat(withBody).isGreaterThan(operations.size() / 2);
     }
 
     /**
-     * Адреса {@code /api/**} контроллеров приложения: «метод адрес» в виде ключа схемы → ожидаемый {@code operationId}.
-     * Тестовые адреса ({@code /api/test/**}) и {@code /error} в счёт не идут, адреса springdoc
-     * ({@code /api/openapi.json}) — тоже: их контроллеры не из приложения.
+     * Адреса {@code /api/**} контроллеров приложения: «метод адрес» в виде ключа схемы → метод контроллера. Тестовые
+     * адреса ({@code /api/test/**}) и {@code /error} в счёт не идут, адреса springdoc ({@code /api/openapi.json}) —
+     * тоже: их контроллеры не из приложения.
      */
-    private Map<String, String> controllerOperations() {
-        var mapped = new HashMap<String, String>();
+    private Map<String, HandlerMethod> controllerOperations() {
+        var mapped = new HashMap<String, HandlerMethod>();
         handlerMapping.getHandlerMethods().forEach((info, method) -> {
             if (!method.getBeanType().getPackageName().startsWith("gag.nails.")) {
                 return;
             }
-            var controller = method.getBeanType().getSimpleName().replaceFirst("Controller$", "");
-            var operationId = Character.toLowerCase(controller.charAt(0)) + controller.substring(1) + "_"
-                    + method.getMethod().getName();
             for (var pattern : info.getPatternValues()) {
                 if (pattern.startsWith("/api/") && !pattern.startsWith("/api/test/")) {
                     var path = PATH_VARIABLE_REGEX.matcher(pattern).replaceAll("{$1}");
                     info.getMethodsCondition()
                             .getMethods()
                             .forEach(httpMethod ->
-                                    mapped.put(httpMethod.name().toLowerCase(Locale.ROOT) + " " + path, operationId));
+                                    mapped.put(httpMethod.name().toLowerCase(Locale.ROOT) + " " + path, method));
                 }
             }
         });
         return mapped;
+    }
+
+    /** {@code ServicesController.create} → {@code services_create}. */
+    private static String expectedOperationId(HandlerMethod method) {
+        var controller = method.getBeanType().getSimpleName().replaceFirst("Controller$", "");
+        return Character.toLowerCase(controller.charAt(0)) + controller.substring(1) + "_"
+                + method.getMethod().getName();
+    }
+
+    /** Есть ли у ответа метода тело: не {@code void} и не {@code ResponseEntity<Void>}. */
+    private static boolean hasBody(HandlerMethod method) {
+        var returnType = ResolvableType.forMethodReturnType(method.getMethod());
+        if (returnType.toClass() == ResponseEntity.class) {
+            returnType = returnType.getGeneric(0);
+        }
+        var type = returnType.toClass();
+        return type != void.class && type != Void.class;
     }
 
     /** Операция схемы: {@code name} — метод и адрес для сообщений проверок. */
@@ -304,7 +338,7 @@ class OpenApiSchemaTest extends ApiTestSupport {
                 .expectBody()
                 .returnResult()
                 .getResponseBody();
-        return JsonMapper.builder().build().readTree(Objects.requireNonNull(body));
+        return jsonMapper.readTree(Objects.requireNonNull(body));
     }
 
     /** Все операции, кроме тестовых адресов {@code /api/test/**}. */

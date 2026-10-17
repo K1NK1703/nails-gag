@@ -28,7 +28,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
 import org.springframework.http.HttpHeaders;
-import org.springframework.web.method.HandlerMethod;
 
 /**
  * Схема OpenAPI для локального запуска (спецификация API, §5.5): springdoc подключён в {@code app} только для
@@ -49,6 +48,9 @@ class OpenApiConfiguration {
 
     /** Обратный вызов провайдера: всегда {@code 303} на страницу сайта (§6.3). */
     private static final String CALLBACK_PATH = ApiPaths.AUTH + "/{provider}/callback";
+
+    /** Суффикс класса контроллера, который в {@code operationId} не входит. */
+    private static final String CONTROLLER = "Controller";
 
     private static final String PROBLEM_JSON = "application/problem+json";
 
@@ -85,10 +87,20 @@ class OpenApiConfiguration {
      * {@code StaffAccessController.setOverride} → {@code staffAccess_setOverride}). Своё имя springdoc берёт из имени
      * метода и одинаковым добавляет суффиксы ({@code create_1}) в порядке обхода контроллеров — тип операции у фронта
      * менял бы имя от добавления соседнего адреса. Уникальность проверяет {@code OpenApiSchemaTest}.
+     *
+     * <p>Имя из {@code @Operation(operationId = …)} тоже заменяется — его не задают. Класс без имени (анонимный)
+     * оставляет имя springdoc.
      */
     @Bean
     OperationCustomizer apiOperationIdCustomizer() {
-        return (operation, handlerMethod) -> operation.operationId(operationId(handlerMethod));
+        return (operation, handlerMethod) -> {
+            var controller = controllerName(handlerMethod.getBeanType().getSimpleName());
+            if (controller.isEmpty()) {
+                return operation;
+            }
+            return operation.operationId(
+                    controller + "_" + handlerMethod.getMethod().getName());
+        };
     }
 
     /** springdoc регистрирует бины {@link ModelConverter} в общем {@link ModelConverters} схемы 3.1. */
@@ -113,12 +125,15 @@ class OpenApiConfiguration {
         };
     }
 
-    private static String operationId(HandlerMethod handlerMethod) {
-        var controller = handlerMethod.getBeanType().getSimpleName().replaceFirst("Controller$", "");
-        return Character.toLowerCase(controller.charAt(0))
-                + controller.substring(1)
-                + "_"
-                + handlerMethod.getMethod().getName();
+    /**
+     * {@code ServicesController} → {@code services}; имя без суффикса {@code Controller} или из одного суффикса
+     * остаётся целым, пустое — пустым.
+     */
+    private static String controllerName(String simpleName) {
+        var name = simpleName.endsWith(CONTROLLER) && simpleName.length() > CONTROLLER.length()
+                ? simpleName.substring(0, simpleName.length() - CONTROLLER.length())
+                : simpleName;
+        return name.isEmpty() ? name : Character.toLowerCase(name.charAt(0)) + name.substring(1);
     }
 
     private static boolean optionalActor(MethodParameter parameter) {
