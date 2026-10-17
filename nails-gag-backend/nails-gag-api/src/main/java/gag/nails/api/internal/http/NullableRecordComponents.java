@@ -28,6 +28,10 @@ import org.jspecify.annotations.Nullable;
  * <p>Тела запросов — так же: фронт отправляет все поля, отсутствующее значение — явным {@code null} (Jackson его
  * принимает). Обязательность не ставится записи с {@link JsonInclude} не {@code ALWAYS} (тело ошибки {@code Problem}
  * опускает пустое — его список задан вручную) и полю, у которого такая аннотация своя.
+ *
+ * <p>Правило — только {@code @Nullable} и {@code @JsonInclude}: список {@code required} записи заменяется целиком,
+ * поэтому {@code @Schema(requiredMode = …)} на компонентах записи не действует, а {@code null} разрешается по
+ * {@code @Nullable}, не по {@code @Schema(nullable = …)}.
  */
 final class NullableRecordComponents implements ModelConverter {
 
@@ -42,8 +46,12 @@ final class NullableRecordComponents implements ModelConverter {
             return null;
         }
         var schema = chain.next().resolve(annotatedType, context, chain);
+        // Без типа Java (схема задана только аннотацией) смотреть нечего.
+        if (schema == null || annotatedType.getType() == null) {
+            return schema;
+        }
         var type = Json.mapper().constructType(annotatedType.getType()).getRawClass();
-        if (schema != null && type.isRecord()) {
+        if (type.isRecord()) {
             var model = model(schema, context);
             if (model != null && model.getProperties() != null) {
                 markNullable(type, model);

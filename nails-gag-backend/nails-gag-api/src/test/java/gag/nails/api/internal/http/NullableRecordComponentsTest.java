@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.core.converter.AnnotatedType;
+import io.swagger.v3.core.converter.ModelConverter;
+import io.swagger.v3.core.converter.ModelConverterContextImpl;
 import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.media.Schema;
 import java.util.ArrayList;
@@ -97,6 +100,20 @@ class NullableRecordComponentsTest {
     @Test
     void jsonPropertyNameIsUsed() {
         assertThat(property("renamed_note").getTypes()).containsExactlyInAnyOrder("string", "null");
+    }
+
+    @Test
+    void annotatedTypeWithoutJavaTypeIsPassedThrough() {
+        var resolved = new Schema<>().$ref("#/components/schemas/Inner");
+        ModelConverter next = (type, context, chain) -> resolved;
+
+        var schema = new NullableRecordComponents()
+                .resolve(
+                        new AnnotatedType(),
+                        new ModelConverterContextImpl(next),
+                        List.of(next).iterator());
+
+        assertThat(schema).isSameAs(resolved);
     }
 
     private Schema<?> property(String name) {
