@@ -1,5 +1,6 @@
 package gag.nails.api.internal.http;
 
+import gag.nails.api.internal.clients.BookingScope;
 import gag.nails.api.internal.security.CurrentActorResolver;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Section;
@@ -20,15 +21,18 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /**
  * Аргументы контроллеров слоя: {@code Actor}/{@code Optional<Actor>} вошедшего и {@code ClientInfo} запроса;
  * перечисления в пути и параметрах запроса — провайдер входа ({@code /api/auth/yandex/…}), документ
- * ({@code /api/documents/policy/…}), раздел админки ({@code …/overrides/booking-settings}) — по имени в нижнем
- * регистре через дефис.
+ * ({@code /api/documents/policy/…}), раздел админки ({@code …/overrides/booking-settings}), записи клиента
+ * ({@code ?scope=history}) — по имени в нижнем регистре через дефис.
  */
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
 
     /** Перечисления, которые в адресе пишутся по имени в нижнем регистре через дефис. */
     private static final List<KebabCaseEnum<?>> KEBAB_CASE_ENUMS = List.of(
-            KebabCaseEnum.of(Provider.class), KebabCaseEnum.of(DocumentKind.class), KebabCaseEnum.of(Section.class));
+            KebabCaseEnum.of(Provider.class),
+            KebabCaseEnum.of(DocumentKind.class),
+            KebabCaseEnum.of(Section.class),
+            KebabCaseEnum.of(BookingScope.class));
 
     /** Типы из {@link #KEBAB_CASE_ENUMS}; по ним же схема OpenAPI показывает значения через дефис. */
     static final Set<Class<?>> KEBAB_CASE_TYPES =

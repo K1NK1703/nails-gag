@@ -160,6 +160,18 @@ class OpenApiSchemaTest extends ApiTestSupport {
         kinds.forEach(kind -> assertThat(enumValues(kind)).containsExactlyElementsOf(kebabCase(DocumentKind.values())));
     }
 
+    /** Перечисление в параметре запроса — тоже через дефис: {@code ?scope=active|history}. */
+    @Test
+    void queryEnumsAreKebabCase() {
+        var scopes = parameters(operations(openApi()), "scope");
+
+        assertThat(scopes).isNotEmpty();
+        scopes.forEach(scope -> {
+            assertThat(scope.path("in").asString()).isEqualTo("query");
+            assertThat(enumValues(scope)).containsExactly("active", "history");
+        });
+    }
+
     /** Операция схемы: {@code name} — метод и адрес для сообщений проверок. */
     private record Operation(String name, JsonNode node) {}
 

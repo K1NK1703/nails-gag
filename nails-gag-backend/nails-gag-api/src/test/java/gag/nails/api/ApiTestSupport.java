@@ -13,6 +13,7 @@ import gag.nails.identity.testing.FakeProfile;
 import gag.nails.identity.testing.FakeProvider;
 import gag.nails.testsupport.MutableClock;
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -56,6 +57,13 @@ public abstract class ApiTestSupport {
     /** Счётчик телефонов: случайное начало, чтобы прогоны на одной базе не сталкивались. */
     private static final AtomicLong PHONES =
             new AtomicLong(ThreadLocalRandom.current().nextLong(900_000_000L));
+
+    /**
+     * Счётчик дней для слотов: случайное начало в 60–2000 днях от часов, чтобы прогоны на одной базе не сталкивались
+     * слотами, а день каждого теста был свободен.
+     */
+    private static final AtomicLong DAYS =
+            new AtomicLong(ThreadLocalRandom.current().nextLong(60, 2000));
 
     /** Телефон разработчика: один на прогон, чтобы повторный вход не менял его способ входа. */
     private static final String DEVELOPER_PHONE = uniquePhone();
@@ -269,6 +277,11 @@ public abstract class ApiTestSupport {
     /** Телефон, которого ещё нет в базе этого прогона: {@code +79} и девять цифр. */
     protected static String uniquePhone() {
         return "+79%09d".formatted(PHONES.getAndIncrement() % 1_000_000_000L);
+    }
+
+    /** День, которого ещё не выдавал этот прогон: на нём нет слотов соседних тестов. */
+    protected LocalDate freshDay() {
+        return LocalDate.now(clock).plusDays(DAYS.getAndIncrement());
     }
 
     /** Cookie из {@code Set-Cookie} ответа со значением и атрибутами; её отсутствие — провал теста. */
