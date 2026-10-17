@@ -6,9 +6,6 @@ import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
 import gag.nails.booking.BookingService;
 import gag.nails.booking.command.CreateBooking;
-import gag.nails.catalog.CatalogService;
-import gag.nails.catalog.command.CreateService;
-import gag.nails.catalog.model.ServiceKind;
 import gag.nails.schedule.ScheduleQueries;
 import gag.nails.schedule.ScheduleService;
 import gag.nails.schedule.ScheduleSettingsService;
@@ -21,7 +18,6 @@ import gag.nails.schedule.model.DayTemplateView;
 import gag.nails.schedule.model.SettingsChangeView;
 import gag.nails.schedule.model.SlotView;
 import gag.nails.schedule.model.WeekTemplateView;
-import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -75,9 +71,6 @@ class ScheduleApiTest extends ApiTestSupport {
 
     @Autowired
     ScheduleSettingsService settings;
-
-    @Autowired
-    CatalogService catalog;
 
     @Autowired
     BookingService bookings;
@@ -446,17 +439,6 @@ class ScheduleApiTest extends ApiTestSupport {
         };
     }
 
-    /** Ответ — ошибка с данным статусом и кодом. */
-    private static void expectProblem(RequestHeadersSpec<?> spec, HttpStatus status, String code) {
-        assertThat(field(json(spec, status), "code").asString()).isEqualTo(code);
-    }
-
-    /** Поле объекта; его отсутствие — провал теста, а не пустое значение. */
-    private static JsonNode field(JsonNode node, String name) {
-        assertThat(node.has(name)).as("field " + name + " in " + node).isTrue();
-        return node.get(name);
-    }
-
     /** Единственный элемент массива с данным {@code id}. */
     private static JsonNode byId(JsonNode items, UUID id) {
         var found = items.values().stream()
@@ -486,17 +468,7 @@ class ScheduleApiTest extends ApiTestSupport {
     /** Слот, занятый записью новой карточки клиента; всё заводит разработчик. */
     private SlotView occupiedSlot(LocalDate day, LocalTime startTime) {
         var developer = developerActor();
-        var service = catalog.create(
-                new CreateService(
-                        ServiceKind.MAIN,
-                        "Услуга " + UUID.randomUUID(),
-                        "Описание",
-                        new BigDecimal("1500.00"),
-                        60,
-                        "Маникюр",
-                        false,
-                        false),
-                developer);
+        var service = mainService();
         var slot = schedule.addSlot(day, startTime, developer);
         var customer = createClient(uniqueLastName());
         bookings.createByMaster(

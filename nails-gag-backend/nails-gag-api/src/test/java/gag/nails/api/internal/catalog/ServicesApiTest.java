@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
 import gag.nails.catalog.CatalogQueries;
-import gag.nails.catalog.CatalogService;
 import gag.nails.catalog.command.CreateService;
 import gag.nails.catalog.command.UpdateService;
 import gag.nails.catalog.model.ServiceKind;
@@ -30,9 +29,6 @@ import org.springframework.test.web.servlet.client.RestTestClient.RequestHeaders
 class ServicesApiTest extends ApiTestSupport {
 
     private static final ParameterizedTypeReference<List<ServiceView>> SERVICES = new ParameterizedTypeReference<>() {};
-
-    @Autowired
-    CatalogService catalog;
 
     @Autowired
     CatalogQueries catalogQueries;

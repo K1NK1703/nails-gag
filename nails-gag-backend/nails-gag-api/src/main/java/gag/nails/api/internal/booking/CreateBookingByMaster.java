@@ -16,7 +16,8 @@ import org.jspecify.annotations.Nullable;
  * @param mainServiceId основная услуга
  * @param addonServiceIds дополнения без повторов, до 20; пустой список — без дополнений
  * @param comment пожелания клиента, до 500 символов; {@code null} — без комментария
- * @param awaitPrepayment ждёт ли запись предоплату; признак клиента при этом не меняется
+ * @param awaitPrepayment ждёт ли запись предоплату; признак клиента при этом не меняется. Обязательно, как все поля
+ *     тел: умолчания нет, без него — {@code 400 common.validation} с полем {@code awaitPrepayment}
  */
 record CreateBookingByMaster(
         @NotNull UUID clientId,

@@ -21,10 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/booking-settings")
 class BookingSettingsController {
 
-    private final BookingSettingsService settings;
+    private final BookingSettingsService bookingSettings;
 
-    BookingSettingsController(BookingSettingsService settings) {
-        this.settings = settings;
+    BookingSettingsController(BookingSettingsService bookingSettings) {
+        this.bookingSettings = bookingSettings;
     }
 
     /**
@@ -32,7 +32,7 @@ class BookingSettingsController {
      */
     @GetMapping
     BookingSettingsView settings(Actor actor) {
-        return settings.settings();
+        return bookingSettings.settings();
     }
 
     /**
@@ -40,12 +40,12 @@ class BookingSettingsController {
      */
     @PutMapping
     BookingSettingsView update(@Valid @RequestBody UpdateBookingSettings body, Actor actor) {
-        return settings.update(body, actor);
+        return bookingSettings.update(body, actor);
     }
 
     /** Журнал изменений правил, новые первыми. */
     @GetMapping("/history")
     List<BookingSettingsChangeView> history(Actor actor) {
-        return settings.history(actor);
+        return bookingSettings.history(actor);
     }
 }

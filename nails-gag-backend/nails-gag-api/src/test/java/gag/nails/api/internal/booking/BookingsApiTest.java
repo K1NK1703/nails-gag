@@ -3,75 +3,32 @@ package gag.nails.api.internal.booking;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.api.ApiTest;
-import gag.nails.api.ApiTestSupport;
-import gag.nails.booking.BookingService;
-import gag.nails.booking.BookingSettingsService;
-import gag.nails.booking.EarlierTimeOffers;
 import gag.nails.booking.command.CreateBooking;
-import gag.nails.booking.command.UpdateActualServices;
-import gag.nails.booking.command.UpdateBookingSettings;
-import gag.nails.booking.model.BookingSettingsChangeView;
-import gag.nails.booking.model.BookingSettingsView;
-import gag.nails.booking.model.BookingView;
-import gag.nails.catalog.CatalogService;
-import gag.nails.catalog.command.CreateService;
-import gag.nails.catalog.model.ServiceKind;
-import gag.nails.catalog.model.ServiceView;
-import gag.nails.clients.ClientQueries;
-import gag.nails.clients.command.RecordConsent;
-import gag.nails.clients.model.ConsentKind;
-import gag.nails.clients.model.ConsentSource;
-import gag.nails.clients.model.DocumentKind;
-import gag.nails.schedule.ScheduleService;
-import gag.nails.schedule.model.SlotView;
-import java.math.BigDecimal;
+import gag.nails.common.actor.AccessLevel;
+import gag.nails.common.actor.Section;
+import gag.nails.identity.command.CreateRole;
+import gag.nails.identity.testing.FakeProfile;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.client.RestTestClient.RequestHeadersSpec;
-import tools.jackson.databind.JsonNode;
 
 /**
- * Записи (спецификация API, §7.6): чтение, ведение, предоплата, предложение приехать раньше и отметки визита — по
- * разделу «Записи», свои записи — клиенту; правила записи — любому вошедшему, их изменение и журнал — по разделу
- * «Правила записи». Права и правила проверяет модуль; здесь — что адрес доходит до нужного вызова и отдаёт его ответ.
- *
- * <p>Слоты — на днях {@link #freshDay()}, в полдень: другие тесты их не трогают. Правила записи в базе одни на всех:
- * тесты, которые их меняют, возвращают прежние значения, а лимит активных записей читается из текущих правил. Тесты
- * со сдвигом часов входят после сдвига: сессия, открытая раньше, к сдвинутому моменту могла истечь.
+ * Записи как ресурс (спецификация API, §7.6): создание, чтение и очереди, отмена, отказ опоздавшему, перенос,
+ * комментарий и заметка мастера. Сотруднику — по разделу «Записи», свои записи — клиенту; права и правила проверяет
+ * модуль, здесь — что адрес доходит до нужного вызова и отдаёт его ответ. Лимит активных записей и окно бесплатной
+ * отмены читаются из текущих правил: они в базе одни на всех.
  */
 @ApiTest
-class BookingsApiTest extends ApiTestSupport {
-
-    private static final LocalTime NOON = LocalTime.of(12, 0);
-
-    @Autowired
-    BookingService bookings;
-
-    @Autowired
-    EarlierTimeOffers earlierTimeOffers;
-
-    @Autowired
-    BookingSettingsService bookingSettings;
-
-    @Autowired
-    CatalogService catalog;
-
-    @Autowired
-    ScheduleService schedule;
-
-    @Autowired
-    ClientQueries clientQueries;
+class BookingsApiTest extends BookingApiTestSupport {
 
     @Test
     void clientBooksFreeSlot() {
@@ -91,7 +48,9 @@ class BookingsApiTest extends ApiTestSupport {
         assertThat(field(booking, "status").asString()).isEqualTo("CONFIRMED");
         assertThat(field(booking, "createdBy").asString()).isEqualTo("CLIENT");
         assertThat(field(booking, "comment").asString()).isEqualTo("Френч");
-        assertThat(field(field(booking, "plannedServices").path(0), "serviceId").asString())
+        var planned = field(booking, "plannedServices");
+        assertThat(planned.size()).isEqualTo(1);
+        assertThat(field(planned.path(0), "serviceId").asString())
                 .isEqualTo(service.id().toString());
     }
 
@@ -133,19 +92,10 @@ class BookingsApiTest extends ApiTestSupport {
     void masterBooksClientAwaitingPrepayment() {
         var target = createClient(uniqueLastName());
         var slot = freeSlot();
-        var service = mainService();
+        var body = byMasterBody(target.id(), slot.id(), mainService().id(), true);
+        body.put("comment", "Записана по телефону");
 
-        var booking = json(
-                createByMaster(
-                        signInMaster(),
-                        Map.of(
-                                "clientId", target.id(),
-                                "slotId", slot.id(),
-                                "mainServiceId", service.id(),
-                                "addonServiceIds", List.of(),
-                                "comment", "Записана по телефону",
-                                "awaitPrepayment", true)),
-                HttpStatus.CREATED);
+        var booking = json(createByMaster(signInMaster(), body), HttpStatus.CREATED);
 
         assertThat(field(booking, "clientId").asString()).isEqualTo(target.id().toString());
         assertThat(field(booking, "slotId").asString()).isEqualTo(slot.id().toString());
@@ -155,21 +105,50 @@ class BookingsApiTest extends ApiTestSupport {
         assertThat(field(booking, "comment").asString()).isEqualTo("Записана по телефону");
     }
 
+    /**
+     * Решение о предоплате — обязательное поле, как все поля тел (спецификация API, §4.2): умолчания нет, пропуск —
+     * {@code 400} с именем поля, а не молча запись без предоплаты.
+     */
+    @Test
+    void masterBookingWithoutPrepaymentChoiceIsRejected() {
+        var body = byMasterBody(
+                createClient(uniqueLastName()).id(),
+                freeSlot().id(),
+                mainService().id(),
+                false);
+        body.remove("awaitPrepayment");
+
+        var problem = json(createByMaster(signInMaster(), body), HttpStatus.BAD_REQUEST);
+
+        assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
+        assertThat(field(field(problem, "errors").path(0), "field").asString()).isEqualTo("awaitPrepayment");
+    }
+
+    @Test
+    void masterBookingWithoutClientIsRejected() {
+        var body = byMasterBody(
+                createClient(uniqueLastName()).id(),
+                freeSlot().id(),
+                mainService().id(),
+                false);
+        body.remove("clientId");
+
+        var problem = json(createByMaster(signInMaster(), body), HttpStatus.BAD_REQUEST);
+
+        assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
+        assertThat(field(field(problem, "errors").path(0), "field").asString()).isEqualTo("clientId");
+    }
+
     @Test
     void clientCannotBookAsMaster() {
         var customer = signInClient();
+        var body = byMasterBody(
+                actor(customer).requireClientId(),
+                freeSlot().id(),
+                mainService().id(),
+                false);
 
-        expectProblem(
-                createByMaster(
-                        customer,
-                        Map.of(
-                                "clientId", actor(customer).requireClientId(),
-                                "slotId", freeSlot().id(),
-                                "mainServiceId", mainService().id(),
-                                "addonServiceIds", List.of(),
-                                "awaitPrepayment", false)),
-                HttpStatus.NOT_FOUND,
-                "common.not_found");
+        expectProblem(createByMaster(customer, body), HttpStatus.NOT_FOUND, "common.not_found");
     }
 
     @Test
@@ -193,6 +172,20 @@ class BookingsApiTest extends ApiTestSupport {
         expectProblem(getBooking(signInClient(), foreign.id()), HttpStatus.NOT_FOUND, "common.not_found");
     }
 
+    /** Сотрудник без раздела «Записи» получает честный отказ, а не «не найдено» (спецификация API, §4.6). */
+    @Test
+    void staffWithoutBookingsRightsIsDenied() {
+        var person = signInClient();
+        var code =
+                "NO_BOOKINGS_" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT);
+        var role = access.createRole(
+                new CreateRole(code, "Только каталог", Map.of(Section.CATALOG, AccessLevel.READ)), developerActor());
+        access.assignRole(person.accountId(), role.id(), developerActor());
+        var foreign = bookFor(createClient(uniqueLastName()).id(), false);
+
+        expectProblem(getBooking(person, foreign.id()), HttpStatus.FORBIDDEN, "common.access_denied");
+    }
+
     @Test
     void staffGetsModuleCodeForMissingBooking() {
         var problem = json(getBooking(signInMaster(), UUID.randomUUID()), HttpStatus.NOT_FOUND);
@@ -204,10 +197,7 @@ class BookingsApiTest extends ApiTestSupport {
     void bookingsRequireSession() {
         var day = freshDay();
 
-        expectProblem(
-                client.get().uri("/api/bookings?from={from}&to={to}", day, day),
-                HttpStatus.UNAUTHORIZED,
-                "common.unauthenticated");
+        expectProblem(ofPeriod(null, day, day), HttpStatus.UNAUTHORIZED, "common.unauthenticated");
     }
 
     @Test
@@ -215,7 +205,7 @@ class BookingsApiTest extends ApiTestSupport {
         var booking = bookFor(createClient(uniqueLastName()).id(), false);
         var day = LocalDate.ofInstant(booking.slotStartsAt(), clock.getZone());
 
-        var period = json(as(signInMaster(), client.get().uri("/api/bookings?from={from}&to={to}", day, day)));
+        var period = json(ofPeriod(signInMaster(), day, day));
 
         assertThat(ids(period)).containsExactly(booking.id());
     }
@@ -224,20 +214,14 @@ class BookingsApiTest extends ApiTestSupport {
     void clientCannotReadBookingsOfPeriod() {
         var day = freshDay();
 
-        expectProblem(
-                as(signInClient(), client.get().uri("/api/bookings?from={from}&to={to}", day, day)),
-                HttpStatus.NOT_FOUND,
-                "common.not_found");
+        expectProblem(ofPeriod(signInClient(), day, day), HttpStatus.NOT_FOUND, "common.not_found");
     }
 
     @Test
     void periodLongerThan93DaysIsRejected() {
         var from = freshDay();
-        var to = from.plusDays(93);
 
-        var problem = json(
-                as(signInMaster(), client.get().uri("/api/bookings?from={from}&to={to}", from, to)),
-                HttpStatus.BAD_REQUEST);
+        var problem = json(ofPeriod(signInMaster(), from, from.plusDays(93)), HttpStatus.BAD_REQUEST);
 
         assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
         assertThat(field(field(problem, "errors").path(0), "field").asString()).isEqualTo("to");
@@ -281,6 +265,24 @@ class BookingsApiTest extends ApiTestSupport {
     }
 
     @Test
+    void lateClientCancellationRequiresPrepayment() {
+        var profile = newClientProfile();
+        var clientId = actor(signIn(profile)).requireClientId();
+        var booking = bookFor(clientId, false);
+        var window = Duration.ofHours(bookingSettings.settings().freeCancelWindowHours());
+        // Минута после закрытия окна бесплатной отмены; слот ещё не начался, если окно не короче двух минут.
+        assertThat(window).isGreaterThan(Duration.ofMinutes(2));
+        clock.set(booking.slotStartsAt().minus(window).plus(Duration.ofMinutes(1)));
+
+        var cancelled = json(cancel(signIn(profile), booking.id()));
+
+        assertThat(field(cancelled, "status").asString()).isEqualTo("CANCELLED");
+        assertThat(field(cancelled, "cancelReason").asString()).isEqualTo("CLIENT_LATE");
+        assertThat(clientQueries.byId(clientId).orElseThrow().prepaymentRequired())
+                .isTrue();
+    }
+
+    @Test
     void masterRefusesLateClient() {
         var booking = bookFor(createClient(uniqueLastName()).id(), false);
         clock.set(booking.slotStartsAt().plus(Duration.ofMinutes(20)));
@@ -305,7 +307,7 @@ class BookingsApiTest extends ApiTestSupport {
         var booking = bookFor(actor(customer).requireClientId(), false);
         var newSlot = freeSlot();
 
-        var moved = json(reschedule(customer, booking.id(), newSlot.id()));
+        var moved = json(reschedule(customer, booking.id(), Map.of("newSlotId", newSlot.id())));
 
         assertThat(field(moved, "id").asString()).isEqualTo(booking.id().toString());
         assertThat(field(moved, "slotId").asString()).isEqualTo(newSlot.id().toString());
@@ -317,13 +319,25 @@ class BookingsApiTest extends ApiTestSupport {
     void reschedulingToSameSlotNamesTheField() {
         var booking = bookFor(createClient(uniqueLastName()).id(), false);
 
-        var problem = json(reschedule(signInMaster(), booking.id(), booking.slotId()), HttpStatus.BAD_REQUEST);
+        var problem = json(
+                reschedule(signInMaster(), booking.id(), Map.of("newSlotId", booking.slotId())),
+                HttpStatus.BAD_REQUEST);
 
         assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
         var error = field(problem, "errors").path(0);
         assertThat(field(error, "field").asString()).isEqualTo("newSlotId");
         // Причина модуля, а не неизвестного поля тела: то и другое — 400 с тем же именем поля.
         assertThat(field(error, "reason").asString()).isEqualTo("must differ from the current slot");
+    }
+
+    @Test
+    void reschedulingWithoutSlotIsRejected() {
+        var booking = bookFor(createClient(uniqueLastName()).id(), false);
+
+        var problem = json(reschedule(signInMaster(), booking.id(), Map.of()), HttpStatus.BAD_REQUEST);
+
+        assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
+        assertThat(field(field(problem, "errors").path(0), "field").asString()).isEqualTo("newSlotId");
     }
 
     @Test
@@ -362,187 +376,13 @@ class BookingsApiTest extends ApiTestSupport {
         expectProblem(readNote(customer, booking.id()), HttpStatus.NOT_FOUND, "common.not_found");
     }
 
-    @Test
-    void masterMarksPrepaymentReceived() {
-        var booking = bookFor(createClient(uniqueLastName()).id(), true);
-
-        var paid = json(markPrepaymentReceived(signInMaster(), booking.id()));
-
-        assertThat(field(paid, "status").asString()).isEqualTo("CONFIRMED");
-        assertThat(field(paid, "prepaymentReceivedAt").asString())
-                .isEqualTo(clock.instant().toString());
-        assertThat(field(paid, "prepaymentDeadline").isNull()).isTrue();
-    }
-
-    @Test
-    void masterConfirmsWithoutPrepaymentAndClearsClientFlag() {
-        var target = createClient(uniqueLastName());
-        clientService.setPrepaymentRequired(target.id(), true, null, developerActor());
-        var booking = bookFor(target.id(), true);
-
-        var confirmed = json(confirmWithoutPrepayment(signInMaster(), booking.id()));
-
-        assertThat(field(confirmed, "status").asString()).isEqualTo("CONFIRMED");
-        assertThat(field(confirmed, "prepaymentReceivedAt").isNull()).isTrue();
-        assertThat(clientQueries.byId(target.id()).orElseThrow().prepaymentRequired())
-                .isFalse();
-    }
-
-    @Test
-    void masterProposesAndWithdrawsEarlierTime() {
-        var master = signInMaster();
-        var booking = bookFor(createClient(uniqueLastName()).id(), false);
-        var proposedStart = booking.slotStartsAt().minus(Duration.ofHours(1));
-
-        var proposed = json(proposeEarlierTime(master, booking.id(), proposedStart));
-        var offer = field(proposed, "earlierTime");
-        assertThat(field(offer, "proposedStart").asString()).isEqualTo(proposedStart.toString());
-        assertThat(field(offer, "proposedAt").asString())
-                .isEqualTo(clock.instant().toString());
-        assertThat(field(offer, "status").asString()).isEqualTo("PENDING");
-
-        var withdrawn = json(withdrawEarlierTime(master, booking.id()));
-        assertThat(field(field(withdrawn, "earlierTime"), "status").asString()).isEqualTo("WITHDRAWN");
-        assertThat(field(withdrawn, "agreedStart").isNull()).isTrue();
-    }
-
-    @Test
-    void clientAcceptsAndDeclinesEarlierTime() {
-        var customer = signInClient();
-        var booking = bookFor(actor(customer).requireClientId(), false);
-        var oneHourEarlier = booking.slotStartsAt().minus(Duration.ofHours(1));
-        earlierTimeOffers.propose(booking.id(), oneHourEarlier, developerActor());
-
-        var accepted = json(acceptEarlierTime(customer, booking.id()));
-        assertThat(field(field(accepted, "earlierTime"), "status").asString()).isEqualTo("ACCEPTED");
-        assertThat(field(accepted, "agreedStart").asString()).isEqualTo(oneHourEarlier.toString());
-
-        earlierTimeOffers.propose(booking.id(), booking.slotStartsAt().minus(Duration.ofHours(2)), developerActor());
-
-        var declined = json(declineEarlierTime(customer, booking.id()));
-        assertThat(field(field(declined, "earlierTime"), "status").asString()).isEqualTo("DECLINED");
-        assertThat(field(declined, "agreedStart").asString()).isEqualTo(oneHourEarlier.toString());
-    }
-
-    @Test
-    void masterCompletesVisitAndCorrectsActualServices() {
-        var booking = bookFor(createClient(uniqueLastName()).id(), false);
-        var extra = mainService();
-        clock.set(booking.slotStartsAt().plus(Duration.ofMinutes(90)));
-        var master = signInMaster();
-
-        var completed = json(complete(master, booking.id()));
-        assertThat(field(completed, "status").asString()).isEqualTo("COMPLETED");
-        assertThat(field(completed, "completedAt").asString())
-                .isEqualTo(clock.instant().toString());
-        assertThat(field(completed, "finalAmount").decimalValue()).isEqualByComparingTo("1500.00");
-
-        var corrected = json(updateActualServices(
-                master, booking.id(), new UpdateActualServices(extra.id(), List.of(), new BigDecimal("1200.00"))));
-        assertThat(field(field(corrected, "actualServices").path(0), "serviceId")
-                        .asString())
-                .isEqualTo(extra.id().toString());
-        assertThat(field(corrected, "actualServices").size()).isEqualTo(1);
-        assertThat(field(corrected, "finalAmount").decimalValue()).isEqualByComparingTo("1200.00");
-    }
-
-    @Test
-    void masterCorrectsCompletionToNoShow() {
-        var booking = bookFor(createClient(uniqueLastName()).id(), false);
-        clock.set(booking.slotStartsAt().plus(Duration.ofMinutes(90)));
-        var master = signInMaster();
-        json(complete(master, booking.id()));
-
-        var noShow = json(markNoShow(master, booking.id()));
-
-        assertThat(field(noShow, "status").asString()).isEqualTo("NO_SHOW");
-        assertThat(field(noShow, "noShowAt").asString())
-                .isEqualTo(clock.instant().toString());
-        assertThat(field(noShow, "actualServices").size()).isZero();
-        assertThat(field(noShow, "finalAmount").isNull()).isTrue();
-    }
-
-    @Test
-    void settingsReadableBySession() {
-        var current = bookingSettings.settings();
-
-        expectProblem(client.get().uri("/api/booking-settings"), HttpStatus.UNAUTHORIZED, "common.unauthenticated");
-        var read = json(as(signInClient(), client.get().uri("/api/booking-settings")));
-
-        assertThat(field(read, "maxActiveBookings").asInt()).isEqualTo(current.maxActiveBookings());
-        assertThat(field(read, "bookingCutoffMinutes").asInt()).isEqualTo(current.bookingCutoffMinutes());
-        assertThat(field(read, "prepaymentHoldHours").asInt()).isEqualTo(current.prepaymentHoldHours());
-        assertThat(field(read, "freeCancelWindowHours").asInt()).isEqualTo(current.freeCancelWindowHours());
-        assertThat(field(read, "prepaymentPercent").asInt()).isEqualTo(current.prepaymentPercent());
-        assertThat(field(read, "lateArrivalToleranceMinutes").asInt()).isEqualTo(current.lateArrivalToleranceMinutes());
-        assertThat(field(read, "markCorrectionWindowDays").asInt()).isEqualTo(current.markCorrectionWindowDays());
-    }
-
-    @Test
-    void masterUpdatesSettings() {
-        var current = bookingSettings.settings();
-        var tolerance = otherTolerance(current.lateArrivalToleranceMinutes());
-        try {
-            var updated = json(updateSettings(signInMaster(), withTolerance(current, tolerance)));
-
-            assertThat(field(updated, "lateArrivalToleranceMinutes").asInt()).isEqualTo(tolerance);
-            assertThat(field(updated, "maxActiveBookings").asInt()).isEqualTo(current.maxActiveBookings());
-            assertThat(bookingSettings.settings().lateArrivalToleranceMinutes()).isEqualTo(tolerance);
-        } finally {
-            bookingSettings.update(withTolerance(current, current.lateArrivalToleranceMinutes()), developerActor());
-        }
-    }
-
-    @Test
-    void clientCannotUpdateSettings() {
-        var current = bookingSettings.settings();
-        var tolerance = otherTolerance(current.lateArrivalToleranceMinutes());
-        try {
-            expectProblem(
-                    updateSettings(signInClient(), withTolerance(current, tolerance)),
-                    HttpStatus.NOT_FOUND,
-                    "common.not_found");
-            assertThat(bookingSettings.settings()).isEqualTo(current);
-        } finally {
-            bookingSettings.update(withTolerance(current, current.lateArrivalToleranceMinutes()), developerActor());
-        }
-    }
-
-    /**
-     * Журнал общий для всей базы, а часы в тестах стоят: такая же строка могла остаться от прошлых тестов и прогонов,
-     * поэтому проверяется, что совпадающих строк стало на одну больше.
-     */
-    @Test
-    void settingsChangeAppearsInHistory() {
-        var current = bookingSettings.settings();
-        var oldValue = current.lateArrivalToleranceMinutes();
-        var newValue = otherTolerance(oldValue);
-        var before = bookingSettings.history(developerActor()).stream()
-                .filter(change -> isToleranceChange(change, oldValue, newValue))
-                .count();
-        try {
-            bookingSettings.update(withTolerance(current, newValue), developerActor());
-
-            var history = json(as(signInMaster(), client.get().uri("/api/booking-settings/history")));
-
-            var matching = history.values().stream()
-                    .filter(entry -> field(entry, "field").asString().equals("late_arrival_tolerance_minutes")
-                            && field(entry, "oldValue").asString().equals(String.valueOf(oldValue))
-                            && field(entry, "newValue").asString().equals(String.valueOf(newValue)))
-                    .count();
-            assertThat(matching).isEqualTo(before + 1);
-        } finally {
-            bookingSettings.update(withTolerance(current, oldValue), developerActor());
-        }
-    }
-
     private RequestHeadersSpec<?> createByClient(Session session, CreateBooking command) {
         return as(session, csrf(client.post().uri("/api/bookings")))
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(command);
     }
 
-    private RequestHeadersSpec<?> createByMaster(Session session, Map<String, Object> body) {
+    private RequestHeadersSpec<?> createByMaster(Session session, Map<String, @Nullable Object> body) {
         return as(session, csrf(client.post().uri("/api/bookings/by-master")))
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body);
@@ -550,6 +390,12 @@ class BookingsApiTest extends ApiTestSupport {
 
     private RequestHeadersSpec<?> getBooking(Session session, UUID bookingId) {
         return as(session, client.get().uri("/api/bookings/{id}", bookingId));
+    }
+
+    /** {@code GET /api/bookings?from=&to=}; без {@code session} — анонимно. */
+    private RequestHeadersSpec<?> ofPeriod(@Nullable Session session, LocalDate from, LocalDate to) {
+        var spec = client.get().uri("/api/bookings?from={from}&to={to}", from, to);
+        return session == null ? spec : as(session, spec);
     }
 
     private RequestHeadersSpec<?> cancel(Session session, UUID bookingId) {
@@ -560,10 +406,10 @@ class BookingsApiTest extends ApiTestSupport {
         return bookingAction(session, bookingId, "refuse-late-arrival");
     }
 
-    private RequestHeadersSpec<?> reschedule(Session session, UUID bookingId, UUID newSlotId) {
+    private RequestHeadersSpec<?> reschedule(Session session, UUID bookingId, Map<String, UUID> body) {
         return as(session, csrf(client.post().uri("/api/bookings/{id}/reschedule", bookingId)))
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("newSlotId", newSlotId));
+                .body(body);
     }
 
     private RequestHeadersSpec<?> setComment(Session session, UUID bookingId, @Nullable String comment) {
@@ -585,127 +431,9 @@ class BookingsApiTest extends ApiTestSupport {
                 .body(Map.of("note", note));
     }
 
-    private RequestHeadersSpec<?> markPrepaymentReceived(Session session, UUID bookingId) {
-        return bookingAction(session, bookingId, "prepayment/received");
-    }
-
-    private RequestHeadersSpec<?> confirmWithoutPrepayment(Session session, UUID bookingId) {
-        return bookingAction(session, bookingId, "prepayment/confirm-without");
-    }
-
-    private RequestHeadersSpec<?> proposeEarlierTime(Session session, UUID bookingId, Instant proposedStart) {
-        return as(session, csrf(client.post().uri("/api/bookings/{id}/earlier-time", bookingId)))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("proposedStart", proposedStart));
-    }
-
-    private RequestHeadersSpec<?> withdrawEarlierTime(Session session, UUID bookingId) {
-        return as(session, csrf(client.delete().uri("/api/bookings/{id}/earlier-time", bookingId)));
-    }
-
-    private RequestHeadersSpec<?> acceptEarlierTime(Session session, UUID bookingId) {
-        return bookingAction(session, bookingId, "earlier-time/accept");
-    }
-
-    private RequestHeadersSpec<?> declineEarlierTime(Session session, UUID bookingId) {
-        return bookingAction(session, bookingId, "earlier-time/decline");
-    }
-
-    private RequestHeadersSpec<?> complete(Session session, UUID bookingId) {
-        return bookingAction(session, bookingId, "complete");
-    }
-
-    private RequestHeadersSpec<?> markNoShow(Session session, UUID bookingId) {
-        return bookingAction(session, bookingId, "no-show");
-    }
-
-    private RequestHeadersSpec<?> updateActualServices(Session session, UUID bookingId, UpdateActualServices command) {
-        return as(session, csrf(client.put().uri("/api/bookings/{id}/actual-services", bookingId)))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(command);
-    }
-
-    private RequestHeadersSpec<?> updateSettings(Session session, UpdateBookingSettings command) {
-        return as(session, csrf(client.put().uri("/api/booking-settings")))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(command);
-    }
-
-    /** Переход записи без тела: {@code POST /api/bookings/{id}/<действие>}. */
-    private RequestHeadersSpec<?> bookingAction(Session session, UUID bookingId, String action) {
-        return as(session, csrf(client.post().uri("/api/bookings/{id}/" + action, bookingId)));
-    }
-
-    /** Ответ — ошибка с данным статусом и кодом. */
-    private static void expectProblem(RequestHeadersSpec<?> spec, HttpStatus status, String code) {
-        assertThat(field(json(spec, status), "code").asString()).isEqualTo(code);
-    }
-
-    /** Поле объекта; его отсутствие — провал теста, а не пустое значение. */
-    private static JsonNode field(JsonNode node, String name) {
-        assertThat(node.has(name)).as("field " + name + " in " + node).isTrue();
-        return node.get(name);
-    }
-
-    /** Новый клиент с согласиями на действующие политику и оферту: без них записаться сам он не может. */
-    private Session customerWithConsents() {
-        var customer = signInClient();
-        var offer = documents.current(DocumentKind.OFFER).version();
-        clientService.recordConsent(
-                actor(customer).requireClientId(),
-                new RecordConsent(ConsentKind.OFFER, offer, ConsentSource.SITE_CHECKBOX),
-                actor(customer));
-        return customer;
-    }
-
-    /** Подтверждённая или ждущая предоплату запись клиента на свой день в полдень; её заводит разработчик. */
-    private BookingView bookFor(UUID clientId, boolean awaitPrepayment) {
-        return bookings.createByMaster(
-                new CreateBooking(clientId, freeSlot().id(), mainService().id(), List.of(), null),
-                awaitPrepayment,
-                developerActor());
-    }
-
-    /** Свободный слот в полдень дня, которого нет у других тестов. */
-    private SlotView freeSlot() {
-        return schedule.addSlot(freshDay(), NOON, developerActor());
-    }
-
-    /** Основная услуга за 1500,00; её заводит разработчик. */
-    private ServiceView mainService() {
-        return catalog.create(
-                new CreateService(
-                        ServiceKind.MAIN,
-                        "Услуга " + UUID.randomUUID(),
-                        "Описание",
-                        new BigDecimal("1500.00"),
-                        60,
-                        "Маникюр",
-                        false,
-                        false),
-                developerActor());
-    }
-
-    /** Те же правила с другим допустимым опозданием. */
-    private static UpdateBookingSettings withTolerance(BookingSettingsView settings, int toleranceMinutes) {
-        return new UpdateBookingSettings(
-                settings.maxActiveBookings(),
-                settings.bookingCutoffMinutes(),
-                settings.prepaymentHoldHours(),
-                settings.freeCancelWindowHours(),
-                settings.prepaymentPercent(),
-                toleranceMinutes,
-                settings.markCorrectionWindowDays());
-    }
-
-    /** Другое допустимое опоздание (0–120 минут): на 5 минут больше текущего, у наибольшего — меньше. */
-    private static int otherTolerance(int current) {
-        return current < 120 ? current + 5 : current - 5;
-    }
-
-    private static boolean isToleranceChange(BookingSettingsChangeView change, int oldValue, int newValue) {
-        return change.field().equals("late_arrival_tolerance_minutes")
-                && change.oldValue().equals(String.valueOf(oldValue))
-                && change.newValue().equals(String.valueOf(newValue));
+    /** Профиль нового клиента у подставного провайдера: по нему тот же человек входит снова после сдвига часов. */
+    private static FakeProfile newClientProfile() {
+        var subject = uniqueSubject();
+        return new FakeProfile(subject, uniquePhone(), null, "Клиент " + subject, null);
     }
 }

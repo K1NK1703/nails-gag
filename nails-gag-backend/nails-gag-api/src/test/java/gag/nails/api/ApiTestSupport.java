@@ -2,6 +2,10 @@ package gag.nails.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import gag.nails.catalog.CatalogService;
+import gag.nails.catalog.command.CreateService;
+import gag.nails.catalog.model.ServiceKind;
+import gag.nails.catalog.model.ServiceView;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.DocumentVersionService;
 import gag.nails.clients.command.CreateClient;
@@ -15,6 +19,7 @@ import gag.nails.identity.model.LoginPurpose;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.identity.testing.FakeProvider;
 import gag.nails.testsupport.MutableClock;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
@@ -107,6 +112,9 @@ public abstract class ApiTestSupport {
 
     @Autowired
     protected Sessions sessions;
+
+    @Autowired
+    protected CatalogService catalog;
 
     @Autowired
     protected MutableClock clock;
@@ -262,6 +270,17 @@ public abstract class ApiTestSupport {
                 .getResponseBody());
     }
 
+    /** Ответ — ошибка с данным статусом и кодом. */
+    protected static void expectProblem(RequestHeadersSpec<?> spec, HttpStatus status, String code) {
+        assertThat(field(json(spec, status), "code").asString()).isEqualTo(code);
+    }
+
+    /** Поле объекта; его отсутствие — провал теста, а не пустое значение. */
+    protected static JsonNode field(JsonNode node, String name) {
+        assertThat(node.has(name)).as("field " + name + " in " + node).isTrue();
+        return node.get(name);
+    }
+
     /** Идентификаторы элементов JSON-массива по порядку; элемент без {@code id} — провал теста. */
     protected static List<UUID> ids(JsonNode items) {
         return items.values().stream()
@@ -351,6 +370,21 @@ public abstract class ApiTestSupport {
     protected ClientView createClient(String lastName) {
         return clientService.create(
                 new CreateClient("Анна", lastName, null, uniquePhone(), null, null), developerActor());
+    }
+
+    /** Новая основная услуга за 1500,00 на 60 минут; её заводит разработчик. */
+    protected ServiceView mainService() {
+        return catalog.create(
+                new CreateService(
+                        ServiceKind.MAIN,
+                        "Услуга " + UUID.randomUUID(),
+                        "Описание",
+                        new BigDecimal("1500.00"),
+                        60,
+                        "Маникюр",
+                        false,
+                        false),
+                developerActor());
     }
 
     /** Cookie из {@code Set-Cookie} ответа со значением и атрибутами; её отсутствие — провал теста. */

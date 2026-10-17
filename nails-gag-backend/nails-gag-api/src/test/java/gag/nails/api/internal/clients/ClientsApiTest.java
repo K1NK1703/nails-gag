@@ -7,9 +7,6 @@ import gag.nails.api.ApiTestSupport;
 import gag.nails.booking.BookingService;
 import gag.nails.booking.command.CreateBooking;
 import gag.nails.booking.model.BookingView;
-import gag.nails.catalog.CatalogService;
-import gag.nails.catalog.command.CreateService;
-import gag.nails.catalog.model.ServiceKind;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.command.RecordConsent;
@@ -18,7 +15,6 @@ import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.schedule.ScheduleService;
-import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
@@ -44,9 +40,6 @@ class ClientsApiTest extends ApiTestSupport {
 
     @Autowired
     ClientQueries clientQueries;
-
-    @Autowired
-    CatalogService catalog;
 
     @Autowired
     ScheduleService schedule;
@@ -438,17 +431,7 @@ class ClientsApiTest extends ApiTestSupport {
     /** Запись клиента на свободный слот нового дня, её ставит разработчик. */
     private BookingView book(UUID clientId) {
         var developer = developerActor();
-        var service = catalog.create(
-                new CreateService(
-                        ServiceKind.MAIN,
-                        "Услуга " + UUID.randomUUID(),
-                        "Описание",
-                        new BigDecimal("1500.00"),
-                        60,
-                        "Маникюр",
-                        false,
-                        false),
-                developer);
+        var service = mainService();
         var slot = schedule.addSlot(freshDay(), NOON, developer);
         return bookings.createByMaster(
                 new CreateBooking(clientId, slot.id(), service.id(), List.of(), null), false, developer);
