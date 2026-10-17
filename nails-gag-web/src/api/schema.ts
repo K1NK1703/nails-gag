@@ -1820,7 +1820,7 @@ export interface components {
     }
     Problem: {
       type: string
-      title?: string | null
+      title?: string
       /** Format: int32 */
       status: number
       instance: string
@@ -1829,7 +1829,7 @@ export interface components {
         [key: string]: unknown
       }
       errors?: components['schemas']['FieldError'][]
-      traceId?: string | null
+      traceId?: string
     }
   }
   responses: never
