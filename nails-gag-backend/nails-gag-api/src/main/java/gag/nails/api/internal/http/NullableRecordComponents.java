@@ -26,8 +26,10 @@ import org.jspecify.annotations.Nullable;
  * слоя и модулей; имя поля — как у Jackson, с учётом {@link JsonProperty}.
  *
  * <p>Тела запросов — так же: фронт отправляет все поля, отсутствующее значение — явным {@code null} (Jackson его
- * принимает). Обязательность не ставится записи с {@link JsonInclude} не {@code ALWAYS} (тело ошибки {@code Problem}
- * опускает пустое — его список задан вручную) и полю, у которого такая аннотация своя.
+ * принимает). Поле, которое Jackson опускает ({@link JsonInclude} не {@code ALWAYS} у поля или, без своей, у записи),
+ * {@code null} не бывает: оно не обязательно и {@code null} не допускает — тип фронта {@code title?: string}. Записи
+ * с такой аннотацией обязательность не ставится вовсе: тело ошибки {@code Problem} опускает пустое, его список задан
+ * вручную.
  *
  * <p>Правило — только {@code @Nullable} и {@code @JsonInclude}: список {@code required} записи заменяется целиком,
  * поэтому {@code @Schema(requiredMode = …)} на компонентах записи не действует, а {@code null} разрешается по
@@ -72,7 +74,7 @@ final class NullableRecordComponents implements ModelConverter {
 
     private static void markNullable(Class<?> type, Schema<?> model) {
         for (var component : type.getRecordComponents()) {
-            if (!component.getAnnotatedType().isAnnotationPresent(Nullable.class)) {
+            if (!component.getAnnotatedType().isAnnotationPresent(Nullable.class) || !writesNull(type, component)) {
                 continue;
             }
             var name = jsonName(component);
@@ -89,11 +91,23 @@ final class NullableRecordComponents implements ModelConverter {
             return;
         }
         var required = Arrays.stream(type.getRecordComponents())
-                .filter(component -> alwaysIncluded(component.getAccessor().getAnnotation(JsonInclude.class)))
+                .filter(component -> writesNull(type, component))
                 .map(NullableRecordComponents::jsonName)
                 .filter(model.getProperties()::containsKey)
                 .toList();
         model.setRequired(required.isEmpty() ? null : required);
+    }
+
+    /**
+     * Пишет ли Jackson компонент всегда, в том числе {@code null}: своя {@link JsonInclude} поля важнее аннотации
+     * записи, {@code USE_DEFAULTS} у поля отсылает к записи.
+     */
+    private static boolean writesNull(Class<?> type, RecordComponent component) {
+        var own = component.getAccessor().getAnnotation(JsonInclude.class);
+        if (own != null && own.value() != JsonInclude.Include.USE_DEFAULTS) {
+            return own.value() == JsonInclude.Include.ALWAYS;
+        }
+        return alwaysIncluded(type.getAnnotation(JsonInclude.class));
     }
 
     /** {@code USE_DEFAULTS} — как у mapper слоя, а он пишет всё ({@link JsonConfiguration}). */

@@ -1,5 +1,6 @@
 package gag.nails.api.internal.access;
 
+import gag.nails.api.internal.http.PageDefaults;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.paging.Paged;
 import gag.nails.common.paging.Paging;
@@ -19,12 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/access")
 class AccessJournalController {
 
-    /** Номер страницы по умолчанию — первая. */
-    private static final String FIRST_PAGE = "0";
-
-    /** Размер страницы по умолчанию; наибольший — {@link Paging#MAX_SIZE}, больше — {@code 400}. */
-    private static final String DEFAULT_PAGE_SIZE = "50";
-
     private final AccessAdministration access;
 
     AccessJournalController(AccessAdministration access) {
@@ -34,8 +29,8 @@ class AccessJournalController {
     /** Журнал прав: роли, их назначение и переопределения — кто, кому и что изменил. */
     @GetMapping("/journal")
     Paged<AccessChangeView> accessJournal(
-            @RequestParam(defaultValue = FIRST_PAGE) int page,
-            @RequestParam(defaultValue = DEFAULT_PAGE_SIZE) int size,
+            @RequestParam(defaultValue = PageDefaults.FIRST_PAGE) int page,
+            @RequestParam(defaultValue = PageDefaults.SIZE) int size,
             Actor actor) {
         return access.accessJournal(new Paging(page, size), actor);
     }
@@ -43,8 +38,8 @@ class AccessJournalController {
     /** Журнал входов, удачных и нет. */
     @GetMapping("/login-journal")
     Paged<LoginEventView> loginJournal(
-            @RequestParam(defaultValue = FIRST_PAGE) int page,
-            @RequestParam(defaultValue = DEFAULT_PAGE_SIZE) int size,
+            @RequestParam(defaultValue = PageDefaults.FIRST_PAGE) int page,
+            @RequestParam(defaultValue = PageDefaults.SIZE) int size,
             Actor actor) {
         return access.loginJournal(new Paging(page, size), actor);
     }

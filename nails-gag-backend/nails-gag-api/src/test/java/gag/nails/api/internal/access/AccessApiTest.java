@@ -196,12 +196,25 @@ class AccessApiTest extends ApiTestSupport {
 
     /**
      * Журналы общие для всей базы: страница сверяется с той же страницей модуля, прочитанной сразу перед запросом, —
-     * чтение журнала само строк не добавляет. Порядок модуля однозначен (время, затем идентификатор).
+     * чтение журнала само строк не добавляет. Порядок модуля однозначен (время, затем идентификатор). На двух страницах
+     * по две строки нужно хотя бы четыре строки в каждом журнале — тест заводит их сам, даже на пустой базе: четыре
+     * входа новых людей и четыре изменения прав.
      */
     @Test
     void journalsArePaged() {
         var developer = signInDeveloper();
-        signInMaster();
+        var customer = signInClient();
+        signInClient();
+        signInClient();
+        var master = builtInRole("MASTER");
+        for (var round = 0; round < 2; round++) {
+            access.assignRole(customer.accountId(), master.id(), developerActor());
+            access.revokeRole(customer.accountId(), master.id(), developerActor());
+        }
+        assertThat(access.accessJournal(new Paging(0, 1), developerActor()).total())
+                .isGreaterThanOrEqualTo(4);
+        assertThat(access.loginJournal(new Paging(0, 1), developerActor()).total())
+                .isGreaterThanOrEqualTo(4);
 
         for (var page = 0; page < 2; page++) {
             var expected = access.accessJournal(new Paging(page, 2), developerActor());

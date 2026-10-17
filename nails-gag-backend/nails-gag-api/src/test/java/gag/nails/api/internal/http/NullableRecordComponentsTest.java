@@ -37,7 +37,12 @@ class NullableRecordComponentsTest {
             @JsonProperty("renamed_note") @Nullable String note) {}
 
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    record Sparse(String code, @Nullable String detail) {}
+    record Sparse(
+            String code,
+            @Nullable String detail,
+
+            @JsonInclude(JsonInclude.Include.ALWAYS) @Nullable
+            String shown) {}
 
     record PartlyOmitted(
             String always,
@@ -58,18 +63,30 @@ class NullableRecordComponentsTest {
         assertThat(schema(Explicit.class).getRequired()).containsExactlyInAnyOrder("value", "other");
     }
 
+    /**
+     * Запись, которая опускает пустое, {@code null} не пишет: поле без значения отсутствует, поэтому оно не обязательно
+     * и {@code null} не допускает (тип фронта — {@code detail?: string}). Своя {@code ALWAYS} у поля возвращает
+     * {@code null}.
+     */
     @Test
     void recordWithoutAlwaysInclusionIsLeftAsIs() {
         var sparse = schema(Sparse.class);
 
         assertThat(sparse.getRequired()).isNullOrEmpty();
         Schema<?> detail = sparse.getProperties().get("detail");
-        assertThat(detail.getTypes()).containsExactlyInAnyOrder("string", "null");
+        assertThat(detail.getTypes()).containsExactly("string");
+        Schema<?> shown = sparse.getProperties().get("shown");
+        assertThat(shown.getTypes()).containsExactlyInAnyOrder("string", "null");
     }
 
+    /** Поле со своим {@code NON_NULL} опускается вместо {@code null}: не обязательно и {@code null} не допускает. */
     @Test
     void componentWithOwnInclusionIsOptional() {
-        assertThat(schema(PartlyOmitted.class).getRequired()).containsExactly("always");
+        var partlyOmitted = schema(PartlyOmitted.class);
+
+        assertThat(partlyOmitted.getRequired()).containsExactly("always");
+        Schema<?> omitted = partlyOmitted.getProperties().get("omitted");
+        assertThat(omitted.getTypes()).containsExactly("string");
     }
 
     @Test

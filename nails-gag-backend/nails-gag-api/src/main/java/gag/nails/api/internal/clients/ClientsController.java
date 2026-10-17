@@ -1,6 +1,7 @@
 package gag.nails.api.internal.clients;
 
 import gag.nails.api.internal.http.BookingScope;
+import gag.nails.api.internal.http.PageDefaults;
 import gag.nails.api.internal.http.SetMasterNote;
 import gag.nails.booking.BookingQueries;
 import gag.nails.booking.model.BookingView;
@@ -42,12 +43,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/clients")
 class ClientsController {
 
-    /** Номер страницы поиска по умолчанию — первая. */
-    private static final String FIRST_PAGE = "0";
-
-    /** Размер страницы поиска по умолчанию; наибольший — {@link Paging#MAX_SIZE}, больше — {@code 400}. */
-    private static final String DEFAULT_PAGE_SIZE = "50";
-
     private final ClientQueries queries;
     private final ClientService clients;
     private final BookingQueries bookingQueries;
@@ -65,8 +60,8 @@ class ClientsController {
     @GetMapping
     Paged<ClientView> search(
             @RequestParam(defaultValue = "") @Size(max = 100) String query,
-            @RequestParam(defaultValue = FIRST_PAGE) int page,
-            @RequestParam(defaultValue = DEFAULT_PAGE_SIZE) int size,
+            @RequestParam(defaultValue = PageDefaults.FIRST_PAGE) int page,
+            @RequestParam(defaultValue = PageDefaults.SIZE) int size,
             Actor actor) {
         return queries.search(query, new Paging(page, size), actor);
     }

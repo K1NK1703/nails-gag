@@ -130,6 +130,9 @@ class OpenApiSchemaTest extends ApiTestSupport {
                 .contains("type", "title", "status", "instance", "code", "params", "errors", "traceId");
         assertThat(problem.path("required").values().stream().map(JsonNode::asString))
                 .containsExactlyInAnyOrder("type", "status", "instance", "code");
+        // Problem опускает пустое: отсутствующее поле не пишется, а не приходит null (тип фронта — title?: string).
+        assertThat(types(problem.path("properties").path("title"))).containsExactly("string");
+        assertThat(types(problem.path("properties").path("traceId"))).containsExactly("string");
         var operations = operations(schema);
         assertThat(operations).isNotEmpty();
         for (var operation : operations) {
