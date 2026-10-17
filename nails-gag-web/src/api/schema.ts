@@ -12,7 +12,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['reorder']
+    put: operations['services_reorder']
     post?: never
     delete?: never
     options?: never
@@ -28,7 +28,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['setSlotDuration']
+    put: operations['scheduleSettings_setSlotDuration']
     post?: never
     delete?: never
     options?: never
@@ -43,8 +43,8 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['rotation']
-    put: operations['setRotation']
+    get: operations['rotation_rotation']
+    put: operations['rotation_setRotation']
     post?: never
     delete?: never
     options?: never
@@ -60,7 +60,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['setPrepaymentRequired']
+    put: operations['clients_setPrepaymentRequired']
     post?: never
     delete?: never
     options?: never
@@ -76,7 +76,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['updateMasterNote']
+    put: operations['clients_updateMasterNote']
     post?: never
     delete?: never
     options?: never
@@ -92,7 +92,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['changeContactPhone']
+    put: operations['clients_changeContactPhone']
     post?: never
     delete?: never
     options?: never
@@ -107,8 +107,8 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['masterNote']
-    put: operations['updateMasterNote_1']
+    get: operations['bookings_masterNote']
+    put: operations['bookings_updateMasterNote']
     post?: never
     delete?: never
     options?: never
@@ -124,7 +124,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['updateComment']
+    put: operations['bookings_updateComment']
     post?: never
     delete?: never
     options?: never
@@ -140,7 +140,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['updateActualServices']
+    put: operations['bookingActions_updateActualServices']
     post?: never
     delete?: never
     options?: never
@@ -155,8 +155,8 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['settings']
-    put: operations['update']
+    get: operations['bookingSettings_settings']
+    put: operations['bookingSettings_update']
     post?: never
     delete?: never
     options?: never
@@ -172,9 +172,9 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    put: operations['setOverride']
+    put: operations['staffAccess_setOverride']
     post?: never
-    delete: operations['removeOverride']
+    delete: operations['staffAccess_removeOverride']
     options?: never
     head?: never
     patch?: never
@@ -187,9 +187,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['services']
+    get: operations['services_services']
     put?: never
-    post: operations['create']
+    post: operations['services_create']
     delete?: never
     options?: never
     head?: never
@@ -205,7 +205,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['deactivate']
+    post: operations['services_deactivate']
     delete?: never
     options?: never
     head?: never
@@ -221,7 +221,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['activate']
+    post: operations['services_activate']
     delete?: never
     options?: never
     head?: never
@@ -235,9 +235,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['weekTemplates']
+    get: operations['weekTemplates_weekTemplates']
     put?: never
-    post: operations['create_1']
+    post: operations['weekTemplates_create']
     delete?: never
     options?: never
     head?: never
@@ -251,9 +251,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['slots']
+    get: operations['slots_slots']
     put?: never
-    post: operations['addSlot']
+    post: operations['slots_addSlot']
     delete?: never
     options?: never
     head?: never
@@ -269,7 +269,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['moveSlot']
+    post: operations['slots_moveSlot']
     delete?: never
     options?: never
     head?: never
@@ -285,7 +285,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['apply']
+    post: operations['rotation_apply']
     delete?: never
     options?: never
     head?: never
@@ -301,7 +301,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['applyDayTemplate']
+    post: operations['slots_applyDayTemplate']
     delete?: never
     options?: never
     head?: never
@@ -315,9 +315,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['dayTemplates']
+    get: operations['dayTemplates_dayTemplates']
     put?: never
-    post: operations['create_2']
+    post: operations['dayTemplates_create']
     delete?: never
     options?: never
     head?: never
@@ -333,7 +333,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['setDefault']
+    post: operations['dayTemplates_setDefault']
     delete?: never
     options?: never
     head?: never
@@ -347,9 +347,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['history']
+    get: operations['documents_history']
     put?: never
-    post: operations['addVersion']
+    post: operations['documents_addVersion']
     delete?: never
     options?: never
     head?: never
@@ -363,9 +363,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['search']
+    get: operations['clients_search']
     put?: never
-    post: operations['create_3']
+    post: operations['clients_create']
     delete?: never
     options?: never
     head?: never
@@ -381,7 +381,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['unblock']
+    post: operations['clients_unblock']
     delete?: never
     options?: never
     head?: never
@@ -397,7 +397,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['changePhone']
+    post: operations['clients_changePhone']
     delete?: never
     options?: never
     head?: never
@@ -413,7 +413,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['merge']
+    post: operations['clients_merge']
     delete?: never
     options?: never
     head?: never
@@ -427,9 +427,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['consents']
+    get: operations['clients_consents']
     put?: never
-    post: operations['recordConsent']
+    post: operations['clients_recordConsent']
     delete?: never
     options?: never
     head?: never
@@ -445,7 +445,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['block']
+    post: operations['clients_block']
     delete?: never
     options?: never
     head?: never
@@ -459,9 +459,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['ofPeriod']
+    get: operations['bookings_ofPeriod']
     put?: never
-    post: operations['createByClient']
+    post: operations['bookings_createByClient']
     delete?: never
     options?: never
     head?: never
@@ -477,7 +477,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['reschedule']
+    post: operations['bookings_reschedule']
     delete?: never
     options?: never
     head?: never
@@ -493,7 +493,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['refuseLateArrival']
+    post: operations['bookings_refuseLateArrival']
     delete?: never
     options?: never
     head?: never
@@ -509,7 +509,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['markPrepaymentReceived']
+    post: operations['bookingActions_markPrepaymentReceived']
     delete?: never
     options?: never
     head?: never
@@ -525,7 +525,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['confirmWithoutPrepayment']
+    post: operations['bookingActions_confirmWithoutPrepayment']
     delete?: never
     options?: never
     head?: never
@@ -541,7 +541,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['markNoShow']
+    post: operations['bookingActions_markNoShow']
     delete?: never
     options?: never
     head?: never
@@ -557,8 +557,8 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['proposeEarlierTime']
-    delete: operations['withdrawEarlierTime']
+    post: operations['bookingActions_proposeEarlierTime']
+    delete: operations['bookingActions_withdrawEarlierTime']
     options?: never
     head?: never
     patch?: never
@@ -573,7 +573,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['declineEarlierTime']
+    post: operations['bookingActions_declineEarlierTime']
     delete?: never
     options?: never
     head?: never
@@ -589,7 +589,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['acceptEarlierTime']
+    post: operations['bookingActions_acceptEarlierTime']
     delete?: never
     options?: never
     head?: never
@@ -605,7 +605,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['complete']
+    post: operations['bookingActions_complete']
     delete?: never
     options?: never
     head?: never
@@ -621,7 +621,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['cancel']
+    post: operations['bookings_cancel']
     delete?: never
     options?: never
     head?: never
@@ -637,7 +637,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['createByMaster']
+    post: operations['bookings_createByMaster']
     delete?: never
     options?: never
     head?: never
@@ -653,7 +653,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['start']
+    post: operations['auth_start']
     delete?: never
     options?: never
     head?: never
@@ -667,9 +667,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['registrationPrefill']
+    get: operations['auth_registrationPrefill']
     put?: never
-    post: operations['register']
+    post: operations['auth_register']
     delete?: never
     options?: never
     head?: never
@@ -685,7 +685,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['logout']
+    post: operations['auth_logout']
     delete?: never
     options?: never
     head?: never
@@ -701,7 +701,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['logoutAll']
+    post: operations['auth_logoutAll']
     delete?: never
     options?: never
     head?: never
@@ -717,7 +717,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['confirmLink']
+    post: operations['auth_confirmLink']
     delete?: never
     options?: never
     head?: never
@@ -733,7 +733,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['code']
+    post: operations['fakeLogin_code']
     delete?: never
     options?: never
     head?: never
@@ -747,9 +747,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['roles']
+    get: operations['roles_roles']
     put?: never
-    post: operations['create_4']
+    post: operations['roles_create']
     delete?: never
     options?: never
     head?: never
@@ -765,7 +765,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['assignRole']
+    post: operations['staffAccess_assignRole']
     delete?: never
     options?: never
     head?: never
@@ -779,13 +779,13 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['service']
+    get: operations['services_service']
     put?: never
     post?: never
     delete?: never
     options?: never
     head?: never
-    patch: operations['update_1']
+    patch: operations['services_update']
     trace?: never
   }
   '/api/schedule/week-templates/{id}': {
@@ -798,10 +798,10 @@ export interface paths {
     get?: never
     put?: never
     post?: never
-    delete: operations['delete']
+    delete: operations['weekTemplates_delete']
     options?: never
     head?: never
-    patch: operations['update_2']
+    patch: operations['weekTemplates_update']
     trace?: never
   }
   '/api/schedule/day-templates/{id}': {
@@ -814,10 +814,10 @@ export interface paths {
     get?: never
     put?: never
     post?: never
-    delete: operations['delete_1']
+    delete: operations['dayTemplates_delete']
     options?: never
     head?: never
-    patch: operations['update_3']
+    patch: operations['dayTemplates_update']
     trace?: never
   }
   '/api/clients/{id}': {
@@ -827,13 +827,13 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['details']
+    get: operations['clients_details']
     put?: never
     post?: never
     delete?: never
     options?: never
     head?: never
-    patch: operations['update_4']
+    patch: operations['clients_update']
     trace?: never
   }
   '/api/access/roles/{id}': {
@@ -846,10 +846,10 @@ export interface paths {
     get?: never
     put?: never
     post?: never
-    delete: operations['delete_2']
+    delete: operations['roles_delete']
     options?: never
     head?: never
-    patch: operations['update_5']
+    patch: operations['roles_update']
     trace?: never
   }
   '/api/schedule/settings': {
@@ -859,7 +859,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['settings_1']
+    get: operations['scheduleSettings_settings']
     put?: never
     post?: never
     delete?: never
@@ -875,7 +875,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['history_1']
+    get: operations['scheduleSettings_history']
     put?: never
     post?: never
     delete?: never
@@ -891,7 +891,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['preview']
+    get: operations['rotation_preview']
     put?: never
     post?: never
     delete?: never
@@ -907,7 +907,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['freeSlots']
+    get: operations['slots_freeSlots']
     put?: never
     post?: never
     delete?: never
@@ -923,7 +923,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['priceList']
+    get: operations['priceList_priceList']
     put?: never
     post?: never
     delete?: never
@@ -939,10 +939,10 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['me']
+    get: operations['me_me']
     put?: never
     post?: never
-    delete: operations['delete_3']
+    delete: operations['me_delete']
     options?: never
     head?: never
     patch?: never
@@ -955,7 +955,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['current']
+    get: operations['documents_current']
     put?: never
     post?: never
     delete?: never
@@ -971,7 +971,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['version']
+    get: operations['documents_version']
     put?: never
     post?: never
     delete?: never
@@ -987,7 +987,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['prepaymentHistory']
+    get: operations['clients_prepaymentHistory']
     put?: never
     post?: never
     delete?: never
@@ -1003,7 +1003,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['bookings']
+    get: operations['clients_bookings']
     put?: never
     post?: never
     delete?: never
@@ -1019,7 +1019,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['get']
+    get: operations['bookings_get']
     put?: never
     post?: never
     delete?: never
@@ -1035,7 +1035,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['awaitingPrepayment']
+    get: operations['bookings_awaitingPrepayment']
     put?: never
     post?: never
     delete?: never
@@ -1051,7 +1051,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['awaitingMark']
+    get: operations['bookings_awaitingMark']
     put?: never
     post?: never
     delete?: never
@@ -1067,7 +1067,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['history_2']
+    get: operations['bookingSettings_history']
     put?: never
     post?: never
     delete?: never
@@ -1083,7 +1083,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['callback']
+    get: operations['auth_callback']
     put?: never
     post?: never
     delete?: never
@@ -1099,7 +1099,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['staff']
+    get: operations['staffAccess_staff']
     put?: never
     post?: never
     delete?: never
@@ -1115,7 +1115,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['loginJournal']
+    get: operations['accessJournal_loginJournal']
     put?: never
     post?: never
     delete?: never
@@ -1131,7 +1131,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['accessJournal']
+    get: operations['accessJournal_accessJournal']
     put?: never
     post?: never
     delete?: never
@@ -1147,7 +1147,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['account']
+    get: operations['staffAccess_account']
     put?: never
     post?: never
     delete?: never
@@ -1166,7 +1166,7 @@ export interface paths {
     get?: never
     put?: never
     post?: never
-    delete: operations['deleteSlot']
+    delete: operations['slots_deleteSlot']
     options?: never
     head?: never
     patch?: never
@@ -1182,7 +1182,7 @@ export interface paths {
     get?: never
     put?: never
     post?: never
-    delete: operations['revokeRole']
+    delete: operations['staffAccess_revokeRole']
     options?: never
     head?: never
     patch?: never
@@ -1840,7 +1840,7 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
-  reorder: {
+  services_reorder: {
     parameters: {
       query?: never
       header?: never
@@ -1871,7 +1871,7 @@ export interface operations {
       }
     }
   }
-  setSlotDuration: {
+  scheduleSettings_setSlotDuration: {
     parameters: {
       query?: never
       header?: never
@@ -1904,7 +1904,7 @@ export interface operations {
       }
     }
   }
-  rotation: {
+  rotation_rotation: {
     parameters: {
       query?: never
       header?: never
@@ -1933,7 +1933,7 @@ export interface operations {
       }
     }
   }
-  setRotation: {
+  rotation_setRotation: {
     parameters: {
       query?: never
       header?: never
@@ -1966,7 +1966,7 @@ export interface operations {
       }
     }
   }
-  setPrepaymentRequired: {
+  clients_setPrepaymentRequired: {
     parameters: {
       query?: never
       header?: never
@@ -1999,7 +1999,7 @@ export interface operations {
       }
     }
   }
-  updateMasterNote: {
+  clients_updateMasterNote: {
     parameters: {
       query?: never
       header?: never
@@ -2032,7 +2032,7 @@ export interface operations {
       }
     }
   }
-  changeContactPhone: {
+  clients_changeContactPhone: {
     parameters: {
       query?: never
       header?: never
@@ -2067,7 +2067,7 @@ export interface operations {
       }
     }
   }
-  masterNote: {
+  bookings_masterNote: {
     parameters: {
       query?: never
       header?: never
@@ -2098,7 +2098,7 @@ export interface operations {
       }
     }
   }
-  updateMasterNote_1: {
+  bookings_updateMasterNote: {
     parameters: {
       query?: never
       header?: never
@@ -2131,7 +2131,7 @@ export interface operations {
       }
     }
   }
-  updateComment: {
+  bookings_updateComment: {
     parameters: {
       query?: never
       header?: never
@@ -2166,7 +2166,7 @@ export interface operations {
       }
     }
   }
-  updateActualServices: {
+  bookingActions_updateActualServices: {
     parameters: {
       query?: never
       header?: never
@@ -2201,7 +2201,7 @@ export interface operations {
       }
     }
   }
-  settings: {
+  bookingSettings_settings: {
     parameters: {
       query?: never
       header?: never
@@ -2230,7 +2230,7 @@ export interface operations {
       }
     }
   }
-  update: {
+  bookingSettings_update: {
     parameters: {
       query?: never
       header?: never
@@ -2263,7 +2263,7 @@ export interface operations {
       }
     }
   }
-  setOverride: {
+  staffAccess_setOverride: {
     parameters: {
       query?: never
       header?: never
@@ -2308,7 +2308,7 @@ export interface operations {
       }
     }
   }
-  removeOverride: {
+  staffAccess_removeOverride: {
     parameters: {
       query?: never
       header?: never
@@ -2349,7 +2349,7 @@ export interface operations {
       }
     }
   }
-  services: {
+  services_services: {
     parameters: {
       query?: never
       header?: never
@@ -2378,7 +2378,7 @@ export interface operations {
       }
     }
   }
-  create: {
+  services_create: {
     parameters: {
       query?: never
       header?: never
@@ -2411,7 +2411,7 @@ export interface operations {
       }
     }
   }
-  deactivate: {
+  services_deactivate: {
     parameters: {
       query?: never
       header?: never
@@ -2440,7 +2440,7 @@ export interface operations {
       }
     }
   }
-  activate: {
+  services_activate: {
     parameters: {
       query?: never
       header?: never
@@ -2469,7 +2469,7 @@ export interface operations {
       }
     }
   }
-  weekTemplates: {
+  weekTemplates_weekTemplates: {
     parameters: {
       query?: never
       header?: never
@@ -2498,7 +2498,7 @@ export interface operations {
       }
     }
   }
-  create_1: {
+  weekTemplates_create: {
     parameters: {
       query?: never
       header?: never
@@ -2531,7 +2531,7 @@ export interface operations {
       }
     }
   }
-  slots: {
+  slots_slots: {
     parameters: {
       query: {
         from: string
@@ -2563,7 +2563,7 @@ export interface operations {
       }
     }
   }
-  addSlot: {
+  slots_addSlot: {
     parameters: {
       query?: never
       header?: never
@@ -2596,7 +2596,7 @@ export interface operations {
       }
     }
   }
-  moveSlot: {
+  slots_moveSlot: {
     parameters: {
       query?: never
       header?: never
@@ -2631,7 +2631,7 @@ export interface operations {
       }
     }
   }
-  apply: {
+  rotation_apply: {
     parameters: {
       query?: never
       header?: never
@@ -2664,7 +2664,7 @@ export interface operations {
       }
     }
   }
-  applyDayTemplate: {
+  slots_applyDayTemplate: {
     parameters: {
       query?: never
       header?: never
@@ -2697,7 +2697,7 @@ export interface operations {
       }
     }
   }
-  dayTemplates: {
+  dayTemplates_dayTemplates: {
     parameters: {
       query?: never
       header?: never
@@ -2726,7 +2726,7 @@ export interface operations {
       }
     }
   }
-  create_2: {
+  dayTemplates_create: {
     parameters: {
       query?: never
       header?: never
@@ -2759,7 +2759,7 @@ export interface operations {
       }
     }
   }
-  setDefault: {
+  dayTemplates_setDefault: {
     parameters: {
       query?: never
       header?: never
@@ -2790,7 +2790,7 @@ export interface operations {
       }
     }
   }
-  history: {
+  documents_history: {
     parameters: {
       query?: never
       header?: never
@@ -2821,7 +2821,7 @@ export interface operations {
       }
     }
   }
-  addVersion: {
+  documents_addVersion: {
     parameters: {
       query?: never
       header?: never
@@ -2856,7 +2856,7 @@ export interface operations {
       }
     }
   }
-  search: {
+  clients_search: {
     parameters: {
       query?: {
         query?: string
@@ -2889,7 +2889,7 @@ export interface operations {
       }
     }
   }
-  create_3: {
+  clients_create: {
     parameters: {
       query?: never
       header?: never
@@ -2922,7 +2922,7 @@ export interface operations {
       }
     }
   }
-  unblock: {
+  clients_unblock: {
     parameters: {
       query?: never
       header?: never
@@ -2953,7 +2953,7 @@ export interface operations {
       }
     }
   }
-  changePhone: {
+  clients_changePhone: {
     parameters: {
       query?: never
       header?: never
@@ -2988,7 +2988,7 @@ export interface operations {
       }
     }
   }
-  merge: {
+  clients_merge: {
     parameters: {
       query?: never
       header?: never
@@ -3023,7 +3023,7 @@ export interface operations {
       }
     }
   }
-  consents: {
+  clients_consents: {
     parameters: {
       query?: never
       header?: never
@@ -3054,7 +3054,7 @@ export interface operations {
       }
     }
   }
-  recordConsent: {
+  clients_recordConsent: {
     parameters: {
       query?: never
       header?: never
@@ -3087,7 +3087,7 @@ export interface operations {
       }
     }
   }
-  block: {
+  clients_block: {
     parameters: {
       query?: never
       header?: never
@@ -3122,7 +3122,7 @@ export interface operations {
       }
     }
   }
-  ofPeriod: {
+  bookings_ofPeriod: {
     parameters: {
       query: {
         from: string
@@ -3154,7 +3154,7 @@ export interface operations {
       }
     }
   }
-  createByClient: {
+  bookings_createByClient: {
     parameters: {
       query?: never
       header?: never
@@ -3187,7 +3187,7 @@ export interface operations {
       }
     }
   }
-  reschedule: {
+  bookings_reschedule: {
     parameters: {
       query?: never
       header?: never
@@ -3222,7 +3222,7 @@ export interface operations {
       }
     }
   }
-  refuseLateArrival: {
+  bookings_refuseLateArrival: {
     parameters: {
       query?: never
       header?: never
@@ -3253,7 +3253,7 @@ export interface operations {
       }
     }
   }
-  markPrepaymentReceived: {
+  bookingActions_markPrepaymentReceived: {
     parameters: {
       query?: never
       header?: never
@@ -3284,7 +3284,7 @@ export interface operations {
       }
     }
   }
-  confirmWithoutPrepayment: {
+  bookingActions_confirmWithoutPrepayment: {
     parameters: {
       query?: never
       header?: never
@@ -3315,7 +3315,7 @@ export interface operations {
       }
     }
   }
-  markNoShow: {
+  bookingActions_markNoShow: {
     parameters: {
       query?: never
       header?: never
@@ -3346,7 +3346,7 @@ export interface operations {
       }
     }
   }
-  proposeEarlierTime: {
+  bookingActions_proposeEarlierTime: {
     parameters: {
       query?: never
       header?: never
@@ -3381,7 +3381,7 @@ export interface operations {
       }
     }
   }
-  withdrawEarlierTime: {
+  bookingActions_withdrawEarlierTime: {
     parameters: {
       query?: never
       header?: never
@@ -3412,7 +3412,7 @@ export interface operations {
       }
     }
   }
-  declineEarlierTime: {
+  bookingActions_declineEarlierTime: {
     parameters: {
       query?: never
       header?: never
@@ -3443,7 +3443,7 @@ export interface operations {
       }
     }
   }
-  acceptEarlierTime: {
+  bookingActions_acceptEarlierTime: {
     parameters: {
       query?: never
       header?: never
@@ -3474,7 +3474,7 @@ export interface operations {
       }
     }
   }
-  complete: {
+  bookingActions_complete: {
     parameters: {
       query?: never
       header?: never
@@ -3505,7 +3505,7 @@ export interface operations {
       }
     }
   }
-  cancel: {
+  bookings_cancel: {
     parameters: {
       query?: never
       header?: never
@@ -3536,7 +3536,7 @@ export interface operations {
       }
     }
   }
-  createByMaster: {
+  bookings_createByMaster: {
     parameters: {
       query?: never
       header?: never
@@ -3569,7 +3569,7 @@ export interface operations {
       }
     }
   }
-  start: {
+  auth_start: {
     parameters: {
       query?: never
       header?: never
@@ -3604,7 +3604,7 @@ export interface operations {
       }
     }
   }
-  registrationPrefill: {
+  auth_registrationPrefill: {
     parameters: {
       query?: never
       header?: never
@@ -3633,7 +3633,7 @@ export interface operations {
       }
     }
   }
-  register: {
+  auth_register: {
     parameters: {
       query?: never
       header?: never
@@ -3666,7 +3666,7 @@ export interface operations {
       }
     }
   }
-  logout: {
+  auth_logout: {
     parameters: {
       query?: never
       header?: never
@@ -3693,7 +3693,7 @@ export interface operations {
       }
     }
   }
-  logoutAll: {
+  auth_logoutAll: {
     parameters: {
       query?: never
       header?: never
@@ -3720,7 +3720,7 @@ export interface operations {
       }
     }
   }
-  confirmLink: {
+  auth_confirmLink: {
     parameters: {
       query?: never
       header?: never
@@ -3749,7 +3749,7 @@ export interface operations {
       }
     }
   }
-  code: {
+  fakeLogin_code: {
     parameters: {
       query?: never
       header?: never
@@ -3782,7 +3782,7 @@ export interface operations {
       }
     }
   }
-  roles: {
+  roles_roles: {
     parameters: {
       query?: never
       header?: never
@@ -3811,7 +3811,7 @@ export interface operations {
       }
     }
   }
-  create_4: {
+  roles_create: {
     parameters: {
       query?: never
       header?: never
@@ -3844,7 +3844,7 @@ export interface operations {
       }
     }
   }
-  assignRole: {
+  staffAccess_assignRole: {
     parameters: {
       query?: never
       header?: never
@@ -3879,7 +3879,7 @@ export interface operations {
       }
     }
   }
-  service: {
+  services_service: {
     parameters: {
       query?: never
       header?: never
@@ -3910,7 +3910,7 @@ export interface operations {
       }
     }
   }
-  update_1: {
+  services_update: {
     parameters: {
       query?: never
       header?: never
@@ -3945,7 +3945,7 @@ export interface operations {
       }
     }
   }
-  delete: {
+  weekTemplates_delete: {
     parameters: {
       query?: never
       header?: never
@@ -3974,7 +3974,7 @@ export interface operations {
       }
     }
   }
-  update_2: {
+  weekTemplates_update: {
     parameters: {
       query?: never
       header?: never
@@ -4009,7 +4009,7 @@ export interface operations {
       }
     }
   }
-  delete_1: {
+  dayTemplates_delete: {
     parameters: {
       query?: never
       header?: never
@@ -4038,7 +4038,7 @@ export interface operations {
       }
     }
   }
-  update_3: {
+  dayTemplates_update: {
     parameters: {
       query?: never
       header?: never
@@ -4073,7 +4073,7 @@ export interface operations {
       }
     }
   }
-  details: {
+  clients_details: {
     parameters: {
       query?: never
       header?: never
@@ -4104,7 +4104,7 @@ export interface operations {
       }
     }
   }
-  update_4: {
+  clients_update: {
     parameters: {
       query?: never
       header?: never
@@ -4139,7 +4139,7 @@ export interface operations {
       }
     }
   }
-  delete_2: {
+  roles_delete: {
     parameters: {
       query?: never
       header?: never
@@ -4168,7 +4168,7 @@ export interface operations {
       }
     }
   }
-  update_5: {
+  roles_update: {
     parameters: {
       query?: never
       header?: never
@@ -4203,7 +4203,7 @@ export interface operations {
       }
     }
   }
-  settings_1: {
+  scheduleSettings_settings: {
     parameters: {
       query?: never
       header?: never
@@ -4232,7 +4232,7 @@ export interface operations {
       }
     }
   }
-  history_1: {
+  scheduleSettings_history: {
     parameters: {
       query?: never
       header?: never
@@ -4261,7 +4261,7 @@ export interface operations {
       }
     }
   }
-  preview: {
+  rotation_preview: {
     parameters: {
       query: {
         from: string
@@ -4293,7 +4293,7 @@ export interface operations {
       }
     }
   }
-  freeSlots: {
+  slots_freeSlots: {
     parameters: {
       query: {
         from: string
@@ -4325,7 +4325,7 @@ export interface operations {
       }
     }
   }
-  priceList: {
+  priceList_priceList: {
     parameters: {
       query?: never
       header?: never
@@ -4354,7 +4354,7 @@ export interface operations {
       }
     }
   }
-  me: {
+  me_me: {
     parameters: {
       query?: never
       header?: never
@@ -4383,7 +4383,7 @@ export interface operations {
       }
     }
   }
-  delete_3: {
+  me_delete: {
     parameters: {
       query?: never
       header?: never
@@ -4410,7 +4410,7 @@ export interface operations {
       }
     }
   }
-  current: {
+  documents_current: {
     parameters: {
       query?: never
       header?: never
@@ -4439,7 +4439,7 @@ export interface operations {
       }
     }
   }
-  version: {
+  documents_version: {
     parameters: {
       query?: never
       header?: never
@@ -4471,7 +4471,7 @@ export interface operations {
       }
     }
   }
-  prepaymentHistory: {
+  clients_prepaymentHistory: {
     parameters: {
       query?: never
       header?: never
@@ -4502,7 +4502,7 @@ export interface operations {
       }
     }
   }
-  bookings: {
+  clients_bookings: {
     parameters: {
       query: {
         scope: 'active' | 'history'
@@ -4535,7 +4535,7 @@ export interface operations {
       }
     }
   }
-  get: {
+  bookings_get: {
     parameters: {
       query?: never
       header?: never
@@ -4566,7 +4566,7 @@ export interface operations {
       }
     }
   }
-  awaitingPrepayment: {
+  bookings_awaitingPrepayment: {
     parameters: {
       query?: never
       header?: never
@@ -4595,7 +4595,7 @@ export interface operations {
       }
     }
   }
-  awaitingMark: {
+  bookings_awaitingMark: {
     parameters: {
       query?: never
       header?: never
@@ -4624,7 +4624,7 @@ export interface operations {
       }
     }
   }
-  history_2: {
+  bookingSettings_history: {
     parameters: {
       query?: never
       header?: never
@@ -4653,7 +4653,7 @@ export interface operations {
       }
     }
   }
-  callback: {
+  auth_callback: {
     parameters: {
       query?: {
         code?: string
@@ -4688,7 +4688,7 @@ export interface operations {
       }
     }
   }
-  staff: {
+  staffAccess_staff: {
     parameters: {
       query?: never
       header?: never
@@ -4717,7 +4717,7 @@ export interface operations {
       }
     }
   }
-  loginJournal: {
+  accessJournal_loginJournal: {
     parameters: {
       query?: {
         page?: number
@@ -4749,7 +4749,7 @@ export interface operations {
       }
     }
   }
-  accessJournal: {
+  accessJournal_accessJournal: {
     parameters: {
       query?: {
         page?: number
@@ -4781,7 +4781,7 @@ export interface operations {
       }
     }
   }
-  account: {
+  staffAccess_account: {
     parameters: {
       query?: never
       header?: never
@@ -4812,7 +4812,7 @@ export interface operations {
       }
     }
   }
-  deleteSlot: {
+  slots_deleteSlot: {
     parameters: {
       query?: never
       header?: never
@@ -4841,7 +4841,7 @@ export interface operations {
       }
     }
   }
-  revokeRole: {
+  staffAccess_revokeRole: {
     parameters: {
       query?: never
       header?: never
