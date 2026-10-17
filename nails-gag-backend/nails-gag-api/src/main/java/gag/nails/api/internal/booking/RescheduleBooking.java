@@ -6,6 +6,7 @@ import java.util.UUID;
 /**
  * Тело {@code POST /api/bookings/{id}/reschedule}: перенос записи.
  *
- * @param slotId новый свободный слот, не совпадающий с текущим
+ * @param newSlotId новый свободный слот; совпадающий с текущим — {@code 400 common.validation} с полем
+ *     {@code newSlotId}
  */
-record RescheduleBooking(@NotNull UUID slotId) {}
+record RescheduleBooking(@NotNull UUID newSlotId) {}

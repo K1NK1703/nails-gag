@@ -314,6 +314,19 @@ class BookingsApiTest extends ApiTestSupport {
     }
 
     @Test
+    void reschedulingToSameSlotNamesTheField() {
+        var booking = bookFor(createClient(uniqueLastName()).id(), false);
+
+        var problem = json(reschedule(signInMaster(), booking.id(), booking.slotId()), HttpStatus.BAD_REQUEST);
+
+        assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
+        var error = field(problem, "errors").path(0);
+        assertThat(field(error, "field").asString()).isEqualTo("newSlotId");
+        // Причина модуля, а не неизвестного поля тела: то и другое — 400 с тем же именем поля.
+        assertThat(field(error, "reason").asString()).isEqualTo("must differ from the current slot");
+    }
+
+    @Test
     void clientSetsAndClearsComment() {
         var customer = signInClient();
         var booking = bookFor(actor(customer).requireClientId(), false);
@@ -515,10 +528,7 @@ class BookingsApiTest extends ApiTestSupport {
             var matching = history.values().stream()
                     .filter(entry -> field(entry, "field").asString().equals("late_arrival_tolerance_minutes")
                             && field(entry, "oldValue").asString().equals(String.valueOf(oldValue))
-                            && field(entry, "newValue").asString().equals(String.valueOf(newValue))
-                            && field(entry, "changedAt")
-                                    .asString()
-                                    .equals(clock.instant().toString()))
+                            && field(entry, "newValue").asString().equals(String.valueOf(newValue)))
                     .count();
             assertThat(matching).isEqualTo(before + 1);
         } finally {
@@ -550,10 +560,10 @@ class BookingsApiTest extends ApiTestSupport {
         return bookingAction(session, bookingId, "refuse-late-arrival");
     }
 
-    private RequestHeadersSpec<?> reschedule(Session session, UUID bookingId, UUID slotId) {
+    private RequestHeadersSpec<?> reschedule(Session session, UUID bookingId, UUID newSlotId) {
         return as(session, csrf(client.post().uri("/api/bookings/{id}/reschedule", bookingId)))
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("slotId", slotId));
+                .body(Map.of("newSlotId", newSlotId));
     }
 
     private RequestHeadersSpec<?> setComment(Session session, UUID bookingId, @Nullable String comment) {

@@ -117,7 +117,7 @@ class BookingsController {
      */
     @PostMapping("/{id}/reschedule")
     BookingView reschedule(@PathVariable UUID id, @Valid @RequestBody RescheduleBooking body, Actor actor) {
-        return bookings.reschedule(id, body.slotId(), actor);
+        return bookings.reschedule(id, body.newSlotId(), actor);
     }
 
     /**
