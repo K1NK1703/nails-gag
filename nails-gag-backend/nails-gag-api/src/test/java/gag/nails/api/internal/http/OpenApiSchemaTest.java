@@ -10,9 +10,10 @@ import gag.nails.identity.model.Provider;
 import io.swagger.v3.oas.models.PathItem;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -43,6 +44,9 @@ import tools.jackson.databind.json.JsonMapper;
 class OpenApiSchemaTest extends ApiTestSupport {
 
     private static final String PROBLEM_REF = "#/components/schemas/Problem";
+
+    /** {@code operationId}: {@code <контроллер>_<метод>}, обе части — camelCase с маленькой буквы. */
+    private static final Pattern OPERATION_ID = Pattern.compile("[a-z][A-Za-z]*_[a-z][A-Za-z0-9]*");
 
     /** Переменная пути с регулярным выражением ({@code {provider:yandex|vk|fake}}): в схеме — только имя. */
     private static final Pattern PATH_VARIABLE_REGEX = Pattern.compile("\\{([^}:]+):[^}]*}");
@@ -187,31 +191,38 @@ class OpenApiSchemaTest extends ApiTestSupport {
     }
 
     /**
-     * Схема полная: в ней каждый адрес {@code /api/**} контроллеров приложения с его методом и ничего сверх них — фронт
-     * не останется без типа для адреса. Тестовые адреса ({@code /api/test/**}) и {@code /error} в счёт не идут, адреса
-     * springdoc ({@code /api/openapi.json}) — тоже: их контроллеры не из приложения.
+     * Схема полная: в ней каждый адрес контроллеров приложения ({@link #controllerOperations()}) с его методом и ничего
+     * сверх них — фронт не останется без типа для адреса.
      */
     @Test
     void everyApiControllerIsInSchema() {
-        var mapped = new HashSet<String>();
-        handlerMapping.getHandlerMethods().forEach((info, method) -> {
-            if (!method.getBeanType().getPackageName().startsWith("gag.nails.")) {
-                return;
-            }
-            for (var pattern : info.getPatternValues()) {
-                if (pattern.startsWith("/api/") && !pattern.startsWith("/api/test/")) {
-                    var path = PATH_VARIABLE_REGEX.matcher(pattern).replaceAll("{$1}");
-                    info.getMethodsCondition()
-                            .getMethods()
-                            .forEach(httpMethod -> mapped.add(httpMethod.name().toLowerCase(Locale.ROOT) + " " + path));
-                }
-            }
-        });
+        var mapped = controllerOperations().keySet();
 
         var documented = operations(openApi()).stream().map(Operation::name).toList();
 
         assertThat(mapped).hasSizeGreaterThan(80);
         assertThat(documented).doesNotHaveDuplicates().containsExactlyInAnyOrderElementsOf(mapped);
+    }
+
+    /**
+     * {@code operationId} — {@code <контроллер>_<метод>}: имя класса контроллера без {@code Controller} с маленькой
+     * буквы и имя метода Java ({@code ServicesController.create} → {@code services_create}). Имя не зависит от порядка
+     * обхода контроллеров, как суффиксы {@code create_1} у springdoc, и по нему тип операции фронта находится в коде.
+     */
+    @Test
+    void operationIdsAreControllerAndMethod() {
+        var ids = new HashMap<String, String>();
+        for (var operation : operations(openApi())) {
+            ids.put(operation.name(), operation.node().path("operationId").asString());
+        }
+
+        assertThat(ids.values())
+                .doesNotHaveDuplicates()
+                .allMatch(id -> OPERATION_ID.matcher(id).matches());
+        assertThat(ids).containsExactlyInAnyOrderEntriesOf(controllerOperations());
+        assertThat(ids)
+                .containsEntry("post /api/services", "services_create")
+                .containsEntry("put /api/access/accounts/{id}/overrides/{section}", "staffAccess_setOverride");
     }
 
     /** Раздел админки в пути — через дефис, как его принимает адрес: {@code …/overrides/booking-settings}. */
@@ -252,6 +263,33 @@ class OpenApiSchemaTest extends ApiTestSupport {
             }
         }
         assertThat(withBody).isGreaterThan(operations.size() / 2);
+    }
+
+    /**
+     * Адреса {@code /api/**} контроллеров приложения: «метод адрес» в виде ключа схемы → ожидаемый {@code operationId}.
+     * Тестовые адреса ({@code /api/test/**}) и {@code /error} в счёт не идут, адреса springdoc
+     * ({@code /api/openapi.json}) — тоже: их контроллеры не из приложения.
+     */
+    private Map<String, String> controllerOperations() {
+        var mapped = new HashMap<String, String>();
+        handlerMapping.getHandlerMethods().forEach((info, method) -> {
+            if (!method.getBeanType().getPackageName().startsWith("gag.nails.")) {
+                return;
+            }
+            var controller = method.getBeanType().getSimpleName().replaceFirst("Controller$", "");
+            var operationId = Character.toLowerCase(controller.charAt(0)) + controller.substring(1) + "_"
+                    + method.getMethod().getName();
+            for (var pattern : info.getPatternValues()) {
+                if (pattern.startsWith("/api/") && !pattern.startsWith("/api/test/")) {
+                    var path = PATH_VARIABLE_REGEX.matcher(pattern).replaceAll("{$1}");
+                    info.getMethodsCondition()
+                            .getMethods()
+                            .forEach(httpMethod ->
+                                    mapped.put(httpMethod.name().toLowerCase(Locale.ROOT) + " " + path, operationId));
+                }
+            }
+        });
+        return mapped;
     }
 
     /** Операция схемы: {@code name} — метод и адрес для сообщений проверок. */

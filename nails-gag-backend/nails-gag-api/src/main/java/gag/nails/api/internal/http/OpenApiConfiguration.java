@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springdoc.core.customizers.OperationCustomizer;
 import org.springdoc.core.customizers.ParameterCustomizer;
 import org.springdoc.core.utils.SpringDocUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -27,6 +28,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
 import org.springframework.http.HttpHeaders;
+import org.springframework.web.method.HandlerMethod;
 
 /**
  * Схема OpenAPI для локального запуска (спецификация API, §5.5): springdoc подключён в {@code app} только для
@@ -77,6 +79,18 @@ class OpenApiConfiguration {
         };
     }
 
+    /**
+     * {@code operationId} — {@code <контроллер>_<метод>}: имя класса контроллера без {@code Controller} с маленькой
+     * буквы и имя метода Java ({@code ServicesController.create} → {@code services_create},
+     * {@code StaffAccessController.setOverride} → {@code staffAccess_setOverride}). Своё имя springdoc берёт из имени
+     * метода и одинаковым добавляет суффиксы ({@code create_1}) в порядке обхода контроллеров — тип операции у фронта
+     * менял бы имя от добавления соседнего адреса. Уникальность проверяет {@code OpenApiSchemaTest}.
+     */
+    @Bean
+    OperationCustomizer apiOperationIdCustomizer() {
+        return (operation, handlerMethod) -> operation.operationId(operationId(handlerMethod));
+    }
+
     /** springdoc регистрирует бины {@link ModelConverter} в общем {@link ModelConverters} схемы 3.1. */
     @Bean
     ModelConverter nullableRecordComponents() {
@@ -97,6 +111,14 @@ class OpenApiConfiguration {
                 replaceCallbackResponses(openApi.getPaths());
             }
         };
+    }
+
+    private static String operationId(HandlerMethod handlerMethod) {
+        var controller = handlerMethod.getBeanType().getSimpleName().replaceFirst("Controller$", "");
+        return Character.toLowerCase(controller.charAt(0))
+                + controller.substring(1)
+                + "_"
+                + handlerMethod.getMethod().getName();
     }
 
     private static boolean optionalActor(MethodParameter parameter) {
