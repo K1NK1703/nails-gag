@@ -174,6 +174,26 @@ class AccessApiTest extends ApiTestSupport {
                 .isEmpty();
     }
 
+    /** Раздел в пути — только через дефис: имя константы Java и другой регистр — неверное значение, ничего не меняется. */
+    @Test
+    void sectionInJavaCaseIsBadRequest() {
+        var developer = signInDeveloper();
+        var customer = signInClient();
+
+        for (var section : List.of("BOOKING_SETTINGS", "Booking-Settings", "booking_settings", " booking-settings")) {
+            var problem = json(
+                    setOverride(developer, customer.accountId(), section, Map.of("level", "READ")),
+                    HttpStatus.BAD_REQUEST);
+
+            assertThat(field(problem, "code").asString()).as(section).isEqualTo("common.validation");
+            assertThat(field(field(problem, "errors").path(0), "field").asString())
+                    .as(section)
+                    .isEqualTo("section");
+        }
+        assertThat(access.account(customer.accountId(), developerActor()).overrides())
+                .isEmpty();
+    }
+
     /**
      * Журналы общие для всей базы: страница сверяется с той же страницей модуля, прочитанной сразу перед запросом, —
      * чтение журнала само строк не добавляет. Порядок модуля однозначен (время, затем идентификатор).

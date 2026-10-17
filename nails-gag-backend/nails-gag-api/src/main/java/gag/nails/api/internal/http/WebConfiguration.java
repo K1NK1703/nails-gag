@@ -5,6 +5,7 @@ import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.identity.model.Provider;
+import java.beans.PropertyEditorSupport;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -14,6 +15,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.format.FormatterRegistry;
+import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -43,9 +45,27 @@ class WebConfiguration implements WebMvcConfigurer {
         resolvers.add(new ClientInfoResolver());
     }
 
+    /**
+     * Те же правила в службе преобразований — для её прямых вызовов; аргументы контроллеров разбирают редакторы
+     * ({@link #registerKebabCaseEditors}).
+     */
     @Override
     public void addFormatters(FormatterRegistry registry) {
         KEBAB_CASE_ENUMS.forEach(kebabCaseEnum -> kebabCaseEnum.register(registry));
+    }
+
+    /**
+     * Перечисления из {@link #KEBAB_CASE_ENUMS} для аргументов контроллеров ({@code @PathVariable},
+     * {@code @RequestParam}): редактор на каждый тип, неверное значение — {@link ValidationException} с именем
+     * параметра. Конвертеров из {@link #addFormatters} для этого мало: их отказ Spring проглатывает и пробует
+     * {@code Enum.valueOf}, так что имя константы Java ({@code BOOKING_SETTINGS}) прошло бы. С редактором службу
+     * преобразований Spring не вызывает и обходного пути нет.
+     *
+     * @param binder привязка одного аргумента; её {@code objectName} — имя параметра
+     */
+    static void registerKebabCaseEditors(WebDataBinder binder) {
+        var parameter = binder.getObjectName();
+        KEBAB_CASE_ENUMS.forEach(kebabCaseEnum -> kebabCaseEnum.registerEditor(binder, parameter));
     }
 
     /** Имя константы в адресе: {@code BOOKING_SETTINGS} → {@code booking-settings}. */
@@ -55,9 +75,9 @@ class WebConfiguration implements WebMvcConfigurer {
 
     /**
      * {@code yandex} → {@code Provider.YANDEX}, {@code booking-settings} → {@code Section.BOOKING_SETTINGS}.
-     * Принимается только такое написание: имя константы Java ({@code BOOKING_SETTINGS}) и прочие строки — неверное
-     * значение параметра, {@code 400 common.validation} с его именем. У провайдера и документа шаблон адреса пропускает
-     * лишь известные имена, поэтому другое имя до конвертера не доходит, а даёт {@code 404}.
+     * Принимается только такое написание: имя константы Java ({@code BOOKING_SETTINGS}), другой регистр, пробелы и
+     * прочие строки — неверное значение параметра, {@code 400 common.validation} с его именем. У провайдера и документа
+     * шаблон адреса пропускает лишь известные имена, поэтому другое имя до разбора не доходит, а даёт {@code 404}.
      */
     private record KebabCaseEnum<E extends Enum<E>>(Class<E> type, Map<String, E> constants) {
 
@@ -68,15 +88,26 @@ class WebConfiguration implements WebMvcConfigurer {
         }
 
         void register(FormatterRegistry registry) {
-            registry.addConverter(String.class, type, this::parse);
+            registry.addConverter(String.class, type, source -> parse(source, type.getSimpleName()));
         }
 
-        private E parse(String source) {
+        /**
+         * Исключение редактора Spring не оборачивает: {@link ValidationException} доходит до {@code ProblemHandler} как
+         * есть, поэтому поле в нём — имя параметра.
+         */
+        void registerEditor(WebDataBinder binder, String parameter) {
+            binder.registerCustomEditor(type, new PropertyEditorSupport() {
+                @Override
+                public void setAsText(String text) {
+                    setValue(parse(text, parameter));
+                }
+            });
+        }
+
+        private E parse(String source, String field) {
             var constant = constants.get(source);
             if (constant == null) {
-                // Аргументы исключения в ответ не попадают: Spring оборачивает отказ конвертера в
-                // MethodArgumentTypeMismatchException, и ProblemHandler берёт поле из имени параметра.
-                throw new ValidationException(type.getSimpleName(), "unknown value");
+                throw new ValidationException(field, "unknown value");
             }
             return constant;
         }

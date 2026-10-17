@@ -374,6 +374,25 @@ class ClientsApiTest extends ApiTestSupport {
         assertThat(bookingIds(master, target.id(), "history")).containsExactly(booking.id());
     }
 
+    /** Область записей — через дефис, как в схеме: имя константы Java ({@code ACTIVE}) — неверное значение. */
+    @Test
+    void scopeInJavaCaseIsBadRequest() {
+        var target = createClient(uniqueLastName());
+
+        for (var scope : List.of("ACTIVE", "History", "")) {
+            var problem = json(
+                    as(
+                            signInMaster(),
+                            client.get().uri("/api/clients/{id}/bookings?scope={scope}", target.id(), scope)),
+                    HttpStatus.BAD_REQUEST);
+
+            assertThat(field(problem, "code").asString()).as(scope).isEqualTo("common.validation");
+            assertThat(field(field(problem, "errors").path(0), "field").asString())
+                    .as(scope)
+                    .isEqualTo("scope");
+        }
+    }
+
     @Test
     void takenPhoneConflicts() {
         var taken = createClient(uniqueLastName());
