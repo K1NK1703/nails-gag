@@ -33,6 +33,8 @@ import tools.jackson.databind.JsonNode;
  * Расписание (спецификация API, §7.5): свободные слоты и настройки — любому вошедшему, слоты, шаблоны, ротация и
  * журнал настроек — по разделу «Расписание», его проверяет модуль. Ротация и длительность слота в базе одни на всех:
  * тесты, которые их меняют, не оставляют длительность изменённой, а слоты кладут на свои дни ({@link #freshDay()}).
+ * Ротация и шаблон дня по умолчанию тоже общие для всех тестов закэшированного контекста, и тесты оставляют их
+ * изменёнными: ни один тест не опирается на их начальное состояние.
  */
 @ApiTest
 class ScheduleApiTest extends ApiTestSupport {
@@ -97,7 +99,10 @@ class ScheduleApiTest extends ApiTestSupport {
                 201);
         var slotId = UUID.fromString(created.path("id").asString());
         assertThat(created.path("day").asString()).isEqualTo(day.toString());
-        assertThat(created.path("occupied").asBoolean()).isFalse();
+        assertThat(created.get("occupied").isBoolean()).isTrue();
+        assertThat(created.get("occupied").asBoolean()).isFalse();
+        assertThat(created.has("bookingId")).isTrue();
+        assertThat(created.get("bookingId").isNull()).isTrue();
 
         var moved = json(as(master, csrf(client.post().uri("/api/schedule/slots/{id}/move", slotId)))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -224,7 +229,7 @@ class ScheduleApiTest extends ApiTestSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(new UpdateWeekTemplate(newName, Map.of(DayOfWeek.FRIDAY, dayTemplate.id()))));
         assertThat(updated.path("name").asString()).isEqualTo(newName);
-        assertThat(updated.path("days").has("MONDAY")).isFalse();
+        assertThat(updated.get("days").size()).isEqualTo(1);
         assertThat(updated.path("days").path("FRIDAY").asString())
                 .isEqualTo(dayTemplate.id().toString());
 
