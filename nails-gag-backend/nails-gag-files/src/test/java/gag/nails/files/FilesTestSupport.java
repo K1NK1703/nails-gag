@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -69,13 +70,14 @@ abstract class FilesTestSupport {
     @AfterEach
     void removeStoredFiles() throws IOException {
         jdbc.sql("delete from files.stored_file").update();
-        try (var paths = Files.walk(ROOT)) {
-            for (var path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                if (!path.equals(ROOT)) {
-                    Files.delete(path);
-                }
-            }
-        }
+        deleteContents(ROOT);
+    }
+
+    /** Временный корень удаляется после класса; следующий класс прогона создаст его заново первой же загрузкой. */
+    @AfterAll
+    static void removeRoot() throws IOException {
+        deleteContents(ROOT);
+        Files.deleteIfExists(ROOT);
     }
 
     StoredFileView store(byte[] content, FilePurpose purpose) {
@@ -89,6 +91,9 @@ abstract class FilesTestSupport {
 
     /** Все обычные файлы под корнем хранилища, включая временные. */
     static List<Path> filesOnDisk() {
+        if (!Files.exists(ROOT)) {
+            return List.of();
+        }
         try (var paths = Files.walk(ROOT)) {
             return paths.filter(Files::isRegularFile).toList();
         } catch (IOException e) {
@@ -105,6 +110,19 @@ abstract class FilesTestSupport {
     void assertNothingStored() {
         assertThat(filesOnDisk()).isEmpty();
         assertThat(rows()).isZero();
+    }
+
+    private static void deleteContents(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return;
+        }
+        try (var paths = Files.walk(root)) {
+            for (var path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                if (!path.equals(root)) {
+                    Files.delete(path);
+                }
+            }
+        }
     }
 
     private static Path temporaryRoot() {

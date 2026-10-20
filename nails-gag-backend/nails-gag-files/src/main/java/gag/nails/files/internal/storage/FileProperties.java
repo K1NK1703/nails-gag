@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.nio.file.Path;
 import java.time.Duration;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
@@ -16,7 +17,7 @@ import org.springframework.validation.annotation.Validated;
  * @param maxFileBytes наибольший размер загружаемого файла
  * @param maxPixels наибольшее число пикселей картинки по заголовку
  * @param maxConcurrentProcessing сколько картинок обрабатывается одновременно; обработка съедает память и процессор
- * @param processingWait сколько загрузка ждёт места обработки, прежде чем ответить «занято»
+ * @param processingWait сколько загрузка ждёт места обработки, прежде чем ответить «занято»; ноль — не ждёт
  * @param jobs ночная уборка; в тестах выключена
  */
 @Validated
@@ -26,7 +27,10 @@ record FileProperties(
         @DefaultValue("15728640") @Positive long maxFileBytes,
         @DefaultValue("50000000") @Positive long maxPixels,
         @DefaultValue("2") @Positive int maxConcurrentProcessing,
-        @DefaultValue("10s") @NotNull Duration processingWait,
+
+        @DefaultValue("10s") @NotNull @DurationMin(nanos = 0)
+        Duration processingWait,
+
         @DefaultValue Jobs jobs) {
 
     /**

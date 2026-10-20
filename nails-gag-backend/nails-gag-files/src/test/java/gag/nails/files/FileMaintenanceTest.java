@@ -124,7 +124,11 @@ class FileMaintenanceTest extends FilesTestSupport {
         return directory;
     }
 
-    /** Время изменения — по часам приложения, как его сравнивает уборка. */
+    /**
+     * Время изменения — по часам приложения, как его сравнивает уборка. Часы тестов стоят на {@code START} (1 октября
+     * 2026), а реальные часы позже: каталог, созданный тестом без этой правки, для уборки всегда «свежий». Проверки
+     * «свежего» на это и опираются, поэтому возраст им тоже задаётся явно.
+     */
     private void setAge(Path path, Duration age) throws IOException {
         Files.setLastModifiedTime(path, FileTime.from(clock.instant().minus(age)));
     }
