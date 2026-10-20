@@ -37,6 +37,12 @@ public final class TestImages {
     /** То же внутри расширенного формата: {@code VP8X}, затем {@code VP8L} и {@code EXIF}. */
     public static final String WEBP_LOSSLESS_20MP_EXTENDED = "images/lossless-20mp-extended.webp";
 
+    /**
+     * Однотонный полупрозрачный WebP с потерями 5000×4000 (20 Мп): {@code VP8X}, {@code ALPH}, {@code VP8 }. Альфу
+     * декодер распаковывает целиком.
+     */
+    public static final String WEBP_LOSSY_ALPHA_20MP = "images/lossy-alpha-20mp.webp";
+
     /** Маркер JPEG APP1: в нём EXIF. */
     public static final int APP1 = 0xE1;
 

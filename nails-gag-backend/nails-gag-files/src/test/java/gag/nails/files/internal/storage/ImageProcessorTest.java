@@ -7,6 +7,7 @@ import static gag.nails.files.TestImages.WEBP_EXIF_ORIENTATION_6;
 import static gag.nails.files.TestImages.WEBP_LOSSLESS;
 import static gag.nails.files.TestImages.WEBP_LOSSLESS_20MP;
 import static gag.nails.files.TestImages.WEBP_LOSSLESS_20MP_EXTENDED;
+import static gag.nails.files.TestImages.WEBP_LOSSY_ALPHA_20MP;
 import static gag.nails.files.TestImages.containsAscii;
 import static gag.nails.files.TestImages.decode;
 import static gag.nails.files.TestImages.grayPng;
@@ -267,6 +268,17 @@ class ImageProcessorTest {
                             TooLargeImageException.class,
                             e -> assertThat(e.params()).containsEntry("maxPixels", 16_000_000L));
         }
+    }
+
+    @Test
+    void lossyWebpWithAlphaIsLimitedToSixteenMegapixels() throws IOException {
+        // Прозрачность (ALPH) декодер распаковывает на полный размер, без прореживания.
+        var source = write("alpha.webp", resource(WEBP_LOSSY_ALPHA_20MP));
+
+        assertThatThrownBy(() -> processor.process(source, FilePurpose.REFERENCE))
+                .isInstanceOfSatisfying(
+                        TooLargeImageException.class,
+                        e -> assertThat(e.params()).containsEntry("maxPixels", 16_000_000L));
     }
 
     @Test

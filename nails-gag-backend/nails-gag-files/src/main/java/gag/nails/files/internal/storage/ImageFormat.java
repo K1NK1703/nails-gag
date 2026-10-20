@@ -19,8 +19,8 @@ enum ImageFormat {
     PNG("png"),
 
     /**
-     * {@code RIFF}, четыре байта длины, {@code WEBP}. Без потерь ({@code VP8L}) — не больше 16 Мп ({@link
-     * WebpImageData}). Однотонный WebP без потерь со сжатием сильнее 2048:1 TwelveMonkeys не распаковывает (защита от
+     * {@code RIFF}, четыре байта длины, {@code WEBP}. Без потерь ({@code VP8L}) или с прозрачностью ({@code ALPH}) —
+     * не больше 16 Мп: такие декодер распаковывает на полный размер ({@link WebpDecoding}). Однотонный WebP без потерь со сжатием сильнее 2048:1 TwelveMonkeys не распаковывает (защита от
      * «бомб»), такой файл — {@code files.unsupported_format}.
      */
     WEBP("webp");
