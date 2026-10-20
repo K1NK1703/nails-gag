@@ -14,6 +14,9 @@ nails-gag:
   files:
     # Общий каталог тестов всех модулей; тесты модуля files задают свой временный, потому что смотрят, что на диске.
     root: ${java.io.tmpdir}/nails-gag-files-test
+    jobs:
+      # Уборка хранилища в тестах не работает: тесты вызывают FileMaintenance сами.
+      enabled: false
   identity:
     jobs:
       # Обслуживание входа в тестах не работает: тесты вызывают IdentityMaintenance сами.

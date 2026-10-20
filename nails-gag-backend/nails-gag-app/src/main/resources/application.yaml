@@ -24,6 +24,10 @@ nails-gag:
     max-concurrent-processing: 2
     # Сколько загрузка ждёт места обработки, прежде чем ответить 503 files.busy.
     processing-wait: 10s
+    jobs:
+      enabled: true
+      # Ночная уборка по времени салона: «сироты» старше суток и каталоги на диске без строки в базе.
+      cleanup-cron: "0 30 3 * * *"
   identity:
     # Пары provider:subject, которым при входе выдаётся роль «Разработчик»: ["YANDEX:1234567", "VK:7654321"]
     bootstrap-developers: []

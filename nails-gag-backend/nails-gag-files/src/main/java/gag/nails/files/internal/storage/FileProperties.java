@@ -17,6 +17,7 @@ import org.springframework.validation.annotation.Validated;
  * @param maxPixels наибольшее число пикселей картинки по заголовку
  * @param maxConcurrentProcessing сколько картинок обрабатывается одновременно; обработка съедает память и процессор
  * @param processingWait сколько загрузка ждёт места обработки, прежде чем ответить «занято»
+ * @param jobs ночная уборка; в тестах выключена
  */
 @Validated
 @ConfigurationProperties("nails-gag.files")
@@ -25,4 +26,17 @@ record FileProperties(
         @DefaultValue("15728640") @Positive long maxFileBytes,
         @DefaultValue("50000000") @Positive long maxPixels,
         @DefaultValue("2") @Positive int maxConcurrentProcessing,
-        @DefaultValue("10s") @NotNull Duration processingWait) {}
+        @DefaultValue("10s") @NotNull Duration processingWait,
+        @DefaultValue Jobs jobs) {
+
+    /**
+     * Читаются аннотациями {@link FileJobs} ({@code @ConditionalOnProperty}, {@code @Scheduled}); поля здесь — чтобы
+     * все настройки модуля были описаны в одном месте.
+     *
+     * @param enabled включена ли уборка
+     * @param cleanupCron когда она идёт, по времени салона ({@code nails-gag.time-zone})
+     */
+    record Jobs(
+            @DefaultValue("true") boolean enabled,
+            @DefaultValue(FileJobs.DEFAULT_CLEANUP_CRON) String cleanupCron) {}
+}
