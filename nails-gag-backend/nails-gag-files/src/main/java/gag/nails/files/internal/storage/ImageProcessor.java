@@ -40,6 +40,12 @@ final class ImageProcessor {
      */
     static final long MAX_DECODED_PIXELS = 16_000_000;
 
+    /**
+     * Предел пикселей WebP без потерь: его декодер распаковывает целиком, без прореживания, поэтому предел — тот же
+     * бюджет памяти, что и у прореженной картинки (спецификация 3.2, п. 2).
+     */
+    static final long MAX_LOSSLESS_WEBP_PIXELS = MAX_DECODED_PIXELS;
+
     private static final Logger log = LoggerFactory.getLogger(ImageProcessor.class);
 
     static {
@@ -59,17 +65,23 @@ final class ImageProcessor {
     /**
      * Обрабатывает картинку из файла.
      *
-     * @throws UnsupportedFormatException содержимое не JPEG, PNG или WebP, либо картинка не читается
-     * @throws TooLargeImageException по заголовку в картинке больше {@code maxPixels} пикселей
+     * @throws UnsupportedFormatException содержимое не JPEG, PNG или WebP, в нём нет данных картинки, либо картинка не
+     *     читается
+     * @throws TooLargeImageException по заголовку в картинке больше {@code maxPixels} пикселей (у WebP без потерь —
+     *     больше {@link #MAX_LOSSLESS_WEBP_PIXELS})
      */
     ProcessedImage process(Path source, FilePurpose purpose) {
         var format = ImageFormat.detect(source).orElseThrow(UnsupportedFormatException::new);
+        var pixelLimit = maxPixels;
+        if (format == ImageFormat.WEBP && WebpImageData.of(source) == WebpImageData.LOSSLESS) {
+            pixelLimit = Math.min(maxPixels, MAX_LOSSLESS_WEBP_PIXELS);
+        }
         var reader = format.newReader();
         try (var input = new FileImageInputStream(source.toFile())) {
             reader.setInput(input, true, true);
             var stored = storedSize(reader);
-            if ((long) stored.width() * stored.height() > maxPixels) {
-                throw new TooLargeImageException(maxPixels);
+            if ((long) stored.width() * stored.height() > pixelLimit) {
+                throw new TooLargeImageException(pixelLimit);
             }
             var orientation = Orientation.read(source, format);
             var upright = orientation.swapsAxes() ? stored.transposed() : stored;

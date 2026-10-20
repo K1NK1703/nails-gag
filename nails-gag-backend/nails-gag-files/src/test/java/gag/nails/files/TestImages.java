@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,6 +27,15 @@ public final class TestImages {
 
     /** WebP с потерями 300×200 с EXIF-ориентацией 6 (блок {@code EXIF} внутри {@code VP8X}). */
     public static final String WEBP_EXIF_ORIENTATION_6 = "images/exif-orientation-6.webp";
+
+    /** WebP без потерь ({@code VP8L}) 64×48. */
+    public static final String WEBP_LOSSLESS = "images/gradient-lossless.webp";
+
+    /** Однотонный WebP без потерь 5000×4000 (20 Мп) — меньше килобайта. */
+    public static final String WEBP_LOSSLESS_20MP = "images/lossless-20mp.webp";
+
+    /** То же внутри расширенного формата: {@code VP8X}, затем {@code VP8L} и {@code EXIF}. */
+    public static final String WEBP_LOSSLESS_20MP_EXTENDED = "images/lossless-20mp-extended.webp";
 
     /** Маркер JPEG APP1: в нём EXIF. */
     public static final int APP1 = 0xE1;
@@ -108,6 +118,19 @@ public final class TestImages {
         writeChunk(out, "IHDR", header);
         writeChunk(out, "IEND", new byte[0]);
         return out.toByteArray();
+    }
+
+    /** WebP из одного заголовка {@code VP8X} (холст 64×48) без блока данных картинки. */
+    public static byte[] webpWithoutImageData() {
+        var vp8x = ByteBuffer.allocate(10).order(ByteOrder.LITTLE_ENDIAN);
+        vp8x.putInt(0); // флаги и резерв
+        vp8x.put((byte) 63).put((byte) 0).put((byte) 0); // ширина − 1, 24 бита
+        vp8x.put((byte) 47).put((byte) 0).put((byte) 0); // высота − 1
+        var riff = ByteBuffer.allocate(12 + 8 + 10).order(ByteOrder.LITTLE_ENDIAN);
+        riff.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(4 + 8 + 10);
+        riff.put("WEBP".getBytes(StandardCharsets.US_ASCII));
+        riff.put("VP8X".getBytes(StandardCharsets.US_ASCII)).putInt(10).put(vp8x.array());
+        return riff.array();
     }
 
     /** PNG с EXIF в блоке {@code eXIf}: в EXIF только тег Orientation. */

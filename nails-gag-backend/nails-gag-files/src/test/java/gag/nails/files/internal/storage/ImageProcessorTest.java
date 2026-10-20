@@ -4,6 +4,9 @@ import static gag.nails.files.TestImages.APP1;
 import static gag.nails.files.TestImages.EXIF_ORIENTATION_6;
 import static gag.nails.files.TestImages.WEBP;
 import static gag.nails.files.TestImages.WEBP_EXIF_ORIENTATION_6;
+import static gag.nails.files.TestImages.WEBP_LOSSLESS;
+import static gag.nails.files.TestImages.WEBP_LOSSLESS_20MP;
+import static gag.nails.files.TestImages.WEBP_LOSSLESS_20MP_EXTENDED;
 import static gag.nails.files.TestImages.containsAscii;
 import static gag.nails.files.TestImages.decode;
 import static gag.nails.files.TestImages.grayPng;
@@ -14,6 +17,7 @@ import static gag.nails.files.TestImages.pngWithCompressedText;
 import static gag.nails.files.TestImages.pngWithExifOrientation;
 import static gag.nails.files.TestImages.resource;
 import static gag.nails.files.TestImages.transparentPng;
+import static gag.nails.files.TestImages.webpWithoutImageData;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -249,6 +253,39 @@ class ImageProcessorTest {
         var bottom = new Color(image.getRGB(100, 280));
         assertThat(top.getRed()).isGreaterThan(180);
         assertThat(bottom.getBlue()).isGreaterThan(180);
+    }
+
+    @Test
+    void losslessWebpIsLimitedToSixteenMegapixels() throws IOException {
+        // Без потерь декодер распаковывает картинку целиком, без прореживания: 20 Мп — уже 80 МБ.
+        for (var name : new String[] {WEBP_LOSSLESS_20MP, WEBP_LOSSLESS_20MP_EXTENDED}) {
+            var source = write("lossless.webp", resource(name));
+
+            assertThatThrownBy(() -> processor.process(source, FilePurpose.REFERENCE))
+                    .as(name)
+                    .isInstanceOfSatisfying(
+                            TooLargeImageException.class,
+                            e -> assertThat(e.params()).containsEntry("maxPixels", 16_000_000L));
+        }
+    }
+
+    @Test
+    void smallLosslessWebpIsRead() throws IOException {
+        var source = write("lossless.webp", resource(WEBP_LOSSLESS));
+
+        var processed = processor.process(source, FilePurpose.PORTFOLIO);
+
+        assertThat(processed.width()).isEqualTo(64);
+        assertThat(processed.height()).isEqualTo(48);
+        assertSize(processed.variants().get(480), 64, 48);
+    }
+
+    @Test
+    void webpWithoutImageDataIsUnsupported() throws IOException {
+        var source = write("empty.webp", webpWithoutImageData());
+
+        assertThatThrownBy(() -> processor.process(source, FilePurpose.PORTFOLIO))
+                .isInstanceOf(UnsupportedFormatException.class);
     }
 
     private Path write(String name, byte[] content) throws IOException {

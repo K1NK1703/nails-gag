@@ -12,6 +12,9 @@ COPY --from=extract /build/extracted/dependencies/ ./
 COPY --from=extract /build/extracted/spring-boot-loader/ ./
 COPY --from=extract /build/extracted/snapshot-dependencies/ ./
 COPY --from=extract /build/extracted/application/ ./
+# Каталог хранилища фото (nails-gag.files.root) — владелец app: под ним приложение и работает. При запуске сюда
+# монтируется том; новый том Docker копирует владельца и права каталога образа.
+RUN mkdir -p /var/lib/nails-gag/files && chown app:app /var/lib/nails-gag/files
 USER app
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
