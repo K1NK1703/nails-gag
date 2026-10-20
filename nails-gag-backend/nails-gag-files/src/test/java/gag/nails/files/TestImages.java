@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.CRC32;
+import java.util.zip.Deflater;
 import javax.imageio.ImageIO;
 
 /** Картинки для тестов: генерируются в коде, готовые файлы — только в {@code src/test/resources/images}. */
@@ -21,6 +22,9 @@ public final class TestImages {
 
     /** WebP с потерями 320×240. */
     public static final String WEBP = "images/gradient.webp";
+
+    /** WebP с потерями 300×200 с EXIF-ориентацией 6 (блок {@code EXIF} внутри {@code VP8X}). */
+    public static final String WEBP_EXIF_ORIENTATION_6 = "images/exif-orientation-6.webp";
 
     /** Маркер JPEG APP1: в нём EXIF. */
     public static final int APP1 = 0xE1;
@@ -61,6 +65,65 @@ public final class TestImages {
                 .array();
         writeChunk(out, "IHDR", header);
         writeChunk(out, "IEND", new byte[0]);
+        return out.toByteArray();
+    }
+
+    /** PNG с EXIF в блоке {@code eXIf}: в EXIF только тег Orientation. */
+    public static byte[] pngWithExifOrientation(int width, int height, int orientation) {
+        return insertPngChunk(png(width, height), "eXIf", tiffWithOrientation(orientation));
+    }
+
+    /**
+     * PNG с текстовым блоком {@code zTXt}, который распаковывается в {@code inflatedBytes} нулей. Нули сжимаются
+     * примерно в тысячу раз: гигабайт помещается в мегабайт файла.
+     */
+    public static byte[] pngWithCompressedText(int width, int height, long inflatedBytes) {
+        var text = new ByteArrayOutputStream();
+        text.writeBytes("Comment".getBytes(StandardCharsets.US_ASCII));
+        text.write(0); // конец ключевого слова
+        text.write(0); // метод сжатия: deflate
+        var deflater = new Deflater(Deflater.BEST_COMPRESSION);
+        try {
+            var zeros = new byte[1 << 20];
+            var buffer = new byte[1 << 16];
+            for (var left = inflatedBytes; left > 0; left -= zeros.length) {
+                deflater.setInput(zeros, 0, (int) Math.min(zeros.length, left));
+                while (!deflater.needsInput()) {
+                    text.write(buffer, 0, deflater.deflate(buffer));
+                }
+            }
+            deflater.finish();
+            while (!deflater.finished()) {
+                text.write(buffer, 0, deflater.deflate(buffer));
+            }
+        } finally {
+            deflater.end();
+        }
+        return insertPngChunk(png(width, height), "zTXt", text.toByteArray());
+    }
+
+    /** TIFF (порядок байтов Motorola) с одним IFD из одного тега Orientation — содержимое блока EXIF. */
+    public static byte[] tiffWithOrientation(int orientation) {
+        return ByteBuffer.allocate(26)
+                .put(new byte[] {'M', 'M', 0, 42})
+                .putInt(8) // смещение первого IFD
+                .putShort((short) 1) // число записей
+                .putShort((short) 0x0112) // Orientation
+                .putShort((short) 3) // SHORT
+                .putInt(1) // одно значение
+                .putShort((short) orientation)
+                .putShort((short) 0) // выравнивание значения до четырёх байтов
+                .putInt(0) // следующего IFD нет
+                .array();
+    }
+
+    /** Вставляет блок сразу после заголовка IHDR (8 байт сигнатуры + 25 байт блока). */
+    public static byte[] insertPngChunk(byte[] png, String type, byte[] data) {
+        var headerEnd = 8 + 25;
+        var out = new ByteArrayOutputStream();
+        out.write(png, 0, headerEnd);
+        writeChunk(out, type, data);
+        out.write(png, headerEnd, png.length - headerEnd);
         return out.toByteArray();
     }
 

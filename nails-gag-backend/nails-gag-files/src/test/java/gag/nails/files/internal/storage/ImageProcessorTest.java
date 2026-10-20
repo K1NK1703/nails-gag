@@ -3,11 +3,14 @@ package gag.nails.files.internal.storage;
 import static gag.nails.files.TestImages.APP1;
 import static gag.nails.files.TestImages.EXIF_ORIENTATION_6;
 import static gag.nails.files.TestImages.WEBP;
+import static gag.nails.files.TestImages.WEBP_EXIF_ORIENTATION_6;
 import static gag.nails.files.TestImages.containsAscii;
 import static gag.nails.files.TestImages.decode;
 import static gag.nails.files.TestImages.jpegMarkers;
 import static gag.nails.files.TestImages.png;
 import static gag.nails.files.TestImages.pngHeaderOnly;
+import static gag.nails.files.TestImages.pngWithCompressedText;
+import static gag.nails.files.TestImages.pngWithExifOrientation;
 import static gag.nails.files.TestImages.resource;
 import static gag.nails.files.TestImages.transparentPng;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -159,6 +162,45 @@ class ImageProcessorTest {
         assertThat(processed.width()).isEqualTo(320);
         assertThat(processed.height()).isEqualTo(240);
         assertSize(processed.variants().get(2000), 320, 240);
+    }
+
+    @Test
+    void compressedTextIsNeverInflated() throws IOException {
+        // Гигабайт нулей в zTXt: распаковка метаданных целиком исчерпала бы память тестового процесса.
+        var bomb = pngWithCompressedText(10, 10, 1L << 30);
+        assertThat(bomb.length).isLessThan(2 * 1024 * 1024);
+        var source = write("bomb.png", bomb);
+
+        var processed = processor.process(source, FilePurpose.REFERENCE);
+
+        assertThat(processed.width()).isEqualTo(10);
+        assertThat(processed.height()).isEqualTo(10);
+    }
+
+    @Test
+    void exifOrientationIsReadFromPng() throws IOException {
+        var source = write("rotated.png", pngWithExifOrientation(300, 200, 6));
+
+        var processed = processor.process(source, FilePurpose.PORTFOLIO);
+
+        assertThat(processed.width()).isEqualTo(200);
+        assertThat(processed.height()).isEqualTo(300);
+        assertSize(processed.variants().get(480), 200, 300);
+    }
+
+    @Test
+    void exifOrientationIsReadFromWebp() throws IOException {
+        var source = write("rotated.webp", resource(WEBP_EXIF_ORIENTATION_6));
+
+        var processed = processor.process(source, FilePurpose.PORTFOLIO);
+
+        assertThat(processed.width()).isEqualTo(200);
+        assertThat(processed.height()).isEqualTo(300);
+        var image = decode(processed.variants().get(480));
+        var top = new Color(image.getRGB(100, 20));
+        var bottom = new Color(image.getRGB(100, 280));
+        assertThat(top.getRed()).isGreaterThan(180);
+        assertThat(bottom.getBlue()).isGreaterThan(180);
     }
 
     private Path write(String name, byte[] content) throws IOException {
