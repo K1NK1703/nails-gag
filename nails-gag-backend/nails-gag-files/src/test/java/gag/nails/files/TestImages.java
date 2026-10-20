@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.zip.CRC32;
 import java.util.zip.Deflater;
@@ -40,6 +41,47 @@ public final class TestImages {
             }
         }
         return encode(image, "png");
+    }
+
+    /**
+     * Серый PNG, собранный без {@link BufferedImage}: каждая строка одного тона, поэтому даже картинка в десятки
+     * мегапикселей сжимается в килобайты и не занимает память теста.
+     */
+    public static byte[] grayPng(int width, int height) {
+        var out = new ByteArrayOutputStream();
+        out.writeBytes(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'});
+        var header = ByteBuffer.allocate(13)
+                .putInt(width)
+                .putInt(height)
+                .put((byte) 8) // бит на канал
+                .put((byte) 0) // оттенки серого
+                .put((byte) 0)
+                .put((byte) 0)
+                .put((byte) 0)
+                .array();
+        writeChunk(out, "IHDR", header);
+        var pixels = new ByteArrayOutputStream();
+        var deflater = new Deflater(Deflater.BEST_COMPRESSION);
+        try {
+            var row = new byte[width + 1]; // байт фильтра (0 — без фильтра) и пиксели
+            var buffer = new byte[1 << 16];
+            for (var y = 0; y < height; y++) {
+                Arrays.fill(row, 1, row.length, (byte) (y % 256));
+                deflater.setInput(row);
+                while (!deflater.needsInput()) {
+                    pixels.write(buffer, 0, deflater.deflate(buffer));
+                }
+            }
+            deflater.finish();
+            while (!deflater.finished()) {
+                pixels.write(buffer, 0, deflater.deflate(buffer));
+            }
+        } finally {
+            deflater.end();
+        }
+        writeChunk(out, "IDAT", pixels.toByteArray());
+        writeChunk(out, "IEND", new byte[0]);
+        return out.toByteArray();
     }
 
     /** PNG, все пиксели которого полностью прозрачны. */

@@ -13,6 +13,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -32,6 +33,12 @@ final class ImageProcessor {
 
     /** Качество JPEG вариантов. */
     static final float JPEG_QUALITY = 0.85f;
+
+    /**
+     * Сколько пикселей картинки распаковывается в память, не больше: 16 Мп — до 64 МБ в четырёх байтах на пиксель.
+     * Больше прореживание и не нужно: самый широкий вариант (2000 px) в рамке N × 2N — 8 Мп.
+     */
+    static final long MAX_DECODED_PIXELS = 16_000_000;
 
     private static final Logger log = LoggerFactory.getLogger(ImageProcessor.class);
 
@@ -65,10 +72,10 @@ final class ImageProcessor {
                 throw new TooLargeImageException(maxPixels);
             }
             var orientation = Orientation.read(source, format);
-            var upright = orientation.swapsAxes() ? new Size(stored.height(), stored.width()) : stored;
-            var decoded = decode(reader, subsampling(upright.width(), purpose));
-            var image = uprightOpaqueSrgb(decoded, orientation);
-            return new ProcessedImage(upright.width(), upright.height(), variants(image, upright, purpose));
+            var upright = orientation.swapsAxes() ? stored.transposed() : stored;
+            var decoded = decode(reader, subsampling(stored.width(), stored.height(), upright.width(), purpose));
+            return new ProcessedImage(
+                    upright.width(), upright.height(), variants(decoded, orientation, upright, purpose));
         } catch (IOException e) {
             throw new InternalException("cannot open uploaded file " + source, e);
         } finally {
@@ -89,13 +96,22 @@ final class ImageProcessor {
     }
 
     /**
-     * Шаг прореживания при чтении: читается каждый {@code n}-й пиксель по обеим осям. Наибольший шаг, при котором
-     * прореженная картинка остаётся не уже самого широкого варианта: большая картинка не распаковывается в память
-     * целиком.
+     * Шаг прореживания при чтении: читается каждый {@code n}-й пиксель по обеим осям. По ширине — наибольший шаг, при
+     * котором прореженная картинка остаётся не уже двух самых широких вариантов: запас вдвое даёт качественному
+     * уменьшению после прореживания убрать муар. Главнее бюджет памяти: распакованная картинка — не больше {@link
+     * #MAX_DECODED_PIXELS}, поэтому узкая длинная прореживается и по высоте, даже если вариантам нужна вся ширина.
+     *
+     * @param uprightWidth ширина после поворота по EXIF: по ней считаются варианты
      */
-    private static int subsampling(int uprightWidth, FilePurpose purpose) {
-        var widest = Math.min(purpose.maxWidth(), uprightWidth);
-        return Math.max(1, uprightWidth / widest);
+    static int subsampling(int storedWidth, int storedHeight, int uprightWidth, FilePurpose purpose) {
+        var byWidth = Math.max(1, uprightWidth / (2 * purpose.maxWidth()));
+        var byMemory = (int) Math.ceil(Math.sqrt((double) storedWidth * storedHeight / MAX_DECODED_PIXELS));
+        var step = Math.max(byWidth, byMemory);
+        // Прореженная сторона округляется вверх, поэтому корень иногда даёт на пиксель больше бюджета.
+        while ((long) Math.ceilDiv(storedWidth, step) * Math.ceilDiv(storedHeight, step) > MAX_DECODED_PIXELS) {
+            step++;
+        }
+        return step;
     }
 
     private static BufferedImage decode(ImageReader reader, int subsampling) {
@@ -121,27 +137,54 @@ final class ImageProcessor {
     }
 
     /**
-     * Картинка в sRGB без прозрачности (прозрачное — на белом фоне), повёрнутая по EXIF. Повороты на 90° и отражения
-     * точны, поэтому без интерполяции.
+     * Варианты от широкого к узкому. Самый широкий уменьшается из распакованной картинки ещё до поворота: перевод в
+     * sRGB без прозрачности (прозрачное — на белом фоне) делает первая же отрисовка, а поворачивается уже маленький
+     * растр. Каждый следующий вариант уменьшается из предыдущего — так дешевле и не хуже.
+     *
+     * <p>Ошибка Java 2D на этих шагах (битый ICC-профиль у {@link ColorConvertOp} и т. п.) означает нечитаемый файл.
      */
-    private static BufferedImage uprightOpaqueSrgb(BufferedImage decoded, Orientation orientation) {
-        var source = toSrgb(decoded);
-        var width = source.getWidth();
-        var height = source.getHeight();
-        var result = orientation.swapsAxes()
-                ? new BufferedImage(height, width, BufferedImage.TYPE_INT_RGB)
-                : new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        var graphics = result.createGraphics();
+    private static Map<Integer, byte[]> variants(
+            BufferedImage decoded, Orientation orientation, Size original, FilePurpose purpose) {
+        var stored = new Size(decoded.getWidth(), decoded.getHeight());
+        var available = orientation.swapsAxes() ? stored.transposed() : stored;
+        var images = new LinkedHashMap<Integer, BufferedImage>();
         try {
-            graphics.setRenderingHint(
-                    RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            graphics.setColor(Color.WHITE);
-            graphics.fillRect(0, 0, result.getWidth(), result.getHeight());
-            graphics.drawImage(source, orientation.transform(width, height), null);
-        } finally {
-            graphics.dispose();
+            BufferedImage current = null;
+            for (var nominal : purpose.widths().reversed()) {
+                var size = variantSize(nominal, original, available);
+                if (current == null) {
+                    var target = orientation.swapsAxes() ? size.transposed() : size;
+                    current = orient(scale(toSrgb(decoded), target.width(), target.height()), orientation);
+                } else {
+                    current = scale(current, size.width(), size.height());
+                }
+                images.put(nominal, current);
+            }
+        } catch (RuntimeException e) {
+            throw unreadable(e);
         }
-        return result;
+        var variants = new HashMap<Integer, byte[]>();
+        images.forEach((nominal, image) -> variants.put(nominal, jpeg(image)));
+        return variants;
+    }
+
+    /**
+     * Размер варианта номинальной ширины {@code n}: не шире {@code n} и распакованной картинки, в рамке {@code n} ×
+     * {@code 2n} — узкая длинная уменьшается по высоте. Пропорции — оригинала, а не прореженной картинки, у которой они
+     * чуть сбиты округлением.
+     *
+     * @param available распакованная (прореженная) картинка после поворота
+     */
+    private static Size variantSize(int nominal, Size original, Size available) {
+        var aspect = (double) original.height() / original.width();
+        var width = Math.min(nominal, available.width());
+        var height = (int) Math.round(width * aspect);
+        var maxHeight = 2 * nominal;
+        if (height > maxHeight) {
+            height = maxHeight;
+            width = (int) Math.round(maxHeight / aspect);
+        }
+        return new Size(Math.max(1, width), Math.clamp(height, 1, available.height()));
     }
 
     /**
@@ -156,26 +199,32 @@ final class ImageProcessor {
         return new ColorConvertOp(ColorSpace.getInstance(ColorSpace.CS_sRGB), null).filter(image, null);
     }
 
-    /**
-     * Варианты от широкого к узкому: каждый уменьшается из предыдущего, так дешевле и не хуже. Высота считается по
-     * пропорциям оригинала, а не прореженной картинки, у которой они чуть сбиты округлением.
-     */
-    private static Map<Integer, byte[]> variants(BufferedImage image, Size original, FilePurpose purpose) {
-        var variants = new HashMap<Integer, byte[]>();
-        var current = image;
-        for (var nominal : purpose.widths().reversed()) {
-            var width = Math.min(nominal, original.width());
-            var height = Math.max(1, (int) Math.round((double) original.height() * width / original.width()));
-            current = scale(current, width, height);
-            variants.put(nominal, jpeg(current));
+    /** Поворот по EXIF. Повороты на 90° и отражения точны, поэтому без интерполяции. */
+    private static BufferedImage orient(BufferedImage image, Orientation orientation) {
+        if (orientation == Orientation.NORMAL) {
+            return image;
         }
-        return variants;
+        var width = image.getWidth();
+        var height = image.getHeight();
+        var result = orientation.swapsAxes()
+                ? new BufferedImage(height, width, BufferedImage.TYPE_INT_RGB)
+                : new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        var graphics = result.createGraphics();
+        try {
+            graphics.setRenderingHint(
+                    RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            graphics.drawImage(image, orientation.transform(width, height), null);
+        } finally {
+            graphics.dispose();
+        }
+        return result;
     }
 
     /**
      * Уменьшение без ступенек: сначала вдвое за шаг (билинейная интерполяция на половине — это среднее четырёх
      * пикселей), последний шаг меньше чем вдвое — бикубической. Бикубическая сразу в несколько раз брала бы лишь 16
-     * соседних пикселей и теряла остальные.
+     * соседних пикселей и теряла остальные. Результат — всегда непрозрачный RGB: картинка другого типа
+     * перерисовывается, даже если размер уже нужный.
      */
     private static BufferedImage scale(BufferedImage image, int width, int height) {
         var current = image;
@@ -186,7 +235,9 @@ final class ImageProcessor {
                     current.getHeight() / 2,
                     RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         }
-        if (current.getWidth() != width || current.getHeight() != height) {
+        if (current.getWidth() != width
+                || current.getHeight() != height
+                || current.getType() != BufferedImage.TYPE_INT_RGB) {
             current = draw(current, width, height, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
         }
         return current;
@@ -198,6 +249,9 @@ final class ImageProcessor {
         try {
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, interpolation);
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            // Прозрачное — на белом фоне: после первой отрисовки картинка непрозрачна.
+            graphics.setColor(Color.WHITE);
+            graphics.fillRect(0, 0, width, height);
             graphics.drawImage(image, 0, 0, width, height, null);
         } finally {
             graphics.dispose();
@@ -227,5 +281,10 @@ final class ImageProcessor {
         return bytes.toByteArray();
     }
 
-    private record Size(int width, int height) {}
+    private record Size(int width, int height) {
+
+        Size transposed() {
+            return new Size(height, width);
+        }
+    }
 }

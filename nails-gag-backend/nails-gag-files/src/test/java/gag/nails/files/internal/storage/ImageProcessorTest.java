@@ -6,6 +6,7 @@ import static gag.nails.files.TestImages.WEBP;
 import static gag.nails.files.TestImages.WEBP_EXIF_ORIENTATION_6;
 import static gag.nails.files.TestImages.containsAscii;
 import static gag.nails.files.TestImages.decode;
+import static gag.nails.files.TestImages.grayPng;
 import static gag.nails.files.TestImages.jpegMarkers;
 import static gag.nails.files.TestImages.png;
 import static gag.nails.files.TestImages.pngHeaderOnly;
@@ -102,14 +103,61 @@ class ImageProcessorTest {
 
     @Test
     void largeImageIsSubsampledWithoutLosingVariantWidth() throws IOException {
-        // 4100 / 2000 = 2: читается каждый второй пиксель, 2050 px — не уже нужных 2000.
-        var source = write("huge.png", png(4100, 2050));
+        // 6400 / (2 × 1600) = 2: читается каждый второй пиксель, 3200 px — вдвое шире самого широкого варианта.
+        var source = write("wide.png", grayPng(6400, 200));
 
-        var processed = processor.process(source, FilePurpose.REFERENCE);
+        var processed = processor.process(source, FilePurpose.PORTFOLIO);
 
-        assertThat(processed.width()).isEqualTo(4100);
-        assertThat(processed.height()).isEqualTo(2050);
-        assertSize(processed.variants().get(2000), 2000, 1000);
+        assertThat(processed.width()).isEqualTo(6400);
+        assertThat(processed.height()).isEqualTo(200);
+        assertSize(processed.variants().get(1600), 1600, 50);
+        assertSize(processed.variants().get(480), 480, 15);
+    }
+
+    @Test
+    void decodedImageStaysWithinSixteenMegapixels() {
+        // Узкая длинная прореживается и по высоте: 1000×50000 → 500×25000.
+        assertThat(ImageProcessor.subsampling(1000, 50_000, 1000, FilePurpose.PORTFOLIO))
+                .isEqualTo(2);
+        // 48 Мп: шаг 2 по ширине (8000 / 3200) и он же укладывает в 16 Мп (4000×3000).
+        assertThat(ImageProcessor.subsampling(8000, 6000, 8000, FilePurpose.PORTFOLIO))
+                .isEqualTo(2);
+        // Не шире двух наибольших вариантов: 4000 px для референса читаются целиком.
+        assertThat(ImageProcessor.subsampling(4000, 3000, 4000, FilePurpose.REFERENCE))
+                .isEqualTo(1);
+        // Повёрнутая: ширина после поворота — высота хранимой.
+        assertThat(ImageProcessor.subsampling(3000, 6400, 6400, FilePurpose.PORTFOLIO))
+                .isEqualTo(2);
+        for (var size : new int[][] {{1000, 50_000}, {7071, 7071}, {50_000, 1000}, {4001, 4001}}) {
+            var step = ImageProcessor.subsampling(size[0], size[1], size[0], FilePurpose.REFERENCE);
+            var decoded = (long) Math.ceilDiv(size[0], step) * Math.ceilDiv(size[1], step);
+            assertThat(decoded).as("%dx%d", size[0], size[1]).isLessThanOrEqualTo(16_000_000);
+        }
+    }
+
+    @Test
+    void tallImageVariantsFitTwiceTheirWidth() throws IOException {
+        var source = write("tall.png", grayPng(1000, 50_000));
+
+        var processed = processor.process(source, FilePurpose.PORTFOLIO);
+
+        assertThat(processed.width()).isEqualTo(1000);
+        assertThat(processed.height()).isEqualTo(50_000);
+        // Рамка N × 2N: высота упирается в 2N, ширина — по пропорциям 1:50.
+        assertSize(processed.variants().get(1600), 64, 3200);
+        assertSize(processed.variants().get(960), 38, 1920);
+        assertSize(processed.variants().get(480), 19, 960);
+    }
+
+    @Test
+    void ordinaryProportionsAreKept() throws IOException {
+        var source = write("portrait.png", png(1200, 1600));
+
+        var processed = processor.process(source, FilePurpose.PORTFOLIO);
+
+        assertSize(processed.variants().get(1600), 1200, 1600);
+        assertSize(processed.variants().get(960), 960, 1280);
+        assertSize(processed.variants().get(480), 480, 640);
     }
 
     @Test
