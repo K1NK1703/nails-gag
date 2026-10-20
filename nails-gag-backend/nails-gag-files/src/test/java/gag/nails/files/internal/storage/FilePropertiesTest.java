@@ -10,6 +10,7 @@ import org.springframework.boot.context.properties.bind.validation.BindValidatio
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.core.env.StandardEnvironment;
 import org.springframework.validation.FieldError;
 
 class FilePropertiesTest {
@@ -33,7 +34,11 @@ class FilePropertiesTest {
 
     @Test
     void rootIsRequired() {
-        context.run(started -> assertRejected(started, "root"));
+        // Gradle задаёт корень тестам системным свойством; здесь его не должно быть.
+        context.withInitializer(started -> started.getEnvironment()
+                        .getPropertySources()
+                        .remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME))
+                .run(started -> assertRejected(started, "root"));
     }
 
     @Test

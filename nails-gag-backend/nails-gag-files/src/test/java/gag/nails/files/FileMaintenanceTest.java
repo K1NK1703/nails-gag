@@ -2,6 +2,8 @@ package gag.nails.files;
 
 import static gag.nails.files.TestImages.png;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import gag.nails.files.model.FilePurpose;
 import gag.nails.testsupport.ModuleTest;
@@ -65,14 +67,14 @@ class FileMaintenanceTest extends FilesTestSupport {
         var stored = store(png(320, 240), FilePurpose.PORTFOLIO);
         setAge(directory(stored), Duration.ofDays(2));
         var stray = createDirectory(
-                ROOT.resolve("portfolio").resolve(UUID.randomUUID().toString()));
+                root.resolve("portfolio").resolve(UUID.randomUUID().toString()));
         setAge(stray, Duration.ofDays(2));
         // Каталог только что перенесённой загрузки, строка которой ещё не зафиксирована, трогать нельзя.
         var fresh = createDirectory(
-                ROOT.resolve("reference").resolve(UUID.randomUUID().toString()));
+                root.resolve("reference").resolve(UUID.randomUUID().toString()));
         setAge(fresh, Duration.ofHours(1));
         // Чужое по имени не похоже на файл хранилища и не удаляется.
-        var unknown = createDirectory(ROOT.resolve("portfolio").resolve("not-a-file-id"));
+        var unknown = createDirectory(root.resolve("portfolio").resolve("not-a-file-id"));
         setAge(unknown, Duration.ofDays(2));
 
         assertThat(maintenance.removeStrayDirectories()).isEqualTo(1);
@@ -86,7 +88,7 @@ class FileMaintenanceTest extends FilesTestSupport {
 
     @Test
     void staleUploadLeftoversAreRemoved() throws IOException {
-        var temporary = Files.createDirectories(ROOT.resolve(".tmp"));
+        var temporary = Files.createDirectories(root.resolve(".tmp"));
         var staleUpload = Files.write(temporary.resolve(UUID.randomUUID() + ".upload"), new byte[10]);
         setAge(staleUpload, Duration.ofDays(2));
         var staleStaging = createDirectory(temporary.resolve(UUID.randomUUID().toString()));
@@ -103,12 +105,17 @@ class FileMaintenanceTest extends FilesTestSupport {
 
     @Test
     void unreadableDirectoryDoesNotStopTheSweep() throws IOException {
-        var unreadable = Files.createDirectories(ROOT.resolve("portfolio"));
+        var unreadable = Files.createDirectories(root.resolve("portfolio"));
         var stray = createDirectory(
-                ROOT.resolve("reference").resolve(UUID.randomUUID().toString()));
+                root.resolve("reference").resolve(UUID.randomUUID().toString()));
         setAge(stray, Duration.ofDays(2));
+        assumeTrue(
+                unreadable.getFileSystem().supportedFileAttributeViews().contains("posix"),
+                "file system has no POSIX permissions");
         Files.setPosixFilePermissions(unreadable, Set.of());
         try {
+            // Под root права не мешают читать каталог, и проверять тогда нечего.
+            assumeFalse(Files.isReadable(unreadable), "permissions do not restrict this user");
             assertThat(maintenance.removeStrayDirectories()).isEqualTo(1);
         } finally {
             Files.setPosixFilePermissions(unreadable, PosixFilePermissions.fromString("rwx------"));

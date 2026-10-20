@@ -16,12 +16,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 
 /**
@@ -29,8 +27,9 @@ import org.springframework.test.context.TestPropertySource;
  * NOT_SUPPORTED)} прямо на классе (объявленная на классе аннотация сильнее мета-аннотации {@code @ModuleTest}).
  * Удаление файлов после фиксации и уборку иначе не проверить.
  *
- * <p>Каталог хранилища — свой временный на прогон, не общий тестовый из {@code application-test.yaml}: тесты смотрят,
- * что осталось на диске, и после каждого теста очищают и его, и таблицу.
+ * <p>Каталог хранилища — общий тестовый ({@code nails-gag.files.root}: при прогоне Gradle — {@code
+ * build/test-files/<задача>} модуля, только для тестов этого модуля). Тесты смотрят, что осталось на диске, и после
+ * каждого теста очищают и его, и таблицу.
  */
 @TestPropertySource(
         properties = {
@@ -44,8 +43,6 @@ abstract class FilesTestSupport {
     static final long MAX_FILE_BYTES = 1_048_576;
 
     static final int PROCESSING_SLOTS = 2;
-
-    static final Path ROOT = temporaryRoot();
 
     static final UUID ACCOUNT = UUID.fromString("0198a1f0-0000-7000-8000-000000000001");
     static final UUID OTHER_ACCOUNT = UUID.fromString("0198a1f0-0000-7000-8000-000000000002");
@@ -62,39 +59,44 @@ abstract class FilesTestSupport {
     @Autowired
     MutableClock clock;
 
-    @DynamicPropertySource
-    static void storageRoot(DynamicPropertyRegistry registry) {
-        registry.add("nails-gag.files.root", ROOT::toString);
+    /** Корень хранилища — тот же, что у приложения теста. */
+    Path root;
+
+    @Value("${nails-gag.files.root}")
+    void setRoot(Path root) {
+        this.root = root.toAbsolutePath().normalize();
     }
 
     @AfterEach
     void removeStoredFiles() throws IOException {
         jdbc.sql("delete from files.stored_file").update();
-        deleteContents(ROOT);
-    }
-
-    /** Временный корень удаляется после класса; следующий класс прогона создаст его заново первой же загрузкой. */
-    @AfterAll
-    static void removeRoot() throws IOException {
-        deleteContents(ROOT);
-        Files.deleteIfExists(ROOT);
+        if (!Files.exists(root)) {
+            return;
+        }
+        try (var paths = Files.walk(root)) {
+            for (var path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                if (!path.equals(root)) {
+                    Files.delete(path);
+                }
+            }
+        }
     }
 
     StoredFileView store(byte[] content, FilePurpose purpose) {
         return storage.store(new ByteArrayInputStream(content), content.length, purpose, UPLOADER);
     }
 
-    static Path directory(StoredFileView file) {
-        return ROOT.resolve(file.purpose().name().toLowerCase(Locale.ROOT))
+    Path directory(StoredFileView file) {
+        return root.resolve(file.purpose().name().toLowerCase(Locale.ROOT))
                 .resolve(file.id().toString());
     }
 
     /** Все обычные файлы под корнем хранилища, включая временные. */
-    static List<Path> filesOnDisk() {
-        if (!Files.exists(ROOT)) {
+    List<Path> filesOnDisk() {
+        if (!Files.exists(root)) {
             return List.of();
         }
-        try (var paths = Files.walk(ROOT)) {
+        try (var paths = Files.walk(root)) {
             return paths.filter(Files::isRegularFile).toList();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -110,26 +112,5 @@ abstract class FilesTestSupport {
     void assertNothingStored() {
         assertThat(filesOnDisk()).isEmpty();
         assertThat(rows()).isZero();
-    }
-
-    private static void deleteContents(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (var paths = Files.walk(root)) {
-            for (var path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                if (!path.equals(root)) {
-                    Files.delete(path);
-                }
-            }
-        }
-    }
-
-    private static Path temporaryRoot() {
-        try {
-            return Files.createTempDirectory("nails-gag-files-test-");
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 }
