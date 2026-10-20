@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(project(":nails-gag-common"))
+    implementation(project(":nails-gag-files"))
     implementation(project(":nails-gag-catalog"))
     implementation(project(":nails-gag-clients"))
     implementation(project(":nails-gag-schedule"))
