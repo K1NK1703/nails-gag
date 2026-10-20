@@ -3,6 +3,7 @@ package gag.nails.clients.internal.consent;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.ConsentView;
+import gag.nails.clients.model.WithdrawnBy;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -11,6 +12,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.UuidGenerator;
+import org.jspecify.annotations.Nullable;
 
 @Entity
 @Table(schema = "clients", name = "consent")
@@ -31,6 +33,11 @@ public class ConsentEntity {
     @Enumerated(EnumType.STRING)
     private ConsentSource source;
 
+    private @Nullable Instant withdrawnAt;
+
+    @Enumerated(EnumType.STRING)
+    private @Nullable WithdrawnBy withdrawnBy;
+
     protected ConsentEntity() {}
 
     public ConsentEntity(
@@ -40,6 +47,12 @@ public class ConsentEntity {
         this.documentVersion = documentVersion;
         this.source = source;
         this.givenAt = givenAt;
+    }
+
+    /** Строка журнала остаётся, согласие перестаёт действовать. */
+    public void withdraw(Instant at, WithdrawnBy by) {
+        this.withdrawnAt = at;
+        this.withdrawnBy = by;
     }
 
     public ConsentView toView() {

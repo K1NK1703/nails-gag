@@ -9,19 +9,24 @@ import gag.nails.clients.command.UpdateClient;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentRequiredException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.clients.event.ClientBlocked;
 import gag.nails.clients.event.ClientErased;
+import gag.nails.clients.event.ConsentGiven;
+import gag.nails.clients.event.ConsentWithdrawn;
 import gag.nails.clients.internal.consent.ConsentEntity;
 import gag.nails.clients.internal.consent.ConsentRepository;
 import gag.nails.clients.internal.consent.DefaultDocumentVersionService;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagJournal;
 import gag.nails.clients.model.ChangedBy;
 import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.MergeResult;
 import gag.nails.clients.model.PrepaymentFlagReason;
+import gag.nails.clients.model.WithdrawnBy;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
@@ -48,6 +53,9 @@ class DefaultClientService implements ClientService {
     /** Причины, которые ставит только мастер или объединение; правилу системы они недоступны. */
     private static final Set<PrepaymentFlagReason> MASTER_ONLY_REASONS = EnumSet.of(
             PrepaymentFlagReason.MASTER_SET, PrepaymentFlagReason.MASTER_WAIVED, PrepaymentFlagReason.MERGED);
+
+    /** Согласия, без которых клиента нельзя обслуживать: их не отзывают. */
+    private static final Set<ConsentKind> REQUIRED_CONSENTS = EnumSet.of(ConsentKind.PERSONAL_DATA, ConsentKind.OFFER);
 
     /** Та же граница, что у {@link PrepaymentFlagChange#comment()}. */
     private static final int MAX_COMMENT_LENGTH = 500;
@@ -178,8 +186,26 @@ class DefaultClientService implements ClientService {
             throw new ConsentVersionOutdatedException(command.kind(), currentVersion);
         }
         var client = requireLive(clientId);
-        consents.save(new ConsentEntity(
-                client.id(), command.kind(), command.documentVersion(), command.source(), clock.instant()));
+        var now = clock.instant();
+        consents.save(new ConsentEntity(client.id(), command.kind(), command.documentVersion(), command.source(), now));
+        events.publishEvent(new ConsentGiven(client.id(), command.kind(), now));
+    }
+
+    @Override
+    public void withdrawConsent(UUID clientId, ConsentKind kind, Actor actor) {
+        actor.requireWriteOrSelf(Section.CLIENTS, clientId);
+        if (REQUIRED_CONSENTS.contains(kind)) {
+            throw new ConsentRequiredException(kind);
+        }
+        var client = requireLive(clientId);
+        var current = consents.findAllByClientIdAndKindAndWithdrawnAtIsNull(client.id(), kind);
+        if (current.isEmpty()) {
+            return;
+        }
+        var now = clock.instant();
+        var by = actor.isClient(clientId) ? WithdrawnBy.CLIENT : WithdrawnBy.STAFF;
+        current.forEach(consent -> consent.withdraw(now, by));
+        events.publishEvent(new ConsentWithdrawn(client.id(), kind, now));
     }
 
     @Override

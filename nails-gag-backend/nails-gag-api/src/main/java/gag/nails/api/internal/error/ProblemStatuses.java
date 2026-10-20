@@ -15,6 +15,7 @@ import gag.nails.catalog.error.ServiceNotFoundException;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentRequiredException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
@@ -86,6 +87,7 @@ final class ProblemStatuses {
             entry(ClientErasedException.class, HttpStatus.FORBIDDEN),
             entry(PhoneTakenException.class, HttpStatus.CONFLICT),
             entry(ConsentVersionOutdatedException.class, HttpStatus.CONFLICT),
+            entry(ConsentRequiredException.class, HttpStatus.CONFLICT),
             entry(DocumentVersionExistsException.class, HttpStatus.CONFLICT),
             entry(DocumentVersionDateTakenException.class, HttpStatus.CONFLICT),
             // schedule

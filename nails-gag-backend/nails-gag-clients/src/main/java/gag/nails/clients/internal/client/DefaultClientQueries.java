@@ -10,6 +10,7 @@ import gag.nails.clients.internal.prepayment.PrepaymentFlagChangeRepository;
 import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentView;
+import gag.nails.clients.model.ConsentWithdrawalView;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
@@ -108,9 +109,15 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds) {
-        return kinds.stream()
-                .allMatch(kind -> consents.existsByClientIdAndKindAndDocumentVersion(
-                        clientId, kind, documents.currentVersion(kind.document())));
+        return kinds.stream().allMatch(kind -> hasCurrentConsent(clientId, kind));
+    }
+
+    private boolean hasCurrentConsent(UUID clientId, ConsentKind kind) {
+        if (!kind.requiresCurrentVersion()) {
+            return consents.existsByClientIdAndKindAndWithdrawnAtIsNull(clientId, kind);
+        }
+        return consents.existsByClientIdAndKindAndDocumentVersionAndWithdrawnAtIsNull(
+                clientId, kind, documents.currentVersion(kind.document()));
     }
 
     @Override
@@ -119,6 +126,12 @@ class DefaultClientQueries implements ClientQueries {
         return consents.findAllByClientIdOrderByGivenAtDescIdDesc(clientId).stream()
                 .map(ConsentEntity::toView)
                 .toList();
+    }
+
+    @Override
+    public List<ConsentWithdrawalView> consentWithdrawals(UUID clientId, Actor actor) {
+        actor.requireReadOrSelf(Section.CLIENTS, clientId);
+        return consents.findWithdrawals(clientId);
     }
 
     @Override

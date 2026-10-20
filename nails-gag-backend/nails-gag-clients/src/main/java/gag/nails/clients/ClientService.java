@@ -8,12 +8,16 @@ import gag.nails.clients.command.UpdateClient;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentRequiredException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.clients.event.ClientBlocked;
 import gag.nails.clients.event.ClientErased;
 import gag.nails.clients.event.ClientMerged;
+import gag.nails.clients.event.ConsentGiven;
+import gag.nails.clients.event.ConsentWithdrawn;
 import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.MergeResult;
 import gag.nails.common.actor.Actor;
@@ -109,13 +113,26 @@ public interface ClientService {
     /**
      * Записывает согласие. Клиент — только своё и только {@link ConsentSource#SITE_CHECKBOX};
      * сотрудник с изменением раздела «Клиенты» — любому клиенту и любым способом. Версия
-     * документа должна быть действующей.
+     * документа должна быть действующей. Каждая запись — новая строка журнала и событие {@link ConsentGiven}
+     * внутри транзакции, даже если такое согласие уже действует.
      *
      * @throws ConsentVersionOutdatedException если версия не действующая; в параметрах — действующая
      * @throws ClientErasedException если карточка обезличена
      * @throws ClientNotFoundException если клиента нет
      */
     void recordConsent(UUID clientId, RecordConsent command, Actor actor);
+
+    /**
+     * Отзыв согласия: клиент — своего, сотрудник с изменением раздела «Клиенты» — любого клиента. Помечает
+     * отозванными все действующие согласия этого вида у клиента ({@link ClientQueries#consentWithdrawals}) и
+     * публикует внутри транзакции {@link ConsentWithdrawn}. Если отзывать нечего — ничего не меняется и события нет.
+     * Дать согласие снова можно обычным {@link #recordConsent}.
+     *
+     * @throws ConsentRequiredException для {@link ConsentKind#PERSONAL_DATA} и {@link ConsentKind#OFFER}
+     * @throws ClientErasedException если карточка обезличена
+     * @throws ClientNotFoundException если клиента нет
+     */
+    void withdrawConsent(UUID clientId, ConsentKind kind, Actor actor);
 
     /**
      * Изменение признака по правилу системы — вызывает модуль записей (поздняя отмена, неявка,
