@@ -34,6 +34,12 @@ class FileConcurrencyTest extends FilesTestSupport {
 
     private static final long WAIT_SECONDS = 10;
 
+    /** Другие соединения, ждущие блокировку строки таблицы файлов; ожидания других тестов и таблиц не считаются. */
+    private static final String LOCK_WAITS = """
+            select count(*) from pg_stat_activity
+            where datname = current_database() and pid <> pg_backend_pid()
+              and wait_event_type = 'Lock' and query like '%stored_file%'""";
+
     @Autowired
     FileMaintenance maintenance;
 
@@ -183,10 +189,7 @@ class FileConcurrencyTest extends FilesTestSupport {
     private void awaitLockWait() throws InterruptedException {
         var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
         while (System.nanoTime() < deadline) {
-            var waiting = jdbc.sql("""
-                            select count(*) from pg_stat_activity
-                            where datname = current_database() and pid <> pg_backend_pid()
-                              and wait_event_type = 'Lock' and query like '%stored_file%'""").query(Integer.class).single();
+            var waiting = jdbc.sql(LOCK_WAITS).query(Integer.class).single();
             if (waiting > 0) {
                 return;
             }
