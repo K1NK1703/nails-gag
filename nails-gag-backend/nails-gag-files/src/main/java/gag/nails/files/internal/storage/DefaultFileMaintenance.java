@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -36,7 +37,7 @@ class DefaultFileMaintenance implements FileMaintenance {
     static final Duration GRACE_PERIOD = Duration.ofDays(1);
 
     /** Сколько «сирот» удаляется одной транзакцией и сколько идентификаторов сверяется с базой одним запросом. */
-    private static final int BATCH_SIZE = 500;
+    static final int BATCH_SIZE = 500;
 
     private static final Logger log = LoggerFactory.getLogger(DefaultFileMaintenance.class);
 
@@ -44,17 +45,30 @@ class DefaultFileMaintenance implements FileMaintenance {
     private final TransactionTemplate transaction;
     private final StorageLayout layout;
     private final Clock clock;
+    private final int batchSize;
 
+    @Autowired
     DefaultFileMaintenance(
             StoredFileRepository files, TransactionTemplate transaction, StorageLayout layout, Clock clock) {
+        this(files, transaction, layout, clock, BATCH_SIZE);
+    }
+
+    /** С другим размером пачки — для теста нескольких пачек. */
+    DefaultFileMaintenance(
+            StoredFileRepository files,
+            TransactionTemplate transaction,
+            StorageLayout layout,
+            Clock clock,
+            int batchSize) {
         this.files = files;
         this.transaction = transaction;
         this.layout = layout;
         this.clock = clock;
+        this.batchSize = batchSize;
     }
 
     /**
-     * Пачками по {@value #BATCH_SIZE}, от старых к новым, каждая — в своей транзакции: блокировки строк держатся
+     * Пачками (по умолчанию по {@value #BATCH_SIZE}), от старых к новым, каждая — в своей транзакции: блокировки строк держатся
      * недолго, а файлы пачки стираются сразу после её фиксации. Идёт, пока очередная пачка не окажется пустой.
      */
     @Override
@@ -70,7 +84,7 @@ class DefaultFileMaintenance implements FileMaintenance {
     }
 
     private int removeOrphanBatch(Instant cutoff) {
-        var removed = files.deleteOrphans(cutoff, BATCH_SIZE);
+        var removed = files.deleteOrphans(cutoff, batchSize);
         if (!removed.isEmpty()) {
             var directories = removed.stream()
                     .map(file -> layout.directory(file.getPurpose(), file.getId()))
@@ -105,8 +119,8 @@ class DefaultFileMaintenance implements FileMaintenance {
     private int removeDirectoriesWithoutRows(Map<UUID, Path> directories) {
         var removed = 0;
         var ids = new ArrayList<>(directories.keySet());
-        for (var from = 0; from < ids.size(); from += BATCH_SIZE) {
-            var batch = ids.subList(from, Math.min(from + BATCH_SIZE, ids.size()));
+        for (var from = 0; from < ids.size(); from += batchSize) {
+            var batch = ids.subList(from, Math.min(from + batchSize, ids.size()));
             var existing = new HashSet<>(files.findExistingIds(batch));
             for (var id : batch) {
                 if (!existing.contains(id) && delete(directories.get(id))) {

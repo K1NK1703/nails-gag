@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 interface StoredFileRepository extends JpaRepository<StoredFileEntity, UUID> {
 
@@ -38,7 +40,12 @@ interface StoredFileRepository extends JpaRepository<StoredFileEntity, UUID> {
      * {@code FOR UPDATE SKIP LOCKED}: строку, которую прямо сейчас привязывают или удаляют, уборка пропускает, а не
      * ждёт — ни ожидания, ни взаимной блокировки с транзакцией владельца. Пропущенная привязка либо зафиксируется (файл
      * больше не «сирота»), либо откатится, и файл уберёт следующий запуск.
+     *
+     * <p>Без {@code @Modifying}: с ним Spring Data выполнил бы запрос через {@code executeUpdate}, а тот не принимает
+     * строки {@code RETURNING}; без него запрос идёт через {@code getResultList}. Поэтому же своей транзакции метод не
+     * открывает (Spring Data считала бы его чтением): нужна транзакция вызывающего, файлы стираются после её фиксации.
      */
+    @Transactional(propagation = Propagation.MANDATORY)
     @Query(value = """
                     delete from files.stored_file
                     where id in (
