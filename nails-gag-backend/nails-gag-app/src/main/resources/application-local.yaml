@@ -11,6 +11,9 @@ logging:
       console:
 
 nails-gag:
+  files:
+    # bootRun работает из корня проекта бэкенда: файлы — в nails-gag-backend/build/files.
+    root: build/files
   identity:
     fake-provider:
       enabled: true

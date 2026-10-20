@@ -11,6 +11,9 @@ nails-gag:
     jobs:
       # Планировщик записей в тестах не работает: тесты вызывают BookingMaintenance сами.
       enabled: false
+  files:
+    # Общий каталог тестов всех модулей; тесты модуля files задают свой временный, потому что смотрят, что на диске.
+    root: ${java.io.tmpdir}/nails-gag-files-test
   identity:
     jobs:
       # Обслуживание входа в тестах не работает: тесты вызывают IdentityMaintenance сами.

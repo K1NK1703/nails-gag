@@ -14,6 +14,16 @@ spring:
 
 nails-gag:
   time-zone: Europe/Moscow
+  files:
+    # Корень хранилища фото; в Docker — том. Создаётся при первой загрузке.
+    root: /var/lib/nails-gag/files
+    # 15 МБ: фронт ужимает фото до 2000 px, а сервер всё равно проверяет сам.
+    max-file-bytes: 15728640
+    max-pixels: 50000000
+    # Обработка картинки занимает память и процессор: одновременно не больше этого числа, остальные ждут.
+    max-concurrent-processing: 2
+    # Сколько загрузка ждёт места обработки, прежде чем ответить 503 files.busy.
+    processing-wait: 10s
   identity:
     # Пары provider:subject, которым при входе выдаётся роль «Разработчик»: ["YANDEX:1234567", "VK:7654321"]
     bootstrap-developers: []
