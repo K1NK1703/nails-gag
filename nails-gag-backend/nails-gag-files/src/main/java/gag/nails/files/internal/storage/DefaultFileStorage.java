@@ -12,6 +12,7 @@ import gag.nails.files.model.StoredFileView;
 import jakarta.persistence.EntityManager;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -22,6 +23,8 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
@@ -89,28 +92,16 @@ class DefaultFileStorage implements FileStorage {
         var staging = temporary.resolve(id.toString());
         try {
             var received = receive(content, upload);
-            var slot = slots.acquire();
-            ProcessedImage image;
-            try {
-                image = processor.process(upload, purpose);
-            } finally {
-                slot.close();
-            }
+            var image = process(upload, purpose);
             layout.createPurposeDirectory(purpose);
             var directory = place(image, staging, layout.directory(purpose, id));
             var file = new StoredFileEntity(
-                    id,
-                    purpose,
-                    image.width(),
-                    image.height(),
-                    received.sha256(),
-                    received.size(),
-                    uploadedBy,
-                    clock.instant());
+                    id, purpose, image.width(), image.height(), received.sha256(), received.size(), uploadedBy, now());
+            var placed = new PlacedDirectory(directory);
             try {
-                return transaction.execute(status -> insert(file, directory));
+                return transaction.execute(status -> insert(file, placed));
             } catch (RuntimeException e) {
-                StorageLayout.deleteQuietly(directory);
+                placed.abandon();
                 throw e;
             }
         } finally {
@@ -122,7 +113,7 @@ class DefaultFileStorage implements FileStorage {
     @Override
     @Transactional
     public void attach(UUID fileId, FilePurpose purpose, UUID uploadedBy) {
-        if (files.attach(fileId, purpose, uploadedBy, clock.instant()) == 1) {
+        if (files.attach(fileId, purpose, uploadedBy, now()) == 1) {
             return;
         }
         // Назначение и загрузивший не меняются, поэтому причину можно взять и из закэшированной копии строки.
@@ -167,22 +158,22 @@ class DefaultFileStorage implements FileStorage {
     }
 
     /**
-     * Строка в транзакции вызывающего или своей. Уборка файлов при откате регистрируется до вставки: откатится ли
-     * вставка или вся транзакция вызывающего позже — каталог удалится. При неизвестном исходе фиксации каталог
-     * остаётся: строка могла сохраниться, а лишний каталог уберёт сверка.
+     * Строка в транзакции вызывающего или своей. Судьба каталога передаётся транзакции до вставки: откатится ли вставка
+     * или вся транзакция вызывающего позже — каталог удалится ({@link PlacedDirectory}).
      */
-    private StoredFileView insert(StoredFileEntity file, Path directory) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == STATUS_ROLLED_BACK) {
-                    StorageLayout.deleteQuietly(directory);
-                }
-            }
-        });
+    private StoredFileView insert(StoredFileEntity file, PlacedDirectory placed) {
+        placed.handOverToTransaction();
         entityManager.persist(file);
         entityManager.flush();
         return file.toView();
+    }
+
+    /** Обработка на одном из мест {@link ProcessingSlots}; место держится, пока картинка обрабатывается. */
+    @SuppressWarnings("try") // место освобождает закрытие ресурса, обращаться к нему в теле не нужно
+    private ProcessedImage process(Path upload, FilePurpose purpose) {
+        try (var slot = slots.acquire()) {
+            return processor.process(upload, purpose);
+        }
     }
 
     /** Копирует поток во временный файл, считая байты и SHA-256; лишний байт сверх лимита прерывает копирование. */
@@ -206,30 +197,61 @@ class DefaultFileStorage implements FileStorage {
         return new Received(size, HexFormat.of().formatHex(digest.digest()));
     }
 
-    /** Пишет варианты во временный каталог и переносит его на место одной атомарной операцией. */
+    /**
+     * Пишет варианты во временный каталог и переносит его на место одной атомарной операцией. Файлы и записи каталогов
+     * сбрасываются на диск до и после переноса: после сбоя питания строка в базе не должна ссылаться на пустые или
+     * недописанные файлы.
+     */
     private static Path place(ProcessedImage image, Path staging, Path target) {
         try {
             Files.createDirectory(staging);
             for (var variant : image.variants().entrySet()) {
-                Files.write(
-                        staging.resolve(variant.getKey() + ".jpg"), variant.getValue(), StandardOpenOption.CREATE_NEW);
+                writeDurably(staging.resolve(variant.getKey() + ".jpg"), variant.getValue());
             }
-            return Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+            forceDirectory(staging);
+            var placed = Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+            forceDirectory(target.getParent());
+            return placed;
         } catch (IOException e) {
             throw new InternalException("cannot write stored file " + target, e);
         }
     }
 
+    private static void writeDurably(Path file, byte[] content) throws IOException {
+        try (var channel = FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+            var buffer = ByteBuffer.wrap(content);
+            while (buffer.hasRemaining()) {
+                channel.write(buffer);
+            }
+            channel.force(true);
+        }
+    }
+
+    /**
+     * Сбрасывает на диск записи каталога (имена файлов, перенос): каталог открывается на чтение и сбрасывается, как
+     * умеют Linux и macOS. Где ОС не даёт открыть каталог (Windows), шаг пропускается: это надёжность при сбое питания,
+     * а не условие работы.
+     */
+    private static void forceDirectory(Path directory) {
+        try (var channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            channel.force(true);
+        } catch (IOException e) {
+            log.debug("cannot force directory {} to disk", directory, e);
+        }
+    }
+
     /**
      * Канал открывается раньше, чем берётся размер: удаление файла после открытия (POSIX) не мешает дочитать его. Нет
-     * файла при живой строке — расхождение диска с базой: отдавать нечего, это видно в логе.
+     * файла при прочитанной строке — удаление успело между чтением строки и открытием или диск разошёлся с базой:
+     * отдавать нечего.
      */
     private static Optional<FileVariant> openVariant(Path path) {
         FileChannel channel;
         try {
             channel = FileChannel.open(path, StandardOpenOption.READ);
         } catch (NoSuchFileException e) {
-            log.warn("stored file variant {} is missing on disk", path);
+            // Бывает и в гонке с удалением после фиксации, поэтому не предупреждение.
+            log.debug("stored file variant {} is missing on disk", path);
             return Optional.empty();
         } catch (IOException e) {
             throw new InternalException("cannot open stored file variant " + path, e);
@@ -244,6 +266,11 @@ class DefaultFileStorage implements FileStorage {
             }
             throw new InternalException("cannot open stored file variant " + path, e);
         }
+    }
+
+    /** Время с точностью {@code timestamptz} (микросекунды): что записано, то и прочитается. */
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 
     private static MessageDigest sha256() {

@@ -196,6 +196,19 @@ class FileStorageTest extends FilesTestSupport {
         assertThat(store(content, FilePurpose.PORTFOLIO).width()).isEqualTo(64);
     }
 
+    @Test
+    void timestampsKeepDatabasePrecision() {
+        // timestamptz хранит микросекунды: наносекунды часов не должны делать store и find разными.
+        clock.set(clock.instant().plusNanos(123_456_789));
+
+        var stored = store(png(64, 48), FilePurpose.PORTFOLIO);
+        storage.attach(stored.id(), FilePurpose.PORTFOLIO, ACCOUNT);
+
+        assertThat(stored.createdAt().getNano() % 1000).isZero();
+        assertThat(storage.find(stored.id())).contains(stored);
+        assertThat(attachedAt(stored.id())).isEqualTo(stored.createdAt());
+    }
+
     private Instant attachedAt(UUID fileId) {
         return jdbc.sql("select attached_at from files.stored_file where id = :id")
                 .param("id", fileId)
