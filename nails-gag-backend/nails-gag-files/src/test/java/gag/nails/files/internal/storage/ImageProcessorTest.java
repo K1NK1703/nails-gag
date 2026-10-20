@@ -2,12 +2,17 @@ package gag.nails.files.internal.storage;
 
 import static gag.nails.files.TestImages.APP1;
 import static gag.nails.files.TestImages.EXIF_ORIENTATION_6;
+import static gag.nails.files.TestImages.VP8X_ALPHA;
+import static gag.nails.files.TestImages.VP8X_ANIMATION;
 import static gag.nails.files.TestImages.WEBP;
+import static gag.nails.files.TestImages.WEBP_ANIMATED;
 import static gag.nails.files.TestImages.WEBP_EXIF_ORIENTATION_6;
 import static gag.nails.files.TestImages.WEBP_LOSSLESS;
 import static gag.nails.files.TestImages.WEBP_LOSSLESS_20MP;
 import static gag.nails.files.TestImages.WEBP_LOSSLESS_20MP_EXTENDED;
 import static gag.nails.files.TestImages.WEBP_LOSSY_ALPHA_20MP;
+import static gag.nails.files.TestImages.anim;
+import static gag.nails.files.TestImages.anmf;
 import static gag.nails.files.TestImages.containsAscii;
 import static gag.nails.files.TestImages.decode;
 import static gag.nails.files.TestImages.grayPng;
@@ -18,6 +23,9 @@ import static gag.nails.files.TestImages.pngWithCompressedText;
 import static gag.nails.files.TestImages.pngWithExifOrientation;
 import static gag.nails.files.TestImages.resource;
 import static gag.nails.files.TestImages.transparentPng;
+import static gag.nails.files.TestImages.vp8x;
+import static gag.nails.files.TestImages.webp;
+import static gag.nails.files.TestImages.webpChunk;
 import static gag.nails.files.TestImages.webpWithoutImageData;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -282,6 +290,67 @@ class ImageProcessorTest {
     }
 
     @Test
+    void alphaAfterLossyDataStillLimitsWebp() throws IOException {
+        // Холст 20 Мп; альфа стоит после данных — декодер всё равно распакует её на весь холст.
+        var source = write(
+                "alpha-after.webp",
+                webp(vp8x(VP8X_ALPHA, 5000, 4000), webpChunk(WEBP, "VP8 "), webpChunk(WEBP_LOSSY_ALPHA_20MP, "ALPH")));
+
+        assertTooLargeForFullDecoding(source);
+    }
+
+    @Test
+    void webpWithTwoImageChunksIsUnsupported() throws IOException {
+        // Без проверки структуры декодер взял бы второй блок (без потерь) — мимо предела для полной распаковки.
+        var source = write(
+                "two-images.webp",
+                webp(vp8x(0, 64, 48), webpChunk(WEBP_EXIF_ORIENTATION_6, "VP8 "), webpChunk(WEBP_LOSSLESS, "VP8L")));
+
+        assertThatThrownBy(() -> processor.process(source, FilePurpose.REFERENCE))
+                .isInstanceOf(UnsupportedFormatException.class);
+    }
+
+    @Test
+    void animatedWebpWithTopLevelDecoyIsUnsupported() throws IOException {
+        // Приманка VP8 на верхнем уровне, а декодируется кадр анимации без потерь.
+        var source = write(
+                "decoy.webp",
+                webp(
+                        vp8x(VP8X_ANIMATION, 64, 48),
+                        anim(),
+                        webpChunk(WEBP_EXIF_ORIENTATION_6, "VP8 "),
+                        anmf(64, 48, webpChunk(WEBP_LOSSLESS, "VP8L"))));
+
+        assertThatThrownBy(() -> processor.process(source, FilePurpose.REFERENCE))
+                .isInstanceOf(UnsupportedFormatException.class);
+    }
+
+    @Test
+    void animatedLosslessWebpIsLimited() throws IOException {
+        var source = write(
+                "animated.webp",
+                webp(
+                        vp8x(VP8X_ANIMATION, 5000, 4000),
+                        anim(),
+                        anmf(5000, 4000, webpChunk(WEBP_LOSSLESS_20MP_EXTENDED, "VP8L"))));
+
+        assertTooLargeForFullDecoding(source);
+    }
+
+    @Test
+    void animatedWebpIsReadByFirstFrame() throws IOException {
+        var source = write("animated.webp", resource(WEBP_ANIMATED));
+
+        var processed = processor.process(source, FilePurpose.PORTFOLIO);
+
+        assertThat(processed.width()).isEqualTo(64);
+        assertThat(processed.height()).isEqualTo(48);
+        var color = new Color(decode(processed.variants().get(480)).getRGB(32, 24));
+        assertThat(color.getRed()).isGreaterThan(180);
+        assertThat(color.getBlue()).isLessThan(80);
+    }
+
+    @Test
     void smallLosslessWebpIsRead() throws IOException {
         var source = write("lossless.webp", resource(WEBP_LOSSLESS));
 
@@ -298,6 +367,13 @@ class ImageProcessorTest {
 
         assertThatThrownBy(() -> processor.process(source, FilePurpose.PORTFOLIO))
                 .isInstanceOf(UnsupportedFormatException.class);
+    }
+
+    private void assertTooLargeForFullDecoding(Path source) {
+        assertThatThrownBy(() -> processor.process(source, FilePurpose.REFERENCE))
+                .isInstanceOfSatisfying(
+                        TooLargeImageException.class,
+                        e -> assertThat(e.params()).containsEntry("maxPixels", 16_000_000L));
     }
 
     private Path write(String name, byte[] content) throws IOException {

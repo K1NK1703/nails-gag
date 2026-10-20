@@ -43,6 +43,9 @@ public final class TestImages {
      */
     public static final String WEBP_LOSSY_ALPHA_20MP = "images/lossy-alpha-20mp.webp";
 
+    /** Анимированный WebP с потерями 64×48 из двух кадров (красный, синий), как его пишет libwebp. */
+    public static final String WEBP_ANIMATED = "images/animated.webp";
+
     /** Маркер JPEG APP1: в нём EXIF. */
     public static final int APP1 = 0xE1;
 
@@ -126,17 +129,100 @@ public final class TestImages {
         return out.toByteArray();
     }
 
+    /** Флаг прозрачности в {@code VP8X}. */
+    public static final int VP8X_ALPHA = 0x10;
+
+    /** Флаг анимации в {@code VP8X}. */
+    public static final int VP8X_ANIMATION = 0x02;
+
+    /** Блок контейнера RIFF внутри WebP. */
+    public record WebpChunk(String fourCc, byte[] payload) {}
+
     /** WebP из одного заголовка {@code VP8X} (холст 64×48) без блока данных картинки. */
     public static byte[] webpWithoutImageData() {
-        var vp8x = ByteBuffer.allocate(10).order(ByteOrder.LITTLE_ENDIAN);
-        vp8x.putInt(0); // флаги и резерв
-        vp8x.put((byte) 63).put((byte) 0).put((byte) 0); // ширина − 1, 24 бита
-        vp8x.put((byte) 47).put((byte) 0).put((byte) 0); // высота − 1
-        var riff = ByteBuffer.allocate(12 + 8 + 10).order(ByteOrder.LITTLE_ENDIAN);
-        riff.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(4 + 8 + 10);
-        riff.put("WEBP".getBytes(StandardCharsets.US_ASCII));
-        riff.put("VP8X".getBytes(StandardCharsets.US_ASCII)).putInt(10).put(vp8x.array());
-        return riff.array();
+        return webp(vp8x(0, 64, 48));
+    }
+
+    /** WebP из заданных блоков: заголовок RIFF и блоки с выравниванием до чётной длины. */
+    public static byte[] webp(WebpChunk... chunks) {
+        var body = new ByteArrayOutputStream();
+        body.writeBytes("WEBP".getBytes(StandardCharsets.US_ASCII));
+        for (var chunk : chunks) {
+            body.writeBytes(riffChunk(chunk));
+        }
+        var out = new ByteArrayOutputStream();
+        out.writeBytes("RIFF".getBytes(StandardCharsets.US_ASCII));
+        out.writeBytes(littleEndian(body.size()));
+        out.writeBytes(body.toByteArray());
+        return out.toByteArray();
+    }
+
+    /** Первый блок этого типа из WebP-ресурса. */
+    public static WebpChunk webpChunk(String resource, String fourCc) {
+        var bytes = ByteBuffer.wrap(resource(resource)).order(ByteOrder.LITTLE_ENDIAN);
+        var position = 12;
+        while (position + 8 <= bytes.limit()) {
+            var type = new String(bytes.array(), position, 4, StandardCharsets.US_ASCII);
+            var size = bytes.getInt(position + 4);
+            if (type.equals(fourCc)) {
+                return new WebpChunk(type, Arrays.copyOfRange(bytes.array(), position + 8, position + 8 + size));
+            }
+            position += 8 + size + (size & 1);
+        }
+        throw new IllegalArgumentException("no " + fourCc + " in " + resource);
+    }
+
+    /** Заголовок расширенного формата: флаги и размер холста. */
+    public static WebpChunk vp8x(int flags, int width, int height) {
+        var payload = ByteBuffer.allocate(10).order(ByteOrder.LITTLE_ENDIAN);
+        payload.putInt(flags); // флаги и три байта резерва
+        putInt24(payload, width - 1);
+        putInt24(payload, height - 1);
+        return new WebpChunk("VP8X", payload.array());
+    }
+
+    /** Параметры анимации: фон и число повторов. */
+    public static WebpChunk anim() {
+        return new WebpChunk("ANIM", new byte[6]);
+    }
+
+    /** Кадр анимации во весь холст с вложенными блоками. */
+    public static WebpChunk anmf(int width, int height, WebpChunk... frame) {
+        var payload = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN);
+        putInt24(payload, 0); // смещение X / 2
+        putInt24(payload, 0); // смещение Y / 2
+        putInt24(payload, width - 1);
+        putInt24(payload, height - 1);
+        putInt24(payload, 100); // длительность, мс
+        payload.put((byte) 0); // флаги
+        var out = new ByteArrayOutputStream();
+        out.writeBytes(payload.array());
+        for (var chunk : frame) {
+            out.writeBytes(riffChunk(chunk));
+        }
+        return new WebpChunk("ANMF", out.toByteArray());
+    }
+
+    private static byte[] riffChunk(WebpChunk chunk) {
+        var out = new ByteArrayOutputStream();
+        out.writeBytes(chunk.fourCc().getBytes(StandardCharsets.US_ASCII));
+        out.writeBytes(littleEndian(chunk.payload().length));
+        out.writeBytes(chunk.payload());
+        if (chunk.payload().length % 2 == 1) {
+            out.write(0);
+        }
+        return out.toByteArray();
+    }
+
+    private static byte[] littleEndian(int value) {
+        return ByteBuffer.allocate(4)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(value)
+                .array();
+    }
+
+    private static void putInt24(ByteBuffer buffer, int value) {
+        buffer.put((byte) value).put((byte) (value >> 8)).put((byte) (value >> 16));
     }
 
     /** PNG с EXIF в блоке {@code eXIf}: в EXIF только тег Orientation. */
