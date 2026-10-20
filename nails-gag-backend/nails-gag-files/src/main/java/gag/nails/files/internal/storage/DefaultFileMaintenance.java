@@ -1,6 +1,5 @@
 package gag.nails.files.internal.storage;
 
-import gag.nails.common.error.InternalException;
 import gag.nails.files.FileMaintenance;
 import gag.nails.files.model.FilePurpose;
 import java.io.IOException;
@@ -21,9 +20,9 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Уборка хранилища. Возраст каталогов и временных файлов на диске — по времени их изменения, сравнивается с часами
@@ -36,43 +35,61 @@ class DefaultFileMaintenance implements FileMaintenance {
     /** Сколько «сирота» ждёт привязки и сколько живут каталог без строки и остатки загрузки. */
     static final Duration GRACE_PERIOD = Duration.ofDays(1);
 
-    /** Сколько идентификаторов сверяется с базой одним запросом. */
+    /** Сколько «сирот» удаляется одной транзакцией и сколько идентификаторов сверяется с базой одним запросом. */
     private static final int BATCH_SIZE = 500;
 
     private static final Logger log = LoggerFactory.getLogger(DefaultFileMaintenance.class);
 
     private final StoredFileRepository files;
+    private final TransactionTemplate transaction;
     private final StorageLayout layout;
     private final Clock clock;
 
-    DefaultFileMaintenance(StoredFileRepository files, StorageLayout layout, Clock clock) {
+    DefaultFileMaintenance(
+            StoredFileRepository files, TransactionTemplate transaction, StorageLayout layout, Clock clock) {
         this.files = files;
+        this.transaction = transaction;
         this.layout = layout;
         this.clock = clock;
     }
 
+    /**
+     * Пачками по {@value #BATCH_SIZE}, от старых к новым, каждая — в своей транзакции: блокировки строк держатся
+     * недолго, а файлы пачки стираются сразу после её фиксации. Идёт, пока очередная пачка не окажется пустой.
+     */
     @Override
-    @Transactional
     public int removeOrphans() {
-        var orphans = files.lockOrphansCreatedBefore(clock.instant().minus(GRACE_PERIOD));
-        if (orphans.isEmpty()) {
-            return 0;
-        }
-        files.deleteAll(orphans);
-        var directories = orphans.stream()
-                .map(orphan -> layout.directory(orphan.purpose(), orphan.id()))
-                .toList();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                directories.forEach(StorageLayout::deleteQuietly);
-            }
-        });
-        return orphans.size();
+        var cutoff = clock.instant().minus(GRACE_PERIOD);
+        var removed = 0;
+        int batch;
+        do {
+            batch = transaction.execute(status -> removeOrphanBatch(cutoff));
+            removed += batch;
+        } while (batch > 0);
+        return removed;
     }
 
+    private int removeOrphanBatch(Instant cutoff) {
+        var removed = files.deleteOrphans(cutoff, BATCH_SIZE);
+        if (!removed.isEmpty()) {
+            var directories = removed.stream()
+                    .map(file -> layout.directory(file.getPurpose(), file.getId()))
+                    .toList();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    directories.forEach(StorageLayout::deleteQuietly);
+                }
+            });
+        }
+        return removed.size();
+    }
+
+    /**
+     * Без транзакции: сверка долго ходит по диску, а базе нужны лишь короткие запросы «какие из этих есть». Сбой
+     * чтения одного каталога пишется в лог и не мешает остальным.
+     */
     @Override
-    @Transactional(readOnly = true)
     public int removeStrayDirectories() {
         var cutoff = clock.instant().minus(GRACE_PERIOD);
         var removed = 0;
@@ -126,7 +143,8 @@ class DefaultFileMaintenance implements FileMaintenance {
         } catch (NoSuchFileException e) {
             return List.of();
         } catch (IOException e) {
-            throw new InternalException("cannot list file storage directory " + directory, e);
+            log.warn("cannot list file storage directory {}, skipping it this run", directory, e);
+            return stale;
         }
         return stale;
     }
@@ -139,7 +157,8 @@ class DefaultFileMaintenance implements FileMaintenance {
         } catch (NoSuchFileException e) {
             return false;
         } catch (IOException e) {
-            throw new InternalException("cannot read modification time of " + entry, e);
+            log.warn("cannot read modification time of {}, skipping it this run", entry, e);
+            return false;
         }
     }
 

@@ -9,7 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -97,6 +99,22 @@ class FileMaintenanceTest extends FilesTestSupport {
         assertThat(staleUpload).doesNotExist();
         assertThat(staleStaging).doesNotExist();
         assertThat(freshUpload).exists();
+    }
+
+    @Test
+    void unreadableDirectoryDoesNotStopTheSweep() throws IOException {
+        var unreadable = Files.createDirectories(ROOT.resolve("portfolio"));
+        var stray = createDirectory(
+                ROOT.resolve("reference").resolve(UUID.randomUUID().toString()));
+        setAge(stray, Duration.ofDays(2));
+        Files.setPosixFilePermissions(unreadable, Set.of());
+        try {
+            assertThat(maintenance.removeStrayDirectories()).isEqualTo(1);
+        } finally {
+            Files.setPosixFilePermissions(unreadable, PosixFilePermissions.fromString("rwx------"));
+        }
+
+        assertThat(stray).doesNotExist();
     }
 
     /** Каталог с одним вариантом внутри, как у настоящего файла. */

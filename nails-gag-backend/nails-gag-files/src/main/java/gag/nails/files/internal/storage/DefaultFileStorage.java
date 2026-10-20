@@ -147,7 +147,13 @@ class DefaultFileStorage implements FileStorage {
         if (file.isEmpty()) {
             return;
         }
-        files.delete(file.get());
+        var removed = files.deleteRow(fileId);
+        // Условное удаление идёт мимо контекста персистентности: копия строки из него убирается вручную.
+        entityManager.detach(file.get());
+        if (removed == 0) {
+            // Файл одновременно удалила другая транзакция или уборка: файлы на диске сотрёт она.
+            return;
+        }
         var directory = layout.directory(file.get().purpose(), fileId);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override

@@ -1,17 +1,23 @@
 package gag.nails.files.internal.storage;
 
 import gag.nails.files.model.FilePurpose;
-import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 interface StoredFileRepository extends JpaRepository<StoredFileEntity, UUID> {
+
+    /** Удалённый файл: что стереть с диска. */
+    interface RemovedFile {
+
+        UUID getId();
+
+        FilePurpose getPurpose();
+    }
 
     /**
      * Привязывает «сироту», если назначение и загрузивший совпадают; возвращает 1, если привязал, и 0, если нет.
@@ -28,13 +34,29 @@ interface StoredFileRepository extends JpaRepository<StoredFileEntity, UUID> {
     int attach(UUID id, FilePurpose purpose, UUID uploadedBy, Instant now);
 
     /**
-     * «Сироты», загруженные раньше {@code createdBefore}, под блокировкой строк (Hibernate берёт FOR NO KEY UPDATE) до конца
-     * транзакции. Одновременная привязка либо успевает раньше — и PostgreSQL, дождавшись её, перепроверяет условие и
-     * не возвращает строку, — либо ждёт уборку и не находит файла.
+     * Удаляет до {@code limit} самых старых «сирот», загруженных раньше {@code createdBefore}, и возвращает, что удалено.
+     * {@code FOR UPDATE SKIP LOCKED}: строку, которую прямо сейчас привязывают или удаляют, уборка пропускает, а не
+     * ждёт — ни ожидания, ни взаимной блокировки с транзакцией владельца. Пропущенная привязка либо зафиксируется (файл
+     * больше не «сирота»), либо откатится, и файл уберёт следующий запуск.
      */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select f from StoredFileEntity f where f.attachedAt is null and f.createdAt < :createdBefore")
-    List<StoredFileEntity> lockOrphansCreatedBefore(Instant createdBefore);
+    @Query(value = """
+                    delete from files.stored_file
+                    where id in (
+                        select id from files.stored_file
+                        where attached_at is null and created_at < :createdBefore
+                        order by created_at
+                        limit :limit
+                        for update skip locked)
+                    returning id, purpose""", nativeQuery = true)
+    List<RemovedFile> deleteOrphans(Instant createdBefore, int limit);
+
+    /**
+     * Удаляет строку; возвращает 1, если удалил, и 0, если её уже нет. Условное удаление вместо {@code delete(entity)}:
+     * одновременное удаление того же файла другой транзакцией (или уборкой) даёт 0, а не ошибку «строка уже удалена».
+     */
+    @Modifying
+    @Query("delete from StoredFileEntity f where f.id = :id")
+    int deleteRow(UUID id);
 
     /** Какие из идентификаторов есть в таблице. */
     @Query("select f.id from StoredFileEntity f where f.id in :ids")
