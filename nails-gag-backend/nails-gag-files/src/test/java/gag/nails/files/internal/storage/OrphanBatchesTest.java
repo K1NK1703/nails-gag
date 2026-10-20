@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.common.actor.Actor;
 import gag.nails.files.FileStorage;
+import gag.nails.files.FilesTestProperties;
 import gag.nails.files.model.FilePurpose;
 import gag.nails.files.model.StoredFileView;
 import gag.nails.testsupport.ModuleTest;
@@ -24,6 +25,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** Уборка «сирот» пачками: размер пачки здесь 2, поэтому три «сироты» уходят за две пачки и пустую третью. */
 @ModuleTest
+@FilesTestProperties
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class OrphanBatchesTest {
 

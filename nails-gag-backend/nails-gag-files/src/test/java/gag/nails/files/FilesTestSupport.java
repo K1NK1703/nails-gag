@@ -20,7 +20,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.TestPropertySource;
 
 /**
  * Тесты хранилища на настоящих транзакциях: наследник ставит на себя {@code @Transactional(propagation =
@@ -31,18 +30,12 @@ import org.springframework.test.context.TestPropertySource;
  * build/test-files/<задача>} модуля, только для тестов этого модуля). Тесты смотрят, что осталось на диске, и после
  * каждого теста очищают и его, и таблицу.
  */
-@TestPropertySource(
-        properties = {
-            "nails-gag.files.max-file-bytes=" + FilesTestSupport.MAX_FILE_BYTES,
-            "nails-gag.files.max-concurrent-processing=" + FilesTestSupport.PROCESSING_SLOTS,
-            "nails-gag.files.processing-wait=200ms"
-        })
+@FilesTestProperties
 abstract class FilesTestSupport {
 
-    /** Лимит размера файла в тестах — 1 МиБ, чтобы проверка лимита не гоняла 15 МБ. */
-    static final long MAX_FILE_BYTES = 1_048_576;
+    static final long MAX_FILE_BYTES = FilesTestProperties.MAX_FILE_BYTES;
 
-    static final int PROCESSING_SLOTS = 2;
+    static final int PROCESSING_SLOTS = FilesTestProperties.PROCESSING_SLOTS;
 
     static final UUID ACCOUNT = UUID.fromString("0198a1f0-0000-7000-8000-000000000001");
     static final UUID OTHER_ACCOUNT = UUID.fromString("0198a1f0-0000-7000-8000-000000000002");
