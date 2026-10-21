@@ -15,12 +15,14 @@ import gag.nails.portfolio.model.WorkSource;
 import gag.nails.portfolio.model.WorkView;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 
 @PortfolioModuleTest
 class PortfolioServiceTest extends PortfolioTestSupport {
@@ -96,12 +98,16 @@ class PortfolioServiceTest extends PortfolioTestSupport {
     void clientOfErasedCardIsRejected() {
         var card = card("Мария");
         var booking = booking(card);
+        var work = example("Пример");
         clients.erase(card);
 
         assertInvalid(
                 () -> portfolio.add(new AddWork(upload(), "Френч", null, WorkSource.CLIENT, booking), MASTER),
                 "bookingId");
-        assertThat(queries.all(MASTER)).isEmpty();
+        assertInvalid(
+                () -> portfolio.update(work.id(), new UpdateWork("Френч", null, WorkSource.CLIENT, booking), MASTER),
+                "bookingId");
+        assertThat(queries.all(MASTER)).singleElement().isEqualTo(work);
     }
 
     @Test
@@ -138,6 +144,26 @@ class PortfolioServiceTest extends PortfolioTestSupport {
                 () -> portfolio.update(
                         work.id(), new UpdateWork("x".repeat(201), null, WorkSource.EXAMPLE, null), MASTER),
                 "alt");
+    }
+
+    /** Длина — в символах, как {@code char_length} в базе: эмодзи вне BMP — один символ, а не два. */
+    @Test
+    void textLengthIsCountedInCharacters() {
+        var emoji = "💅";
+        var longest = emoji.repeat(200);
+
+        var work = portfolio.add(new AddWork(upload(), longest, longest, WorkSource.EXAMPLE, null), MASTER);
+
+        assertThat(longest).hasSize(400);
+        assertThat(view(work.id()).alt()).isEqualTo(longest);
+        assertThat(view(work.id()).caption()).isEqualTo(longest);
+        assertInvalid(
+                () -> portfolio.add(new AddWork(upload(), emoji.repeat(201), null, WorkSource.EXAMPLE, null), MASTER),
+                "alt");
+        assertInvalid(
+                () -> portfolio.update(
+                        work.id(), new UpdateWork("Френч", emoji.repeat(201), WorkSource.EXAMPLE, null), MASTER),
+                "caption");
     }
 
     @Test
@@ -190,10 +216,28 @@ class PortfolioServiceTest extends PortfolioTestSupport {
                 "orderedWorkIds");
         assertInvalid(
                 () -> portfolio.reorder(List.of(first.id(), second.id(), UUID.randomUUID()), MASTER), "orderedWorkIds");
+        assertInvalid(() -> portfolio.reorder(Arrays.asList(first.id(), second.id(), null), MASTER), "orderedWorkIds");
         assertThat(queries.all(MASTER)).extracting(WorkView::id).containsExactly(third.id(), first.id(), second.id());
         // Новая работа после перестановки — в конце.
         assertThat(example("Четвёртая").position())
                 .isGreaterThan(view(second.id()).position());
+    }
+
+    /**
+     * Уникальность позиций проверяется сразу, а не при фиксации: откладывает её только перестановка, и только на
+     * время своих изменений. Последний шаг теста: ошибка прерывает транзакцию теста.
+     */
+    @Test
+    void positionsAreUniqueAtOnce() {
+        var first = example("Первая");
+        var second = example("Вторая");
+        portfolio.reorder(List.of(second.id(), first.id()), MASTER);
+
+        assertThatThrownBy(() -> jdbc.sql("update portfolio.work set position = :position where id = :id")
+                        .param("position", view(first.id()).position())
+                        .param("id", second.id())
+                        .update())
+                .isInstanceOf(DuplicateKeyException.class);
     }
 
     @Test

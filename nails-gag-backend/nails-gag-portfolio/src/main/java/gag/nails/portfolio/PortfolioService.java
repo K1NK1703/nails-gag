@@ -2,7 +2,6 @@ package gag.nails.portfolio;
 
 import gag.nails.booking.BookingQueries;
 import gag.nails.booking.error.BookingNotFoundException;
-import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
@@ -21,8 +20,12 @@ import java.util.UUID;
  * видна актору, иначе — исключения модуля записей ({@link BookingNotFoundException}, {@link AccessDeniedException}).
  * Клиент записи с обезличенной карточкой — {@link ValidationException} (поле {@code bookingId}): работы такого
  * клиента удалены вместе с его карточкой и новые не заводятся. Если карточку клиента записи объединили с другой,
- * пока команда ждала её, — {@link ClientNotFoundException}: запись уже у оставшейся карточки, команду достаточно
- * повторить.
+ * пока команда ждала её, — тоже {@link ValidationException} (поле {@code bookingId}): запись уже у оставшейся
+ * карточки, команду достаточно повторить.
+ *
+ * <p>Команды с работой клиента вызывать как внешнюю транзакцию или в транзакции, не читавшей карточку клиента
+ * записи: карточка перечитывается после ожидания её блокировки в портфолио, а уже загруженную транзакция взяла бы
+ * из своего кэша.
  */
 public interface PortfolioService {
 
@@ -30,8 +33,9 @@ public interface PortfolioService {
      * Новая работа: видима и встаёт в конец. Файл привязывается к работе в той же транзакции.
      *
      * @throws ValidationException (поле {@code bookingId}) у {@link WorkSource#CLIENT} нет записи, у другого
-     *     источника запись есть, клиент записи обезличен; (поле {@code fileId}) файла нет, у него другое назначение,
-     *     его загрузил другой аккаунт или он уже занят; нарушены ограничения полей команды
+     *     источника запись есть, клиент записи обезличен или объединён; (поле {@code fileId}) файла нет, у него
+     *     другое назначение, его загрузил другой аккаунт или он уже занят; ({@code alt}, {@code caption}) пустое
+     *     описание, текст длиннее 200 символов
      */
     WorkView add(AddWork command, Actor actor);
 
@@ -40,7 +44,7 @@ public interface PortfolioService {
      * у {@link #add}; у {@link WorkSource#CLIENT} клиент каждый раз берётся из записи.
      *
      * @throws WorkNotFoundException если работы нет
-     * @throws ValidationException (поле {@code bookingId}) как у {@link #add}; нарушены ограничения полей команды
+     * @throws ValidationException (поля {@code bookingId}, {@code alt}, {@code caption}) как у {@link #add}
      */
     WorkView update(UUID workId, UpdateWork command, Actor actor);
 

@@ -3,14 +3,19 @@ package gag.nails.portfolio.internal.work;
 import gag.nails.files.FileStorage;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Работы клиента для подписчиков событий его карточки. Сначала блокировка клиента ({@link PortfolioLocks#client}):
  * добавление его работы, начатое раньше, уже зафиксировано и попадёт в выборку, начатое позже — дождётся и увидит
  * итог. Затем строки работ под блокировкой: параллельная правка, показ, перестановка или удаление той же работы идут
  * строго до или после.
+ *
+ * <p>Только в транзакции подписчика ({@code MANDATORY}): вне её блокировка клиента отпустилась бы сразу.
  */
 @Component
+@Transactional(propagation = Propagation.MANDATORY)
 public class ClientWorks {
 
     private final WorkRepository works;

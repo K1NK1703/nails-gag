@@ -31,14 +31,15 @@ class DefaultPortfolioQueries implements PortfolioQueries {
     }
 
     /**
-     * Страница и {@code total} — два запроса; {@code REPEATABLE READ} даёт им один снимок базы, чтобы отзыв согласия
-     * между ними не рассогласовал страницу и число. Внутри чужой транзакции — её снимок.
+     * Страница и {@code total} — два запроса. Вне транзакции своя с {@code REPEATABLE READ} даёт им один снимок базы:
+     * отзыв согласия между ними не рассогласует страницу и число. Внутри чужой транзакции действует её уровень
+     * изоляции (Spring не меняет его у уже начатой), при {@code READ COMMITTED} согласованность не гарантируется.
      */
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Paged<PublicWork> published(Paging paging) {
         var page = works.findPublished(PageRequest.of(paging.page(), paging.size()));
-        return Paged.of(page.getContent(), paging, page.getTotalElements()).map(WorkRow::toPublic);
+        return Paged.of(page.getContent(), paging, page.getTotalElements()).map(WorkEntity::toPublic);
     }
 
     @Override

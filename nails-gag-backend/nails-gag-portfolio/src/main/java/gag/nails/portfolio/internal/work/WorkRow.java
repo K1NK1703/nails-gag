@@ -1,6 +1,5 @@
 package gag.nails.portfolio.internal.work;
 
-import gag.nails.portfolio.model.PublicWork;
 import gag.nails.portfolio.model.WorkConsent;
 import gag.nails.portfolio.model.WorkView;
 import java.util.UUID;
@@ -42,10 +41,5 @@ record WorkRow(WorkEntity work, @Nullable UUID consentClientId) {
                 published(),
                 consent(),
                 work.createdAt());
-    }
-
-    /** Работа на лендинге; вызывать только для опубликованной. */
-    static PublicWork toPublic(WorkEntity work) {
-        return new PublicWork(work.id(), work.fileId(), work.alt(), work.caption(), work.width(), work.height());
     }
 }

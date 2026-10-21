@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 interface WorkRepository extends JpaRepository<WorkEntity, UUID> {
@@ -21,9 +22,9 @@ interface WorkRepository extends JpaRepository<WorkEntity, UUID> {
 
     String ROW = "select new gag.nails.portfolio.internal.work.WorkRow(w, c.clientId)" + WITH_CONSENT;
 
-    /** Опубликованные работы по порядку; {@code total} — по тому же условию. */
+    /** Опубликованные работы по порядку (позиция уникальна); {@code total} — по тому же условию. */
     @Query(
-            value = "select w" + WITH_CONSENT + PUBLISHED + " order by w.position, w.id",
+            value = "select w" + WITH_CONSENT + PUBLISHED + " order by w.position",
             countQuery = "select count(w)" + WITH_CONSENT + PUBLISHED)
     Page<WorkEntity> findPublished(Pageable pageable);
 
@@ -31,7 +32,7 @@ interface WorkRepository extends JpaRepository<WorkEntity, UUID> {
     @Query("select count(w)" + WITH_CONSENT + PUBLISHED + " and w.fileId = :fileId")
     long countPublishedByFileId(UUID fileId);
 
-    @Query(ROW + " order by w.position, w.id")
+    @Query(ROW + " order by w.position")
     List<WorkRow> findAllRows();
 
     @Query(ROW + " where w.id = :workId")
@@ -40,6 +41,21 @@ interface WorkRepository extends JpaRepository<WorkEntity, UUID> {
     /** Последняя позиция; пусто, если работ нет. */
     @Query("select max(w.position) from WorkEntity w")
     Optional<Integer> findMaxPosition();
+
+    /**
+     * Откладывает проверку уникальности позиций до {@link #checkPositions()}: перестановка по пути повторяет позиции.
+     */
+    @Modifying
+    @Query(value = "set constraints portfolio.work_position_key deferred", nativeQuery = true)
+    void deferPositionCheck();
+
+    /**
+     * Сбрасывает изменения и проверяет уникальность позиций сейчас, а не при фиксации: нарушение — ошибка внутри
+     * метода, который переставлял, а не у того, кто фиксирует транзакцию.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "set constraints portfolio.work_position_key immediate", nativeQuery = true)
+    void checkPositions();
 
     /**
      * Работа под блокировкой строки ({@code SELECT … FOR UPDATE}): параллельное изменение той же работы дождётся

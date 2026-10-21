@@ -11,17 +11,17 @@ import org.springframework.stereotype.Component;
  * {@link ClientErased}; события отзыва согласия при обезличивании нет.
  *
  * <p>Карточка уже заблокирована модулем клиентов. Порядок блокировок — карточка, затем блокировка клиента и строки
- * работ ({@link ClientWorks}), затем строки файлов и копии согласий. Добавление работы этого клиента, начатое
- * одновременно, либо уже зафиксировано и удаляется здесь, либо дождётся и откажет: клиент обезличен.
+ * работ ({@link ClientWorks}), затем строки файлов и копии согласий. Добавление или правка работы с записью этого
+ * клиента, начатые одновременно, либо уже зафиксированы, и работа удаляется здесь, либо дождутся и откажут: клиент
+ * обезличен.
  */
-// Имя бина задано: у модуля записей слушатель с тем же именем класса.
-@Component("portfolioClientEraseListener")
-class ClientEraseListener {
+@Component
+class PortfolioClientEraseListener {
 
     private final ClientWorks works;
     private final PublicationConsentRepository consents;
 
-    ClientEraseListener(ClientWorks works, PublicationConsentRepository consents) {
+    PortfolioClientEraseListener(ClientWorks works, PublicationConsentRepository consents) {
         this.works = works;
         this.consents = consents;
     }

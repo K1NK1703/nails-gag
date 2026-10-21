@@ -1,5 +1,6 @@
 package gag.nails.portfolio.internal.work;
 
+import gag.nails.portfolio.model.PublicWork;
 import gag.nails.portfolio.model.WorkSource;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -130,5 +131,10 @@ class WorkEntity {
 
     Instant createdAt() {
         return createdAt;
+    }
+
+    /** Работа на лендинге; вызывать только для опубликованной. */
+    PublicWork toPublic() {
+        return new PublicWork(id, fileId, alt, caption, width, height);
     }
 }

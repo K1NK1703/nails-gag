@@ -6,7 +6,6 @@ import gag.nails.booking.BookingService;
 import gag.nails.booking.command.CreateBooking;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.command.CreateClient;
-import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.paging.Paging;
@@ -131,14 +130,16 @@ class PortfolioConcurrencyTest {
     }
 
     @Test
-    void addWaitingForMergeGetsClientNotFound() throws Exception {
+    void addWaitingForMergeIsRejectedAndRetrySucceeds() throws Exception {
         var card = card("Мария");
         var survivor = card("Маша");
         var add = clientWork(card);
 
         var added = locks.whileRowIsHeld(() -> clients.merge(card, survivor, Actor.master()), add::run);
 
-        assertThat(added.failure()).isInstanceOf(ClientNotFoundException.class);
+        assertThat(added.failure())
+                .isInstanceOfSatisfying(
+                        ValidationException.class, e -> assertThat(e.field()).isEqualTo("bookingId"));
         assertThat(clientWorks(card)).isEmpty();
         assertThat(clientWorks(survivor)).isEmpty();
         // Повтор находит запись уже у оставшейся карточки.

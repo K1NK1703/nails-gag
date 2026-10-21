@@ -8,15 +8,23 @@ import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.common.actor.Actor;
 import gag.nails.portfolio.error.WorkNotFoundException;
+import gag.nails.portfolio.internal.work.ClientWorks;
 import gag.nails.portfolio.model.WorkConsent;
 import gag.nails.portfolio.model.WorkView;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.IllegalTransactionStateException;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Копия согласий на публикацию фото следует за событиями модуля клиентов в их транзакции. */
 @PortfolioModuleTest
 class PortfolioConsentTest extends PortfolioTestSupport {
+
+    @Autowired
+    ClientWorks clientWorks;
 
     @Test
     void withdrawalHidesClientWorksAtOnce() {
@@ -139,6 +147,16 @@ class PortfolioConsentTest extends PortfolioTestSupport {
         assertThat(files.find(kept.fileId())).isPresent();
         assertThat(consentRows(card)).isZero();
         assertThat(consentRows(other)).isEqualTo(1);
+    }
+
+    /** Блокировка клиента вне транзакции отпустилась бы сразу: работы клиента меняются только в транзакции. */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void clientWorksNeedATransaction() {
+        assertThatThrownBy(() -> clientWorks.deleteAll(UUID.randomUUID()))
+                .isInstanceOf(IllegalTransactionStateException.class);
+        assertThatThrownBy(() -> clientWorks.reassign(UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(IllegalTransactionStateException.class);
     }
 
     private int consentRows(UUID clientId) {

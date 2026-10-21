@@ -17,11 +17,11 @@ import org.springframework.stereotype.Component;
  * Повтор {@link ConsentGiven} при действующем согласии ничего не меняет.
  */
 @Component
-class ConsentListener {
+class PortfolioConsentListener {
 
     private final PublicationConsentRepository consents;
 
-    ConsentListener(PublicationConsentRepository consents) {
+    PortfolioConsentListener(PublicationConsentRepository consents) {
         this.consents = consents;
     }
 

@@ -2,9 +2,9 @@ package gag.nails.portfolio.internal.work;
 
 import gag.nails.booking.BookingQueries;
 import gag.nails.clients.ClientQueries;
-import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.common.error.InternalException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.validation.CommandValidator;
 import gag.nails.files.FileStorage;
@@ -38,6 +38,9 @@ class DefaultPortfolioService implements PortfolioService {
 
     private static final String NO_SUCH_FILE = "no such file uploaded by this account";
 
+    /** Предел длины описания и подписи — как в {@code CHECK} колонок {@code alt} и {@code caption}. */
+    private static final int MAX_TEXT_LENGTH = 200;
+
     private final WorkRepository works;
     private final PortfolioLocks locks;
     private final FileStorage files;
@@ -67,6 +70,7 @@ class DefaultPortfolioService implements PortfolioService {
     public WorkView add(AddWork command, Actor actor) {
         actor.requireWrite(Section.PORTFOLIO);
         validator.requireValid(command);
+        requireLengths(command.alt(), command.caption());
         requireBookingMatchesSource(command.source(), command.bookingId());
         var uploadedBy = actor.accountId();
         if (uploadedBy == null) {
@@ -75,11 +79,10 @@ class DefaultPortfolioService implements PortfolioService {
         }
         locks.order();
         var details = details(command.alt(), command.caption(), command.source(), command.bookingId(), actor);
-        var file = files.find(command.fileId()).orElseThrow(() -> new ValidationException("fileId", NO_SUCH_FILE));
-        if (file.purpose() != FilePurpose.PORTFOLIO) {
-            throw new ValidationException("fileId", "must be a " + FilePurpose.PORTFOLIO + " file");
-        }
-        files.attach(file.id(), FilePurpose.PORTFOLIO, uploadedBy);
+        // Привязка сама проверяет назначение, загрузившего и занятость; чужой файл неотличим от несуществующего.
+        files.attach(command.fileId(), FilePurpose.PORTFOLIO, uploadedBy);
+        var file = files.find(command.fileId())
+                .orElseThrow(() -> new InternalException("attached file " + command.fileId() + " is missing"));
         var position = works.findMaxPosition().map(last -> last + 1).orElse(0);
         var work = works.save(new WorkEntity(file.id(), file.width(), file.height(), details, position, now()));
         return view(work.id());
@@ -89,6 +92,7 @@ class DefaultPortfolioService implements PortfolioService {
     public WorkView update(UUID workId, UpdateWork command, Actor actor) {
         actor.requireWrite(Section.PORTFOLIO);
         validator.requireValid(command);
+        requireLengths(command.alt(), command.caption());
         requireBookingMatchesSource(command.source(), command.bookingId());
         if (!works.existsById(workId)) {
             throw new WorkNotFoundException(workId);
@@ -122,10 +126,13 @@ class DefaultPortfolioService implements PortfolioService {
         if (orderedWorkIds.size() != all.size() || !new HashSet<>(orderedWorkIds).equals(all.keySet())) {
             throw new ValidationException("orderedWorkIds", "must list every work exactly once");
         }
+        // Посреди перестановки позиции повторяются; проверка уникальности — после всех изменений, но до выхода.
+        works.deferPositionCheck();
         var position = 0;
         for (var id : orderedWorkIds) {
             all.get(id).setPosition(position++);
         }
+        works.checkPositions();
     }
 
     @Override
@@ -154,14 +161,37 @@ class DefaultPortfolioService implements PortfolioService {
     }
 
     /**
-     * Клиент записи под блокировкой клиента ({@link PortfolioLocks#client}). Под блокировкой карточка перечитывается:
+     * Длина описания и подписи — в символах (кодовых точках), как {@code char_length} в {@code CHECK} базы: эмодзи —
+     * один символ, хотя в Java это две единицы UTF-16. Поэтому не {@code @Size} в команде: он считал бы единицы UTF-16
+     * и отказывал бы раньше базы.
+     */
+    private static void requireLengths(String alt, @Nullable String caption) {
+        requireAtMost("alt", alt);
+        if (caption != null) {
+            requireAtMost("caption", caption);
+        }
+    }
+
+    private static void requireAtMost(String field, String value) {
+        if (value.codePointCount(0, value.length()) > MAX_TEXT_LENGTH) {
+            throw new ValidationException(field, "must be at most " + MAX_TEXT_LENGTH + " characters");
+        }
+    }
+
+    /**
+     * Клиент записи под блокировкой клиента ({@link PortfolioLocks#client}). Под блокировкой карточка читается заново:
      * пока ждали, её могли обезличить (работы клиента удалены — новая не заводится) или объединить с другой (запись
-     * уже у оставшейся; перечитать запись в этой транзакции нельзя — она закэширована, поэтому отказ).
+     * уже у оставшейся; перечитать запись в этой транзакции нельзя — она закэширована, поэтому отказ, повтор пройдёт).
+     *
+     * <p>Карточка читается из базы, только если эта транзакция её ещё не загружала: поэтому команды вызываются как
+     * внешняя транзакция или в транзакции, не читавшей карточку клиента записи.
      */
     private UUID clientOf(UUID bookingId, Actor actor) {
         var clientId = bookings.get(bookingId, actor).clientId();
         locks.client(clientId);
-        var client = clients.byId(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
+        var client = clients.byId(clientId)
+                .orElseThrow(() -> new ValidationException(
+                        "bookingId", "the client of the booking was merged into another card, retry"));
         if (client.erased()) {
             throw new ValidationException("bookingId", "the client of the booking is erased");
         }

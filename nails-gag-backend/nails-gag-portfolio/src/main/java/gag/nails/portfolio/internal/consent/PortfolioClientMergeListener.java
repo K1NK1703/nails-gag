@@ -15,14 +15,13 @@ import org.springframework.stereotype.Component;
  * Порядок блокировок — карточки, затем блокировка клиента и строки работ ({@link ClientWorks}), затем строки копии
  * согласий.
  */
-// Имя бина задано: у модуля записей слушатель с тем же именем класса.
-@Component("portfolioClientMergeListener")
-class ClientMergeListener {
+@Component
+class PortfolioClientMergeListener {
 
     private final ClientWorks works;
     private final PublicationConsentRepository consents;
 
-    ClientMergeListener(ClientWorks works, PublicationConsentRepository consents) {
+    PortfolioClientMergeListener(ClientWorks works, PublicationConsentRepository consents) {
         this.works = works;
         this.consents = consents;
     }
