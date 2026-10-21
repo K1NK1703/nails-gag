@@ -26,6 +26,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,9 @@ class BookingReferencesTest extends BookingTestSupport {
 
     @Autowired
     VisitMarks marks;
+
+    @Autowired
+    EarlierTimeOffers offers;
 
     @PersistenceContext
     EntityManager entityManager;
@@ -120,6 +124,42 @@ class BookingReferencesTest extends BookingTestSupport {
         assertThatThrownBy(() -> references.remove(booking.id(), kept.fileId(), actor))
                 .isInstanceOf(ReferencesClosedException.class);
         assertThat(references.list(booking.id(), actor)).containsExactly(kept);
+    }
+
+    @Test
+    void clientReferencesCloseAtAgreedEarlierStart() {
+        var anna = client("Анна");
+        var actor = signedIn(anna);
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        var kept = references.add(booking.id(), upload(actor), actor);
+        var agreedStart = slot.startsAt().minus(Duration.ofMinutes(90));
+        offers.propose(booking.id(), agreedStart, master);
+        offers.respond(booking.id(), true, Actor.client(anna));
+        var late = upload(actor);
+
+        // Слот ещё не начался, но клиент согласился прийти раньше — визит уже идёт.
+        clock.set(agreedStart.plus(Duration.ofMinutes(1)));
+
+        assertThatThrownBy(() -> references.add(booking.id(), late, actor))
+                .isInstanceOf(ReferencesClosedException.class);
+        assertThatThrownBy(() -> references.remove(booking.id(), kept.fileId(), actor))
+                .isInstanceOf(ReferencesClosedException.class);
+        assertThat(references.list(booking.id(), actor)).containsExactly(kept);
+    }
+
+    @Test
+    void clientRemovesReferenceAddedByStaff() {
+        var anna = client("Анна");
+        var actor = signedIn(anna);
+        var staff = signedInMaster();
+        var booking = book(anna, slot(MONDAY, "12:00"));
+        var byStaff = references.add(booking.id(), upload(staff), staff);
+
+        references.remove(booking.id(), byStaff.fileId(), actor);
+
+        assertThat(references.list(booking.id(), actor)).isEmpty();
+        assertThat(files.find(byStaff.fileId())).isEmpty();
     }
 
     @Test
@@ -324,6 +364,31 @@ class BookingReferencesTest extends BookingTestSupport {
         assertThat(references.list(future.id(), master)).isEmpty();
         assertThat(files.find(first.fileId())).isEmpty();
         assertThat(files.find(second.fileId())).isEmpty();
+    }
+
+    @Test
+    void nobodyAddsReferencesToBookingsOfErasedClient() {
+        var anna = client("Анна");
+        var staff = signedInMaster();
+        var started = slot(MONDAY, "12:00");
+        var startedBooking = book(anna, started);
+        var future = byMaster(anna, slot(TUESDAY, "12:00"));
+        var leftover = references.add(startedBooking.id(), upload(staff), staff);
+        timeIsAfterStartOf(started, Duration.ofMinutes(30));
+        clients.erase(anna);
+        entityManager.flush();
+        entityManager.clear();
+
+        for (var booking : List.of(startedBooking, future)) {
+            var file = upload(staff);
+            assertThatThrownBy(() -> references.add(booking.id(), file, staff))
+                    .isInstanceOfSatisfying(
+                            ValidationException.class,
+                            e -> assertThat(e.field()).isEqualTo("bookingId"));
+        }
+        // Удалять сотрудник может и у обезличенного: вдруг что-то осталось.
+        references.remove(startedBooking.id(), leftover.fileId(), staff);
+        assertThat(references.list(startedBooking.id(), master)).isEmpty();
     }
 
     @Test

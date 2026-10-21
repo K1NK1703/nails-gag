@@ -3,10 +3,14 @@ package gag.nails.booking.internal.reference;
 import gag.nails.booking.BookingReferences;
 import gag.nails.booking.error.ReferencesClosedException;
 import gag.nails.booking.error.ReferencesLimitReachedException;
+import gag.nails.booking.internal.booking.BookingEntity;
 import gag.nails.booking.internal.booking.BookingFinder;
+import gag.nails.booking.internal.booking.BookingRules;
 import gag.nails.booking.internal.booking.CurrentRules;
+import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.ReferenceAuthor;
 import gag.nails.booking.model.ReferenceView;
+import gag.nails.clients.ClientQueries;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.InternalException;
@@ -23,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Изменения берут строку записи под блокировку до проверок ({@link BookingFinder#requireAccessibleForUpdate}):
  * параллельные добавления к одной записи считают референсы по очереди, а отмена, перенос или отметка той же записи
  * идут строго до или после. Порядок блокировок — запись, затем строка файла ({@link FileStorage#attach},
- * {@link FileStorage#delete}); блокировки клиента и слота здесь не нужны.
+ * {@link FileStorage#delete}); блокировки клиента и слота здесь не нужны: карточка клиента только читается.
  */
 @Service
 @Transactional
@@ -36,18 +40,21 @@ class DefaultBookingReferences implements BookingReferences {
     private final BookingFinder finder;
     private final CurrentRules currentRules;
     private final FileStorage files;
+    private final ClientQueries clients;
 
     DefaultBookingReferences(
             ReferenceRepository references,
             ReferenceRemoval removal,
             BookingFinder finder,
             CurrentRules currentRules,
-            FileStorage files) {
+            FileStorage files,
+            ClientQueries clients) {
         this.references = references;
         this.removal = removal;
         this.finder = finder;
         this.currentRules = currentRules;
         this.files = files;
+        this.clients = clients;
     }
 
     @Override
@@ -62,10 +69,10 @@ class DefaultBookingReferences implements BookingReferences {
     @Override
     public ReferenceView add(UUID bookingId, UUID fileId, Actor actor) {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
+        requireClientNotErased(booking);
         var author = authorOf(actor);
         var rules = currentRules.get();
-        if (author == ReferenceAuthor.CLIENT
-                && (!booking.status().isActive() || rules.visitStarted(booking.slotStartsAt()))) {
+        if (author == ReferenceAuthor.CLIENT && (!booking.status().isActive() || visitStarted(booking, rules))) {
             throw new ReferencesClosedException();
         }
         var uploadedBy = actor.accountId();
@@ -86,7 +93,7 @@ class DefaultBookingReferences implements BookingReferences {
     @Override
     public void remove(UUID bookingId, UUID fileId, Actor actor) {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
-        if (authorOf(actor) == ReferenceAuthor.CLIENT && currentRules.get().visitStarted(booking.slotStartsAt())) {
+        if (authorOf(actor) == ReferenceAuthor.CLIENT && visitStarted(booking, currentRules.get())) {
             throw new ReferencesClosedException();
         }
         references
@@ -100,6 +107,27 @@ class DefaultBookingReferences implements BookingReferences {
     public boolean imageVisible(UUID bookingId, UUID fileId, Actor actor) {
         finder.requireAccessible(bookingId, actor);
         return references.existsByBookingIdAndFileId(bookingId, fileId);
+    }
+
+    /**
+     * Визит начинается в согласованное более раннее время, если клиент согласился прийти раньше, иначе в начале слота
+     * ({@link BookingView#visitStart}): с этого момента клиенту референсы закрыты.
+     */
+    private static boolean visitStarted(BookingEntity booking, BookingRules rules) {
+        return rules.visitStarted(booking.toView().visitStart());
+    }
+
+    /**
+     * Референсы обезличенного клиента удалены вместе с его карточкой, новые не заводит никто. Карточка читается после
+     * блокировки строки записи: обезличивание, начатое раньше, уже зафиксировано, а начатое позже дождётся этого
+     * добавления и удалит его референс вместе с остальными.
+     */
+    private void requireClientNotErased(BookingEntity booking) {
+        var client = clients.byId(booking.clientId())
+                .orElseThrow(() -> new InternalException("client " + booking.clientId() + " of booking is missing"));
+        if (client.erased()) {
+            throw new ValidationException("bookingId", "the client of the booking is erased");
+        }
     }
 
     /**
