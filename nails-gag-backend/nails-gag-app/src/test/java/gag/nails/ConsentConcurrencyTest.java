@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
+import gag.nails.clients.DocumentVersionService;
 import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.command.RecordConsent;
 import gag.nails.clients.error.ClientErasedException;
@@ -21,9 +22,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +49,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 class ConsentConcurrencyTest {
 
     private static final long WAIT_SECONDS = 20;
-    private static final String CURRENT_VERSION = "2026-09-25";
     private static final ConsentKind PHOTO = ConsentKind.PHOTO_PUBLICATION;
     private static final String GIVEN = "given";
     private static final String WITHDRAWN = "withdrawn";
@@ -68,6 +70,9 @@ class ConsentConcurrencyTest {
 
     @Autowired
     JdbcClient jdbc;
+
+    @Autowired
+    DocumentVersionService documents;
 
     @Autowired
     ConsentEvents events;
@@ -163,6 +168,49 @@ class ConsentConcurrencyTest {
         assertThat(events.of(card)).containsExactly(GIVEN);
     }
 
+    @Test
+    void concurrentRecordsBothCount() throws Exception {
+        var card = card("Мария");
+
+        var second = whileCardIsHeld(() -> give(card), () -> give(card));
+
+        assertThat(second.failure()).isNull();
+        assertThat(queries.consents(card, master)).hasSize(2);
+        assertThat(events.of(card)).containsExactly(GIVEN, GIVEN);
+    }
+
+    /**
+     * Карточка прочитана в транзакции до блокировки строки, а другая транзакция тем временем обезличила её и
+     * зафиксировалась: запись согласия под блокировкой перечитывает карточку и видит обезличивание.
+     */
+    @Test
+    void consentRecordForCardErasedAfterItWasReadIsRejected() {
+        var card = card("Мария");
+
+        var failure = transaction.execute(status -> {
+            assertThat(queries.byId(card))
+                    .hasValueSatisfying(read -> assertThat(read.erased()).isFalse());
+            inAnotherTransaction(() -> clients.erase(card));
+            status.setRollbackOnly();
+            return outcome(() -> give(card)).failure();
+        });
+
+        assertThat(failure).isInstanceOf(ClientErasedException.class);
+        assertThat(queries.consents(card, master)).isEmpty();
+        assertThat(events.of(card)).isEmpty();
+    }
+
+    private static void inAnotherTransaction(Runnable action) {
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            executor.submit(action).get(WAIT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        } catch (ExecutionException | TimeoutException e) {
+            throw new AssertionError(e);
+        }
+    }
+
     private UUID card(String firstName) {
         return clients.create(new CreateClient(firstName, null, null, null, null, null), master)
                 .id();
@@ -170,7 +218,10 @@ class ConsentConcurrencyTest {
 
     private void give(UUID clientId) {
         clients.recordConsent(
-                clientId, new RecordConsent(PHOTO, CURRENT_VERSION, ConsentSource.ENTERED_BY_MASTER), master);
+                clientId,
+                new RecordConsent(
+                        PHOTO, documents.current(PHOTO.document()).version(), ConsentSource.ENTERED_BY_MASTER),
+                master);
     }
 
     private void withdraw(UUID clientId) {

@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 /**
  * Объединение двух клиентов в одного. Порядок шагов важен: телефон и аккаунт уникальны, а журналы
  * ссылаются на клиента. Обе карточки вызывающий передаёт уже заблокированными
- * ({@link ClientRepository#findLockedById}).
+ * ({@link ClientLocking#findLockedById}).
  */
 @Component
 class ClientMerger {

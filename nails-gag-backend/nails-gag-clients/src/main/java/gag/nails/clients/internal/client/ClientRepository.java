@@ -1,16 +1,14 @@
 package gag.nails.clients.internal.client;
 
-import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
-interface ClientRepository extends JpaRepository<ClientEntity, UUID> {
+interface ClientRepository extends JpaRepository<ClientEntity, UUID>, ClientLocking {
 
     /**
      * Условие поиска, общее для списка, страницы и её подсчёта. {@code pattern} — уже в нижнем регистре, с
@@ -28,16 +26,6 @@ interface ClientRepository extends JpaRepository<ClientEntity, UUID> {
 
     /** Порядок поиска: по алфавиту, при совпадении имён — по id, чтобы страницы не перекрывались. */
     String SEARCH_ORDER = "order by c.firstName, c.lastName, c.id";
-
-    /**
-     * Карточка под блокировкой строки (SELECT … FOR UPDATE) до конца транзакции. Ею сериализуются запись и
-     * отзыв согласия, объединение и обезличивание: кто пришёл вторым, увидит результат первого (удалённую при
-     * объединении карточку — как отсутствующую). Порядок блокировок: карточка, затем строки согласий; две
-     * карточки — в порядке id.
-     */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select c from ClientEntity c where c.id = :id")
-    Optional<ClientEntity> findLockedById(UUID id);
 
     Optional<ClientEntity> findByPhone(String phone);
 

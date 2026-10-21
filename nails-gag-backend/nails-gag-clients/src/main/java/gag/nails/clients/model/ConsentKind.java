@@ -16,6 +16,9 @@ public enum ConsentKind {
     /** Публикация фото работ клиента в портфолио; необязательное, действует до отзыва. */
     PHOTO_PUBLICATION(DocumentKind.POLICY);
 
+    private static final Set<ConsentKind> REQUIRED_KINDS =
+            Arrays.stream(values()).filter(ConsentKind::required).collect(Collectors.toUnmodifiableSet());
+
     private final DocumentKind document;
 
     ConsentKind(DocumentKind document) {
@@ -47,6 +50,6 @@ public enum ConsentKind {
 
     /** Все обязательные виды ({@link #required()}). */
     public static Set<ConsentKind> requiredKinds() {
-        return Arrays.stream(values()).filter(ConsentKind::required).collect(Collectors.toUnmodifiableSet());
+        return REQUIRED_KINDS;
     }
 }

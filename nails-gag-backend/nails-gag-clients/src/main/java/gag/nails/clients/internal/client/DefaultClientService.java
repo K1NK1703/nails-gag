@@ -246,7 +246,7 @@ class DefaultClientService implements ClientService {
         if (reason != null && reason.codePointCount(0, reason.length()) > MAX_BLOCK_REASON_LENGTH) {
             throw new ValidationException("reason", "must be at most " + MAX_BLOCK_REASON_LENGTH + " characters");
         }
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         var now = clock.instant();
         client.block(reason, now);
         events.publishEvent(new ClientBlocked(client.id(), client.accountId().orElse(null), now));
@@ -256,7 +256,7 @@ class DefaultClientService implements ClientService {
     @Override
     public ClientView unblock(UUID clientId, Actor actor) {
         actor.requireWrite(Section.CLIENTS);
-        var client = require(clientId);
+        var client = requireLocked(clientId);
         client.unblock();
         return client.toView();
     }
@@ -353,7 +353,9 @@ class DefaultClientService implements ClientService {
 
     /**
      * Две карточки под блокировкой строк в том порядке, в каком их передали; блокируются в порядке id — одном для
-     * всех, кто берёт две карточки, чтобы встречные объединения не ждали друг друга по кругу.
+     * всех, кто берёт две карточки, чтобы встречные объединения не ждали друг друга по кругу. Порядок — по строке
+     * {@link UUID#toString()}: он совпадает с порядком {@code uuid} в PostgreSQL (байты без знака), а
+     * {@link UUID#compareTo} сравнивает половины как знаковые {@code long} и с ним расходится.
      */
     private List<ClientEntity> requireLockedPair(UUID first, UUID second) {
         if (first.toString().compareTo(second.toString()) < 0) {
@@ -364,11 +366,12 @@ class DefaultClientService implements ClientService {
         return List.of(requireLocked(first), b);
     }
 
+    /** Карточка под блокировкой строки, перечитанная под ней ({@link ClientLocking#findLockedById}). */
     private ClientEntity requireLocked(UUID clientId) {
         return clients.findLockedById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
     }
 
-    /** Живая карточка под блокировкой строки ({@link ClientRepository#findLockedById}). */
+    /** Живая карточка под блокировкой строки, перечитанная под ней ({@link ClientLocking#findLockedById}). */
     private ClientEntity requireLiveLocked(UUID clientId) {
         var client = requireLocked(clientId);
         if (client.isErased()) {

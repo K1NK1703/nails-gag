@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.RegisterClient;
+import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.Actor;
@@ -13,16 +15,19 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.context.annotation.Import;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Параллельные действия над клиентами с настоящими транзакциями дают согласованный итог. */
 @SpringBootTest(webEnvironment = WebEnvironment.NONE, properties = "nails-gag.booking.jobs.enabled=false")
@@ -34,6 +39,9 @@ class ClientsConcurrencyTest {
 
     @Autowired
     ClientQueries queries;
+
+    @Autowired
+    TransactionTemplate transaction;
 
     private final Actor master = Actor.master();
 
@@ -65,6 +73,49 @@ class ClientsConcurrencyTest {
         var other = owner.equals(anna) ? maria : anna;
         assertThat(queries.get(owner, master).phone()).isEqualTo(phone);
         assertThat(queries.get(other, master).phone()).isNull();
+    }
+
+    /**
+     * Карточка прочитана в транзакции до блокировки строки, а другая транзакция тем временем заблокировала клиента
+     * и зафиксировалась: объединение под блокировкой карточки перечитывает её и видит блокировку, а не прочитанное
+     * раньше.
+     */
+    @Test
+    void mergeOfOwnCardBlockedAfterItWasReadIsRejected() throws Exception {
+        var ownAccount = UUID.randomUUID();
+        var otherAccount = UUID.randomUUID();
+        var own = clients.register(new RegisterClient(ownAccount, "Мария", null, null))
+                .id();
+        var other = clients.register(new RegisterClient(otherAccount, "Мария", null, null))
+                .id();
+
+        var failure = transaction.execute(status -> {
+            assertThat(queries.byAccountId(otherAccount))
+                    .hasValueSatisfying(card -> assertThat(card.blocked()).isFalse());
+            inAnotherTransaction(() -> clients.block(other, null, master));
+            status.setRollbackOnly();
+            try {
+                clients.mergeOwn(other, Actor.client(own));
+                return null;
+            } catch (RuntimeException e) {
+                return e;
+            }
+        });
+
+        assertThat(failure).isInstanceOf(ClientBlockedException.class);
+        assertThat(queries.get(other, master).blocked()).isTrue();
+        assertThat(queries.byId(own)).isPresent();
+    }
+
+    private static void inAnotherTransaction(Runnable action) {
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            executor.submit(action).get(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        } catch (ExecutionException | TimeoutException e) {
+            throw new AssertionError(e);
+        }
     }
 
     private UUID card(String firstName) {
