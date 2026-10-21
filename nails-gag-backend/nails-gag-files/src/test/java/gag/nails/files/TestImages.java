@@ -1,6 +1,6 @@
 package gag.nails.files;
 
-import java.awt.Color;
+import gag.nails.testsupport.TestPictures;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -53,13 +53,7 @@ public final class TestImages {
 
     /** PNG с плавным градиентом: сжимается хорошо, поэтому и большой файл получается маленьким. */
     public static byte[] png(int width, int height) {
-        var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        for (var y = 0; y < height; y++) {
-            for (var x = 0; x < width; x++) {
-                image.setRGB(x, y, new Color(x * 255 / width, y * 255 / height, 128).getRGB());
-            }
-        }
-        return encode(image, "png");
+        return TestPictures.png(width, height);
     }
 
     /**

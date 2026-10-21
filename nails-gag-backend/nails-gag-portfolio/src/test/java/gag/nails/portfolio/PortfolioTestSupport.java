@@ -20,18 +20,13 @@ import gag.nails.portfolio.model.WorkSource;
 import gag.nails.portfolio.model.WorkView;
 import gag.nails.schedule.ScheduleService;
 import gag.nails.testsupport.MutableClock;
-import java.awt.Color;
-import java.awt.image.BufferedImage;
+import gag.nails.testsupport.TestPictures;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import javax.imageio.ImageIO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -92,7 +87,7 @@ abstract class PortfolioTestSupport {
     }
 
     UUID upload(FilePurpose purpose, Actor uploader) {
-        var content = png(640, 480);
+        var content = TestPictures.png(640, 480);
         return files.store(new ByteArrayInputStream(content), content.length, purpose, uploader)
                 .id();
     }
@@ -142,20 +137,5 @@ abstract class PortfolioTestSupport {
 
     WorkView view(UUID workId) {
         return queries.get(workId, MASTER);
-    }
-
-    static byte[] png(int width, int height) {
-        var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        var graphics = image.createGraphics();
-        graphics.setColor(new Color(200, 120, 160));
-        graphics.fillRect(0, 0, width, height);
-        graphics.dispose();
-        var out = new ByteArrayOutputStream();
-        try {
-            ImageIO.write(image, "png", out);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return out.toByteArray();
     }
 }

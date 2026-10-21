@@ -18,11 +18,7 @@ import gag.nails.portfolio.model.PublicWork;
 import gag.nails.portfolio.model.WorkSource;
 import gag.nails.portfolio.model.WorkView;
 import gag.nails.schedule.ScheduleService;
-import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -30,7 +26,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.imageio.ImageIO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -233,13 +228,7 @@ class PortfolioConcurrencyTest {
     }
 
     private UUID upload() {
-        var out = new ByteArrayOutputStream();
-        try {
-            ImageIO.write(new BufferedImage(64, 48, BufferedImage.TYPE_INT_RGB), "png", out);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        var content = out.toByteArray();
+        var content = Pictures.png(64, 48);
         return files.store(new ByteArrayInputStream(content), content.length, FilePurpose.PORTFOLIO, master)
                 .id();
     }
