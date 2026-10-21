@@ -24,7 +24,7 @@ public class BookingFinder {
     }
 
     /** Сотрудник с чтением «Записей» — любую запись, клиент — только свою. */
-    BookingEntity requireAccessible(UUID bookingId, Actor actor) {
+    public BookingEntity requireAccessible(UUID bookingId, Actor actor) {
         var booking = require(bookingId);
         actor.requireReadOrSelf(Section.BOOKINGS, booking.clientId());
         return booking;

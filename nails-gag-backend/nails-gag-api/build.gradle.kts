@@ -8,6 +8,8 @@ dependencies {
     implementation(project(":nails-gag-clients"))
     implementation(project(":nails-gag-schedule"))
     implementation(project(":nails-gag-booking"))
+    // Пока только статусы ошибок файлов: модуль записей тянет files в classpath, а таблица статусов должна быть полной.
+    implementation(project(":nails-gag-files"))
     implementation(project(":nails-gag-identity"))
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.validation)

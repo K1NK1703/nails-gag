@@ -14,6 +14,13 @@ spring:
 
 nails-gag:
   time-zone: Europe/Moscow
+  booking:
+    # Сколько дней хранятся фото-референсы после визита или отмены записи: политика конфиденциальности обещает 30.
+    reference-retention-days: 30
+    jobs:
+      enabled: true
+      # Ночное удаление референсов с истёкшим сроком, по времени салона; отмена и истечение идут раз в минуту.
+      reference-cleanup-cron: "0 0 4 * * *"
   files:
     # Корень хранилища фото; в Docker — том. Создаётся при первой загрузке.
     root: /var/lib/nails-gag/files

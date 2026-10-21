@@ -4,6 +4,7 @@ import gag.nails.booking.internal.booking.BookingCancellation;
 import gag.nails.booking.internal.booking.BookingRepository;
 import gag.nails.booking.internal.booking.ClientLocks;
 import gag.nails.booking.internal.booking.CurrentRules;
+import gag.nails.booking.internal.reference.ReferenceRemoval;
 import gag.nails.booking.model.CancelReason;
 import gag.nails.clients.event.ClientErased;
 import org.springframework.context.event.EventListener;
@@ -12,14 +13,18 @@ import org.springframework.stereotype.Component;
 /**
  * Обезличивание клиента: его активные записи на ещё не начавшиеся слоты отменяются с причиной
  * {@link CancelReason#ACCOUNT_DELETED} (слот освобождается, признак предоплаты не ставится), а
- * комментарий клиента стирается у всех его записей. Записи, чей слот уже начался, остаются мастеру на
+ * комментарий клиента и фото-референсы (с файлами; файлы на диске — после фиксации) удаляются у всех его
+ * записей, кто бы их ни приложил: на фото — данные клиента. Записи, чей слот уже начался, остаются мастеру на
  * отметку: визит либо состоялся, либо нет, и это не зависит от аккаунта. Обычный
  * {@code @EventListener} — выполняется синхронно в транзакции обезличивания, как требует
  * {@link ClientErased}.
  *
  * <p>Сначала берётся блокировка клиента: параллельная самозапись либо уже зафиксирована и попадёт в
  * выборку, либо дождётся конца обезличивания и увидит обезличенную карточку. Затем записи читаются под
- * блокировкой строк: параллельная отмена, перенос или отметка той же записи идут строго до или после.
+ * блокировкой строк: параллельная отмена, перенос или отметка той же записи идут строго до или после, а
+ * параллельное добавление референса либо уже зафиксировано, и референс удаляется здесь, либо дождётся конца
+ * обезличивания: клиенту приложить уже нельзя (запись отменена или слот начался), сотрудник прикладывает фото
+ * сознательно.
  *
  * <p>Известное ограничение: обезличивание уже держит строку клиента и только потом берёт записи
  * (клиент → запись), тогда как поздняя отмена, отметки визита и перенос записи клиентом идут в
@@ -34,16 +39,19 @@ class ClientEraseListener {
     private final ClientLocks locks;
     private final CurrentRules currentRules;
     private final BookingCancellation cancellation;
+    private final ReferenceRemoval references;
 
     ClientEraseListener(
             BookingRepository bookings,
             ClientLocks locks,
             CurrentRules currentRules,
-            BookingCancellation cancellation) {
+            BookingCancellation cancellation,
+            ReferenceRemoval references) {
         this.bookings = bookings;
         this.locks = locks;
         this.currentRules = currentRules;
         this.cancellation = cancellation;
+        this.references = references;
     }
 
     @EventListener
@@ -55,6 +63,7 @@ class ClientEraseListener {
                 cancellation.cancel(booking, CancelReason.ACCOUNT_DELETED, rules.now());
             }
             booking.wipeComment();
+            references.removeAll(booking.id());
         }
     }
 }

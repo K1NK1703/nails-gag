@@ -8,6 +8,8 @@ import gag.nails.booking.error.CorrectionWindowClosedException;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.LateRescheduleNotAllowedException;
 import gag.nails.booking.error.LimitReachedException;
+import gag.nails.booking.error.ReferencesClosedException;
+import gag.nails.booking.error.ReferencesLimitReachedException;
 import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.error.VisitNotStartedException;
 import gag.nails.catalog.error.ServiceInactiveException;
@@ -25,6 +27,10 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.UnauthenticatedException;
 import gag.nails.common.error.UserFacingException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.files.error.ProcessingBusyException;
+import gag.nails.files.error.TooLargeFileException;
+import gag.nails.files.error.TooLargeImageException;
+import gag.nails.files.error.UnsupportedFormatException;
 import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.error.LastAccessAdminException;
@@ -77,6 +83,11 @@ final class ProblemStatuses {
             entry(ValidationException.class, HttpStatus.BAD_REQUEST),
             entry(UnauthenticatedException.class, HttpStatus.UNAUTHORIZED),
             entry(AccessDeniedException.class, HttpStatus.FORBIDDEN),
+            // files
+            entry(UnsupportedFormatException.class, HttpStatus.BAD_REQUEST),
+            entry(TooLargeImageException.class, HttpStatus.BAD_REQUEST),
+            entry(TooLargeFileException.class, HttpStatus.CONTENT_TOO_LARGE),
+            entry(ProcessingBusyException.class, HttpStatus.SERVICE_UNAVAILABLE),
             // catalog
             entry(ServiceNotFoundException.class, HttpStatus.NOT_FOUND),
             entry(ServiceInactiveException.class, HttpStatus.CONFLICT),
@@ -110,6 +121,8 @@ final class ProblemStatuses {
             entry(CorrectionWindowClosedException.class, HttpStatus.CONFLICT),
             entry(VisitNotStartedException.class, HttpStatus.CONFLICT),
             entry(ConsentMissingException.class, HttpStatus.CONFLICT),
+            entry(ReferencesLimitReachedException.class, HttpStatus.CONFLICT),
+            entry(ReferencesClosedException.class, HttpStatus.CONFLICT),
             // identity
             entry(LoginFailedException.class, HttpStatus.UNAUTHORIZED),
             entry(RegistrationExpiredException.class, HttpStatus.UNAUTHORIZED),

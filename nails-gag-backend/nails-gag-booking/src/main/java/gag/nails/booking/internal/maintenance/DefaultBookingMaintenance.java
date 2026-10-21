@@ -2,9 +2,12 @@ package gag.nails.booking.internal.maintenance;
 
 import gag.nails.booking.BookingMaintenance;
 import gag.nails.booking.internal.booking.BookingRepository;
+import gag.nails.booking.internal.reference.ReferenceRetention;
 import gag.nails.booking.model.BookingStatus;
 import gag.nails.booking.model.EarlierTimeStatus;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -19,11 +22,20 @@ class DefaultBookingMaintenance implements BookingMaintenance {
 
     private final BookingRepository bookings;
     private final BookingTimeouts timeouts;
+    private final ReferenceRetention references;
+    private final BookingProperties properties;
     private final Clock clock;
 
-    DefaultBookingMaintenance(BookingRepository bookings, BookingTimeouts timeouts, Clock clock) {
+    DefaultBookingMaintenance(
+            BookingRepository bookings,
+            BookingTimeouts timeouts,
+            ReferenceRetention references,
+            BookingProperties properties,
+            Clock clock) {
         this.bookings = bookings;
         this.timeouts = timeouts;
+        this.references = references;
+        this.properties = properties;
         this.clock = clock;
     }
 
@@ -37,6 +49,13 @@ class DefaultBookingMaintenance implements BookingMaintenance {
     public int expireEarlierTimeOffers() {
         var unanswered = bookings.idsWithOfferAndSlotStartedBy(EarlierTimeStatus.PENDING, clock.instant());
         return each(unanswered, timeouts::expireEarlierTime);
+    }
+
+    @Override
+    public int removeExpiredReferences() {
+        var retention = Duration.ofDays(properties.referenceRetentionDays());
+        return references.removeExpired(
+                clock.instant().truncatedTo(ChronoUnit.MICROS).minus(retention));
     }
 
     /** Сбой на одной записи записывается в лог и не мешает остальным; следующий запуск попробует снова. */
