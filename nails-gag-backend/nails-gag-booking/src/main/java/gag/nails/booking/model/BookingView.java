@@ -49,6 +49,14 @@ public record BookingView(
 
     /** Время, к которому клиент приходит: согласованное более раннее или начало слота. */
     public Instant visitStart() {
+        return visitStart(agreedStart, slotStartsAt);
+    }
+
+    /**
+     * Правило начала визита в одном месте — для представления и для записи внутри модуля: согласованное более раннее
+     * время, если клиент согласился прийти раньше, иначе начало слота.
+     */
+    public static Instant visitStart(@Nullable Instant agreedStart, Instant slotStartsAt) {
         return agreedStart != null ? agreedStart : slotStartsAt;
     }
 }

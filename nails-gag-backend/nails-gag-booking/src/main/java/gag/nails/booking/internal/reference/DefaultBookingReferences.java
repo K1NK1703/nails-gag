@@ -7,7 +7,6 @@ import gag.nails.booking.internal.booking.BookingEntity;
 import gag.nails.booking.internal.booking.BookingFinder;
 import gag.nails.booking.internal.booking.BookingRules;
 import gag.nails.booking.internal.booking.CurrentRules;
-import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.ReferenceAuthor;
 import gag.nails.booking.model.ReferenceView;
 import gag.nails.clients.ClientQueries;
@@ -21,6 +20,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -57,8 +57,14 @@ class DefaultBookingReferences implements BookingReferences {
         this.clients = clients;
     }
 
+    /**
+     * Референсы и их файлы — разные запросы. Вне транзакции своя с {@code REPEATABLE READ} даёт им один снимок базы:
+     * удаление референса между ними (строка референса и строка файла уходят одной транзакцией) не оставит референс
+     * без файла. Внутри чужой транзакции действует её уровень изоляции (Spring не меняет его у уже начатой), при
+     * {@code READ COMMITTED} согласованность не гарантируется.
+     */
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public List<ReferenceView> list(UUID bookingId, Actor actor) {
         finder.requireAccessible(bookingId, actor);
         return references.findAllByBookingIdOrderByCreatedAtAscFileIdAsc(bookingId).stream()
@@ -111,16 +117,20 @@ class DefaultBookingReferences implements BookingReferences {
 
     /**
      * Визит начинается в согласованное более раннее время, если клиент согласился прийти раньше, иначе в начале слота
-     * ({@link BookingView#visitStart}): с этого момента клиенту референсы закрыты.
+     * ({@link BookingEntity#visitStart}): с этого момента клиенту референсы закрыты.
      */
     private static boolean visitStarted(BookingEntity booking, BookingRules rules) {
-        return rules.visitStarted(booking.toView().visitStart());
+        return rules.visitStarted(booking.visitStart());
     }
 
     /**
      * Референсы обезличенного клиента удалены вместе с его карточкой, новые не заводит никто. Карточка читается после
      * блокировки строки записи: обезличивание, начатое раньше, уже зафиксировано, а начатое позже дождётся этого
      * добавления и удалит его референс вместе с остальными.
+     *
+     * <p>Это должно быть первое чтение карточки в транзакции: уже загруженную карточку модуль клиентов отдал бы из
+     * кэша транзакции, прочитанной до блокировки. Поэтому {@link #add} вызывается как внешняя транзакция или в
+     * транзакции, не читавшей карточку клиента записи.
      */
     private void requireClientNotErased(BookingEntity booking) {
         var client = clients.byId(booking.clientId())

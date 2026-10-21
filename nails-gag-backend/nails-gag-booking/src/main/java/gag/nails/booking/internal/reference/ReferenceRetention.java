@@ -1,21 +1,36 @@
 package gag.nails.booking.internal.reference;
 
+import gag.nails.common.error.InternalException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Удаление референсов с истёкшим сроком хранения пачками записей (по умолчанию по {@value #BATCH_SIZE}), каждая
- * пачка — в своей транзакции: блокировки строк записей держатся недолго, а файлы пачки стираются сразу после её
- * фиксации. Идёт, пока очередная пачка не окажется пустой.
+ * Удаление референсов с истёкшим сроком хранения пачками записей (по умолчанию по {@value #BATCH_SIZE}). Записи
+ * перебираются курсором по идентификатору: страница выбирается без блокировки, затем в своей транзакции её записи
+ * блокируются, условие проверяется заново, референсы и строки файлов удаляются, а файлы на диске стираются сразу
+ * после фиксации. Блокировки строк держатся недолго.
+ *
+ * <p>Сбой пачки не останавливает проход: её записи разбираются по одной, каждая в своей транзакции; запись, на
+ * которой сбой повторился, пишется в лог и ждёт следующего запуска, остальные удаляются.
  */
 @Component
 public class ReferenceRetention {
 
     /** Сколько записей обрабатывается одной транзакцией; у записи не больше трёх референсов. */
     static final int BATCH_SIZE = 100;
+
+    /** Меньше любого идентификатора: с него начинается курсор. */
+    private static final UUID FIRST = new UUID(0, 0);
+
+    private static final Logger log = LoggerFactory.getLogger(ReferenceRetention.class);
 
     private final ReferenceRepository references;
     private final ReferenceRemoval removal;
@@ -27,7 +42,7 @@ public class ReferenceRetention {
         this(references, removal, transaction, BATCH_SIZE);
     }
 
-    /** С другим размером пачки — для теста нескольких пачек. */
+    /** С другим размером пачки и подставным удалением — для тестов пачек и сбоев. */
     ReferenceRetention(
             ReferenceRepository references, ReferenceRemoval removal, TransactionTemplate transaction, int batchSize) {
         this.references = references;
@@ -38,29 +53,49 @@ public class ReferenceRetention {
 
     /**
      * Удаляет референсы записей, срок хранения которых истёк к {@code cutoff}
-     * ({@link ReferenceRepository#lockBookingsWithExpiredReferences}).
+     * ({@link ReferenceRepository#findBookingsWithExpiredReferences}). Вызывать вне транзакции: пачка должна быть
+     * своей транзакцией, иначе её фиксация, стирание файлов и разбор сбоя по одной записи не работают.
      *
      * @return сколько референсов удалено
+     * @throws InternalException если вызвана внутри транзакции
      */
     public int removeExpired(Instant cutoff) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new InternalException("expired references must be removed outside a transaction");
+        }
         var removed = 0;
-        Batch batch;
+        var after = FIRST;
+        List<UUID> page;
         do {
-            batch = Objects.requireNonNull(transaction.execute(status -> removeBatch(cutoff)));
-            removed += batch.references();
-        } while (batch.bookings() > 0);
+            page = references.findBookingsWithExpiredReferences(cutoff, after, batchSize);
+            if (page.isEmpty()) {
+                break;
+            }
+            removed += removeBatchOrEach(cutoff, page);
+            after = page.getLast();
+        } while (page.size() == batchSize);
         return removed;
     }
 
-    private Batch removeBatch(Instant cutoff) {
-        var bookingIds = references.lockBookingsWithExpiredReferences(cutoff, batchSize);
+    private int removeBatchOrEach(Instant cutoff, List<UUID> bookingIds) {
+        try {
+            return removeLocked(cutoff, bookingIds);
+        } catch (RuntimeException e) {
+            log.warn("expired references batch failed, removing its {} bookings one by one", bookingIds.size(), e);
+        }
         var removed = 0;
         for (var bookingId : bookingIds) {
-            removed += removal.removeAll(bookingId);
+            try {
+                removed += removeLocked(cutoff, List.of(bookingId));
+            } catch (RuntimeException e) {
+                log.error("removing expired references failed for booking {}", bookingId, e);
+            }
         }
-        return new Batch(bookingIds.size(), removed);
+        return removed;
     }
 
-    /** Сколько записей попало в пачку и сколько референсов у них удалено. */
-    private record Batch(int bookings, int references) {}
+    private int removeLocked(Instant cutoff, List<UUID> bookingIds) {
+        return Objects.requireNonNull(
+                transaction.execute(status -> removal.removeAll(references.lockExpired(bookingIds, cutoff))));
+    }
 }

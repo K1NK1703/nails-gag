@@ -31,9 +31,14 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 @ModuleTest
 class BookingReferencesTest extends BookingTestSupport {
+
+    private static final String LEFTOVER_REFERENCE = """
+            insert into booking.reference (booking_id, file_id, added_by, created_at)
+            values (:bookingId, :fileId, 'STAFF', now())""";
 
     @Autowired
     BookingReferences references;
@@ -46,6 +51,9 @@ class BookingReferencesTest extends BookingTestSupport {
 
     @Autowired
     EarlierTimeOffers offers;
+
+    @Autowired
+    JdbcClient jdbc;
 
     @PersistenceContext
     EntityManager entityManager;
@@ -373,7 +381,6 @@ class BookingReferencesTest extends BookingTestSupport {
         var started = slot(MONDAY, "12:00");
         var startedBooking = book(anna, started);
         var future = byMaster(anna, slot(TUESDAY, "12:00"));
-        var leftover = references.add(startedBooking.id(), upload(staff), staff);
         timeIsAfterStartOf(started, Duration.ofMinutes(30));
         clients.erase(anna);
         entityManager.flush();
@@ -386,9 +393,24 @@ class BookingReferencesTest extends BookingTestSupport {
                             ValidationException.class,
                             e -> assertThat(e.field()).isEqualTo("bookingId"));
         }
-        // Удалять сотрудник может и у обезличенного: вдруг что-то осталось.
-        references.remove(startedBooking.id(), leftover.fileId(), staff);
-        assertThat(references.list(startedBooking.id(), master)).isEmpty();
+    }
+
+    @Test
+    void staffRemovesLeftoverReferenceOfErasedClient() {
+        var anna = client("Анна");
+        var staff = signedInMaster();
+        var booking = byMaster(anna, slot(MONDAY, "12:00"));
+        clients.erase(anna);
+        // Остаток, который обезличивание почему-то не удалило: приложить его через модуль уже нельзя.
+        var leftover = upload(staff);
+        var insert = jdbc.sql(LEFTOVER_REFERENCE).param("bookingId", booking.id());
+        insert.param("fileId", leftover).update();
+        assertThat(references.list(booking.id(), master)).hasSize(1);
+
+        references.remove(booking.id(), leftover, staff);
+
+        assertThat(references.list(booking.id(), master)).isEmpty();
+        assertThat(files.find(leftover)).isEmpty();
     }
 
     @Test

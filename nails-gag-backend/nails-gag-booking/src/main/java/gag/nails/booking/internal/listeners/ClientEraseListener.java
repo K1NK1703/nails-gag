@@ -1,6 +1,7 @@
 package gag.nails.booking.internal.listeners;
 
 import gag.nails.booking.internal.booking.BookingCancellation;
+import gag.nails.booking.internal.booking.BookingEntity;
 import gag.nails.booking.internal.booking.BookingRepository;
 import gag.nails.booking.internal.booking.ClientLocks;
 import gag.nails.booking.internal.booking.CurrentRules;
@@ -57,12 +58,13 @@ class ClientEraseListener {
     void on(ClientErased event) {
         locks.acquire(event.clientId());
         var rules = currentRules.get();
-        for (var booking : bookings.findAllLockedByClientId(event.clientId())) {
+        var locked = bookings.findAllLockedByClientId(event.clientId());
+        for (var booking : locked) {
             if (booking.status().isActive() && !rules.visitStarted(booking.slotStartsAt())) {
                 cancellation.cancel(booking, CancelReason.ACCOUNT_DELETED, rules.now());
             }
             booking.wipeComment();
-            references.removeAll(booking.id());
         }
+        references.removeAll(locked.stream().map(BookingEntity::id).toList());
     }
 }

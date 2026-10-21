@@ -298,6 +298,11 @@ public class BookingEntity {
         return slotStartsAt;
     }
 
+    /** Время, к которому клиент приходит ({@link BookingView#visitStart(Instant, Instant)}). */
+    public Instant visitStart() {
+        return BookingView.visitStart(agreedStart, slotStartsAt);
+    }
+
     public BookingStatus status() {
         return status;
     }
