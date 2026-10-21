@@ -302,6 +302,9 @@ class LoginWriter {
         var account = accounts.findById(accountId).orElseThrow(() -> failed(provider, null, client));
         var card = clientQueries.byAccountId(accountId);
         card.ifPresent(c -> requireNotBlocked(c, accountId, provider, client));
+        // Карточку — первой, до способа входа и аккаунта: сброс изменений перед блокировкой карточки иначе отправил бы
+        // их раньше, а порядок блокировок здесь — клиент → способ входа и аккаунт, как у блокировки и объединения.
+        card.ifPresent(c -> confirmPhone(c, profile.phone()));
         var now = clock.instant();
         LoginMethodEntity method;
         if (known.method() == null) {
@@ -310,8 +313,6 @@ class LoginWriter {
             method = known.method();
             method.used(profile.phone(), profile.email(), profile.displayName(), profile.avatarUrl(), now);
         }
-        // Карточку — раньше аккаунта: порядок блокировок клиент → аккаунт, как у блокировки клиента и объединения.
-        card.ifPresent(c -> confirmPhone(c, profile.phone()));
         account.loggedIn(now);
         return open(account, method, provider, profile, LoginOutcome.SIGNED_IN, client);
     }

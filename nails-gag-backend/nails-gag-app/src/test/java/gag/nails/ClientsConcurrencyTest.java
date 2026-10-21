@@ -21,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -151,6 +152,29 @@ class ClientsConcurrencyTest {
         assertThat(merged.lastName()).isEqualTo("Иванова");
         assertThat(merged.phone()).isEqualTo(phone);
         assertThat(queries.masterNote(survivor, master)).contains("любит квадрат");
+    }
+
+    /**
+     * Регистрация нашла карточку по телефону, но та объединяется с карточкой без телефона: после ожидания телефон уже у
+     * оставшейся, и регистрация привязывает аккаунт к ней, а не заводит дубль номера.
+     */
+    @Test
+    void registrationWaitingForMergeOfMatchedCardAttachesToSurvivor() throws Exception {
+        var phone = "+7999" + String.format("%07d", ThreadLocalRandom.current().nextInt(10_000_000));
+        var card = clients.create(new CreateClient("Мария", null, null, phone, null, null), master)
+                .id();
+        var survivor = card("Мария");
+        var accountId = UUID.randomUUID();
+        var registered = new AtomicReference<ClientView>();
+
+        var registration = rows().whileRowIsHeld(
+                        () -> clients.merge(card, survivor, master),
+                        () -> registered.set(clients.register(new RegisterClient(accountId, "Maria", phone, null))));
+
+        assertThat(registration.failure()).isNull();
+        assertThat(registered.get().id()).isEqualTo(survivor);
+        assertThat(queries.get(survivor, master).accountId()).isEqualTo(accountId);
+        assertThat(queries.get(survivor, master).phone()).isEqualTo(phone);
     }
 
     private ConcurrencySupport rows() {

@@ -67,6 +67,9 @@ class DefaultClientService implements ClientService {
     /** Та же граница, что в ограничении {@code client_block_reason_check}. */
     private static final int MAX_BLOCK_REASON_LENGTH = 500;
 
+    /** Сколько раз регистрация ищет карточку по телефону заново, если найденную объединили, пока ждали. */
+    private static final int PHONE_LOOKUP_ATTEMPTS = 3;
+
     /** Уникальный индекс телефона из миграции {@code 0001-init}. */
     private static final String PHONE_KEY = "client_phone_key";
 
@@ -119,10 +122,7 @@ class DefaultClientService implements ClientService {
         }
         var phone = Phones.normalize(command.phone()).orElse(null);
         if (phone != null) {
-            var sameNumber = clients.findByPhone(phone)
-                    .flatMap(card -> lockedIf(
-                            card.id(),
-                            locked -> locked.phone().filter(phone::equals).isPresent()));
+            var sameNumber = lockedByPhone(phone);
             if (sameNumber.isPresent()) {
                 return attachAccount(sameNumber.get(), command);
             }
@@ -132,8 +132,8 @@ class DefaultClientService implements ClientService {
             // Между двумя карточками с одной почтой не угадываем: заводится новая, дубль разрешит мастер.
             var sameEmail = clients.findAllUnregisteredByEmail(email);
             if (sameEmail.size() == 1) {
-                var card = lockedIf(
-                        sameEmail.getFirst().id(), locked -> locked.accountId().isEmpty() && !locked.isErased());
+                var cardId = sameEmail.getFirst().id();
+                var card = lockedIf(cardId, locked -> isOnlyUnregisteredWithEmail(cardId, email));
                 if (card.isPresent()) {
                     return attachAccount(card.get(), command);
                 }
@@ -373,6 +373,36 @@ class DefaultClientService implements ClientService {
         }
         var b = requireLocked(second);
         return List.of(requireLocked(first), b);
+    }
+
+    /**
+     * Карточка с этим телефоном — под блокировкой и перечитанная. Пока ждали блокировку, найденную карточку могли
+     * объединить с другой, и телефон перешёл к оставшейся: тогда поиск повторяется (как {@code ClientLocks.acquire}
+     * в модуле записей). Пусто — только если карточки с этим телефоном действительно нет.
+     */
+    private Optional<ClientEntity> lockedByPhone(String phone) {
+        for (var attempt = 0; attempt < PHONE_LOOKUP_ATTEMPTS; attempt++) {
+            var found = clients.findByPhone(phone);
+            if (found.isEmpty()) {
+                return Optional.empty();
+            }
+            var locked = lockedIf(
+                    found.get().id(), card -> card.phone().filter(phone::equals).isPresent());
+            if (locked.isPresent()) {
+                return locked;
+            }
+        }
+        throw new InternalException(
+                "client card with the matched phone changed " + PHONE_LOOKUP_ATTEMPTS + " times while waiting for it");
+    }
+
+    /**
+     * Перечитанная карточка всё ещё единственная без аккаунта с этой почтой — тем же запросом, что нашёл её: та же
+     * нормализация почты, что и при поиске.
+     */
+    private boolean isOnlyUnregisteredWithEmail(UUID cardId, String email) {
+        var same = clients.findAllUnregisteredByEmail(email);
+        return same.size() == 1 && same.getFirst().id().equals(cardId);
     }
 
     /**
