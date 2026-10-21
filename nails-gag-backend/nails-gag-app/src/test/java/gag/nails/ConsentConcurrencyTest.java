@@ -21,13 +21,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -41,23 +35,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Запись согласия, его отзыв, объединение и обезличивание карточки сериализуются блокировкой строки карточки:
- * подписчики событий согласий видят их в порядке фиксации. Порядок задаётся не гонкой, а ожиданием блокировки: первая
- * транзакция держит карточку, вторая гарантированно встаёт на её блокировку до фиксации первой.
+ * подписчики событий согласий видят их в порядке фиксации. Порядок задаётся не гонкой, а ожиданием блокировки
+ * ({@link ConcurrencySupport#whileRowIsHeld}).
  */
 @SpringBootTest(webEnvironment = WebEnvironment.NONE, properties = "nails-gag.booking.jobs.enabled=false")
 @Import({PostgresTestcontainers.class, ConsentConcurrencyTest.Recording.class})
 class ConsentConcurrencyTest {
 
-    private static final long WAIT_SECONDS = 20;
     private static final ConsentKind PHOTO = ConsentKind.PHOTO_PUBLICATION;
     private static final String GIVEN = "given";
     private static final String WITHDRAWN = "withdrawn";
-
-    /** Другие соединения, ждущие блокировку строки карточки клиента; ожидания других таблиц не считаются. */
-    private static final String LOCK_WAITS = """
-            select count(*) from pg_stat_activity
-            where datname = current_database() and pid <> pg_backend_pid()
-              and wait_event_type = 'Lock' and query like '%clients.client %'""";
 
     @Autowired
     ClientService clients;
@@ -78,13 +65,19 @@ class ConsentConcurrencyTest {
     ConsentEvents events;
 
     private final Actor master = Actor.master();
+    private ConcurrencySupport rows;
+
+    @BeforeEach
+    void rowLocks() {
+        rows = new ConcurrencySupport(transaction, jdbc, "%clients.%");
+    }
 
     @Test
     void consentRecordedWhileWithdrawalIsPendingStaysCurrent() throws Exception {
         var card = card("Мария");
         give(card);
 
-        var recorded = whileCardIsHeld(() -> withdraw(card), () -> give(card));
+        var recorded = rows.whileRowIsHeld(() -> withdraw(card), () -> give(card));
 
         assertThat(recorded.failure()).isNull();
         assertThat(queries.hasCurrentConsents(card, Set.of(PHOTO))).isTrue();
@@ -95,7 +88,7 @@ class ConsentConcurrencyTest {
     void withdrawalWaitingForRecordedConsentWithdrawsIt() throws Exception {
         var card = card("Мария");
 
-        var withdrawn = whileCardIsHeld(() -> give(card), () -> withdraw(card));
+        var withdrawn = rows.whileRowIsHeld(() -> give(card), () -> withdraw(card));
 
         assertThat(withdrawn.failure()).isNull();
         assertThat(queries.hasCurrentConsents(card, Set.of(PHOTO))).isFalse();
@@ -108,7 +101,7 @@ class ConsentConcurrencyTest {
         var card = card("Мария");
         give(card);
 
-        var second = whileCardIsHeld(() -> withdraw(card), () -> withdraw(card));
+        var second = rows.whileRowIsHeld(() -> withdraw(card), () -> withdraw(card));
 
         assertThat(second.failure()).isNull();
         assertThat(queries.consentWithdrawals(card, master)).hasSize(1);
@@ -121,7 +114,7 @@ class ConsentConcurrencyTest {
         var survivor = card("Аня");
         give(card);
 
-        var withdrawn = whileCardIsHeld(() -> clients.merge(card, survivor, master), () -> withdraw(card));
+        var withdrawn = rows.whileRowIsHeld(() -> clients.merge(card, survivor, master), () -> withdraw(card));
 
         assertThat(withdrawn.failure()).isInstanceOf(ClientNotFoundException.class);
         assertThat(queries.hasCurrentConsents(survivor, Set.of(PHOTO))).isTrue();
@@ -135,7 +128,7 @@ class ConsentConcurrencyTest {
         var survivor = card("Аня");
         give(card);
 
-        var merged = whileCardIsHeld(() -> withdraw(card), () -> clients.merge(card, survivor, master));
+        var merged = rows.whileRowIsHeld(() -> withdraw(card), () -> clients.merge(card, survivor, master));
 
         assertThat(merged.failure()).isNull();
         assertThat(queries.byId(card)).isEmpty();
@@ -149,7 +142,7 @@ class ConsentConcurrencyTest {
         var card = card("Мария");
         var survivor = card("Аня");
 
-        var recorded = whileCardIsHeld(() -> clients.merge(card, survivor, master), () -> give(card));
+        var recorded = rows.whileRowIsHeld(() -> clients.merge(card, survivor, master), () -> give(card));
 
         assertThat(recorded.failure()).isInstanceOf(ClientNotFoundException.class);
         assertThat(queries.consents(survivor, master)).isEmpty();
@@ -161,7 +154,7 @@ class ConsentConcurrencyTest {
         var card = card("Мария");
         give(card);
 
-        var withdrawn = whileCardIsHeld(() -> clients.erase(card), () -> withdraw(card));
+        var withdrawn = rows.whileRowIsHeld(() -> clients.erase(card), () -> withdraw(card));
 
         assertThat(withdrawn.failure()).isInstanceOf(ClientErasedException.class);
         assertThat(queries.consentWithdrawals(card, master)).isEmpty();
@@ -172,7 +165,7 @@ class ConsentConcurrencyTest {
     void concurrentRecordsBothCount() throws Exception {
         var card = card("Мария");
 
-        var second = whileCardIsHeld(() -> give(card), () -> give(card));
+        var second = rows.whileRowIsHeld(() -> give(card), () -> give(card));
 
         assertThat(second.failure()).isNull();
         assertThat(queries.consents(card, master)).hasSize(2);
@@ -190,25 +183,14 @@ class ConsentConcurrencyTest {
         var failure = transaction.execute(status -> {
             assertThat(queries.byId(card))
                     .hasValueSatisfying(read -> assertThat(read.erased()).isFalse());
-            inAnotherTransaction(() -> clients.erase(card));
+            ConcurrencySupport.inAnotherTransaction(() -> clients.erase(card));
             status.setRollbackOnly();
-            return outcome(() -> give(card)).failure();
+            return ConcurrencySupport.outcome(() -> give(card)).failure();
         });
 
         assertThat(failure).isInstanceOf(ClientErasedException.class);
         assertThat(queries.consents(card, master)).isEmpty();
         assertThat(events.of(card)).isEmpty();
-    }
-
-    private static void inAnotherTransaction(Runnable action) {
-        try (var executor = Executors.newSingleThreadExecutor()) {
-            executor.submit(action).get(WAIT_SECONDS, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
-        } catch (ExecutionException | TimeoutException e) {
-            throw new AssertionError(e);
-        }
     }
 
     private UUID card(String firstName) {
@@ -227,65 +209,6 @@ class ConsentConcurrencyTest {
     private void withdraw(UUID clientId) {
         clients.withdrawConsent(clientId, PHOTO, master);
     }
-
-    /**
-     * {@code holder} в своей транзакции захватывает карточку и ждёт, пока {@code contender} не встанет на её
-     * блокировку; затем транзакция {@code holder} фиксируется. Возвращает исход {@code contender}.
-     */
-    private Outcome whileCardIsHeld(Runnable holder, Runnable contender) throws Exception {
-        var held = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            var holding = executor.submit(() -> transaction.executeWithoutResult(status -> {
-                holder.run();
-                held.countDown();
-                await(release);
-            }));
-            Future<Outcome> contending;
-            try {
-                assertThat(held.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
-                contending = executor.submit(() -> outcome(contender));
-                awaitLockWait();
-            } finally {
-                release.countDown();
-            }
-            holding.get(WAIT_SECONDS, TimeUnit.SECONDS);
-            return contending.get(WAIT_SECONDS, TimeUnit.SECONDS);
-        }
-    }
-
-    private void awaitLockWait() throws InterruptedException {
-        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
-        while (System.nanoTime() < deadline) {
-            if (jdbc.sql(LOCK_WAITS).query(Integer.class).single() > 0) {
-                return;
-            }
-            Thread.sleep(20);
-        }
-        throw new AssertionError("no query is waiting for a lock on clients.client");
-    }
-
-    private static Outcome outcome(Runnable attempt) {
-        try {
-            attempt.run();
-            return new Outcome(null);
-        } catch (RuntimeException e) {
-            return new Outcome(e);
-        }
-    }
-
-    private static void await(CountDownLatch latch) {
-        try {
-            if (!latch.await(WAIT_SECONDS, TimeUnit.SECONDS)) {
-                throw new AssertionError("latch was not released");
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
-        }
-    }
-
-    private record Outcome(@Nullable RuntimeException failure) {}
 
     /** События согласий всех потоков в порядке публикации — как их увидит синхронный подписчик. */
     static final class ConsentEvents {

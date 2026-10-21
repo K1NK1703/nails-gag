@@ -310,8 +310,9 @@ class LoginWriter {
             method = known.method();
             method.used(profile.phone(), profile.email(), profile.displayName(), profile.avatarUrl(), now);
         }
-        account.loggedIn(now);
+        // Карточку — раньше аккаунта: порядок блокировок клиент → аккаунт, как у блокировки клиента и объединения.
         card.ifPresent(c -> confirmPhone(c, profile.phone()));
+        account.loggedIn(now);
         return open(account, method, provider, profile, LoginOutcome.SIGNED_IN, client);
     }
 

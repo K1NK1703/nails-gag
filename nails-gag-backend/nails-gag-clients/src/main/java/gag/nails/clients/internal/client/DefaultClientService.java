@@ -43,8 +43,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import org.jspecify.annotations.Nullable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -117,7 +119,10 @@ class DefaultClientService implements ClientService {
         }
         var phone = Phones.normalize(command.phone()).orElse(null);
         if (phone != null) {
-            var sameNumber = clients.findByPhone(phone);
+            var sameNumber = clients.findByPhone(phone)
+                    .flatMap(card -> lockedIf(
+                            card.id(),
+                            locked -> locked.phone().filter(phone::equals).isPresent()));
             if (sameNumber.isPresent()) {
                 return attachAccount(sameNumber.get(), command);
             }
@@ -127,7 +132,11 @@ class DefaultClientService implements ClientService {
             // Между двумя карточками с одной почтой не угадываем: заводится новая, дубль разрешит мастер.
             var sameEmail = clients.findAllUnregisteredByEmail(email);
             if (sameEmail.size() == 1) {
-                return attachAccount(sameEmail.getFirst(), command);
+                var card = lockedIf(
+                        sameEmail.getFirst().id(), locked -> locked.accountId().isEmpty() && !locked.isErased());
+                if (card.isPresent()) {
+                    return attachAccount(card.get(), command);
+                }
             }
         }
         return clients.save(ClientEntity.registered(command, phone)).toView();
@@ -137,7 +146,7 @@ class DefaultClientService implements ClientService {
     public ClientView update(UUID clientId, UpdateClient command, Actor actor) {
         actor.requireWriteOrSelf(Section.CLIENTS, clientId);
         validator.requireValid(command);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         client.apply(command);
         return client.toView();
     }
@@ -146,7 +155,7 @@ class DefaultClientService implements ClientService {
     public ClientView changePhone(UUID clientId, String phone, Actor actor) {
         actor.requireWrite(Section.CLIENTS);
         var normalized = Phones.require(phone);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         requirePhoneFree(normalized, clientId);
         client.setPhone(normalized);
         return client.toView();
@@ -156,7 +165,7 @@ class DefaultClientService implements ClientService {
     public ClientView changeContactPhone(UUID clientId, @Nullable String phone, Actor actor) {
         actor.requireWriteOrSelf(Section.CLIENTS, clientId);
         var normalized = Phones.normalize(phone).orElse(null);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         client.setContactPhone(normalized);
         return client.toView();
     }
@@ -164,7 +173,7 @@ class DefaultClientService implements ClientService {
     @Override
     public boolean confirmPhone(UUID clientId, String phone) {
         var normalized = Phones.require(phone);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         if (client.phone().isPresent() || clients.findByPhone(normalized).isPresent()) {
             return false;
         }
@@ -176,7 +185,7 @@ class DefaultClientService implements ClientService {
     @Override
     public void updateMasterNote(UUID clientId, String note, Actor actor) {
         actor.requireWrite(Section.CLIENTS);
-        requireLive(clientId).setMasterNote(note);
+        requireLiveLocked(clientId).setMasterNote(note);
     }
 
     @Override
@@ -221,7 +230,7 @@ class DefaultClientService implements ClientService {
             throw new ValidationException("reason", "reserved for the master");
         }
         flagJournal.record(
-                require(clientId),
+                requireLocked(clientId),
                 change.required(),
                 change.reason(),
                 ChangedBy.SYSTEM,
@@ -236,7 +245,7 @@ class DefaultClientService implements ClientService {
             throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
         }
         var reason = required ? PrepaymentFlagReason.MASTER_SET : PrepaymentFlagReason.MASTER_WAIVED;
-        flagJournal.record(requireLive(clientId), required, reason, ChangedBy.MASTER, null, comment);
+        flagJournal.record(requireLiveLocked(clientId), required, reason, ChangedBy.MASTER, null, comment);
     }
 
     @Override
@@ -366,27 +375,25 @@ class DefaultClientService implements ClientService {
         return List.of(requireLocked(first), b);
     }
 
+    /**
+     * Найденная без блокировки карточка — под блокировкой и перечитанная, если она всё ещё подходит: пока ждали
+     * блокировку, её могли объединить, обезличить или привязать к другому аккаунту.
+     */
+    private Optional<ClientEntity> lockedIf(UUID clientId, Predicate<ClientEntity> stillMatches) {
+        return clients.findLockedById(clientId).filter(stillMatches);
+    }
+
     /** Карточка под блокировкой строки, перечитанная под ней ({@link ClientLocking#findLockedById}). */
     private ClientEntity requireLocked(UUID clientId) {
         return clients.findLockedById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
     }
 
-    /** Живая карточка под блокировкой строки, перечитанная под ней ({@link ClientLocking#findLockedById}). */
+    /**
+     * Карточка, которую ещё можно менять, — под блокировкой строки и перечитанная под ней; обезличенная — только для
+     * системных отметок ({@link #requireLocked}).
+     */
     private ClientEntity requireLiveLocked(UUID clientId) {
         var client = requireLocked(clientId);
-        if (client.isErased()) {
-            throw new ClientErasedException(clientId);
-        }
-        return client;
-    }
-
-    private ClientEntity require(UUID clientId) {
-        return clients.findById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
-    }
-
-    /** Клиент, которого ещё можно менять: обезличенная карточка — только для системных отметок. */
-    private ClientEntity requireLive(UUID clientId) {
-        var client = require(clientId);
         if (client.isErased()) {
             throw new ClientErasedException(clientId);
         }
