@@ -12,10 +12,11 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Обезличивание клиента: его активные записи на ещё не начавшиеся слоты отменяются с причиной
+ * Обезличивание клиента: его активные записи, визит по которым ещё не начался (начало визита — согласованное более
+ * раннее время, если клиент согласился прийти раньше, иначе начало слота), отменяются с причиной
  * {@link CancelReason#ACCOUNT_DELETED} (слот освобождается, признак предоплаты не ставится), а
  * комментарий клиента и фото-референсы (с файлами; файлы на диске — после фиксации) удаляются у всех его
- * записей, кто бы их ни приложил: на фото — данные клиента. Записи, чей слот уже начался, остаются мастеру на
+ * записей, кто бы их ни приложил: на фото — данные клиента. Записи, визит по которым уже начался, остаются мастеру на
  * отметку: визит либо состоялся, либо нет, и это не зависит от аккаунта. Обычный
  * {@code @EventListener} — выполняется синхронно в транзакции обезличивания, как требует
  * {@link ClientErased}.
@@ -60,7 +61,7 @@ class ClientEraseListener {
         var rules = currentRules.get();
         var locked = bookings.findAllLockedByClientId(event.clientId());
         for (var booking : locked) {
-            if (booking.status().isActive() && !rules.visitStarted(booking.slotStartsAt())) {
+            if (booking.status().isActive() && !rules.visitStarted(booking.visitStart())) {
                 cancellation.cancel(booking, CancelReason.ACCOUNT_DELETED, rules.now());
             }
             booking.wipeComment();

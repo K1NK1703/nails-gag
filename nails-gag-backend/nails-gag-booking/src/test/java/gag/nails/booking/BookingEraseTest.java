@@ -31,6 +31,9 @@ class BookingEraseTest extends BookingTestSupport {
     @PersistenceContext
     EntityManager entityManager;
 
+    @Autowired
+    EarlierTimeOffers offers;
+
     @Test
     void futureBookingsAreCancelledAndSlotsFreed(PublishedEvents events) {
         var anna = client("Анна");
@@ -168,5 +171,23 @@ class BookingEraseTest extends BookingTestSupport {
         assertThat(scheduleQueries.freeSlots(MONDAY, MONDAY))
                 .extracting(SlotView::id)
                 .containsExactly(slot.id());
+    }
+
+    @Test
+    void bookingAlreadyUnderwayAtAgreedEarlierStartIsKept() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        var agreedStart = slot.startsAt().minus(Duration.ofMinutes(90));
+        offers.propose(booking.id(), agreedStart, master);
+        offers.respond(booking.id(), true, Actor.client(anna));
+        // Слот ещё не начался, но клиент согласился прийти раньше — визит уже идёт.
+        clock.set(agreedStart.plus(Duration.ofMinutes(15)));
+
+        clients.erase(anna);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(queries.get(booking.id(), master).status()).isEqualTo(BookingStatus.CONFIRMED);
     }
 }
