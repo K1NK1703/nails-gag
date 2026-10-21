@@ -1,6 +1,5 @@
 package gag.nails.booking;
 
-import static gag.nails.booking.CommittedData.referenceDirectory;
 import static gag.nails.booking.ReferenceUploads.signedIn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,10 +8,12 @@ import gag.nails.booking.model.BookingView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.InternalException;
 import gag.nails.files.FileStorage;
+import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -52,16 +53,30 @@ class BookingReferenceRetentionTest extends BookingTestSupport {
     @Autowired
     TransactionTemplate transaction;
 
-    Path filesRoot;
+    /** Свои зафиксированные данные теста: после него удаляются только они. */
+    CommittedData committed;
 
     @Value("${nails-gag.files.root}")
     void setFilesRoot(Path root) {
-        this.filesRoot = root.toAbsolutePath().normalize();
+        committed = new CommittedData(jdbc, root);
     }
 
     @AfterEach
     void removeCommittedData() throws IOException {
-        CommittedData.removeAll(jdbc, filesRoot);
+        committed.removeAll();
+    }
+
+    /** Карточка регистрируется: её записи, референсы и согласия удалятся после теста. */
+    @Override
+    UUID client(String firstName) {
+        return committed.client(super.client(firstName));
+    }
+
+    @Override
+    SlotView slot(LocalDate day, String time) {
+        var slot = super.slot(day, time);
+        committed.slot(slot.id());
+        return slot;
     }
 
     @Test
@@ -143,7 +158,7 @@ class BookingReferenceRetentionTest extends BookingTestSupport {
 
         assertThat(references.list(booking.id(), master)).hasSize(1);
         assertThat(files.find(file)).isPresent();
-        assertThat(referenceDirectory(filesRoot, file)).exists();
+        assertThat(committed.referenceDirectory(file)).exists();
     }
 
     @Test
@@ -174,13 +189,13 @@ class BookingReferenceRetentionTest extends BookingTestSupport {
     private UUID reference(BookingView booking, UUID clientId) {
         var actor = signedIn(clientId);
         return references
-                .add(booking.id(), ReferenceUploads.upload(files, actor), actor)
+                .add(booking.id(), committed.file(ReferenceUploads.upload(files, actor)), actor)
                 .fileId();
     }
 
     private void assertRemoved(BookingView booking, UUID file) {
         assertThat(references.list(booking.id(), master)).isEmpty();
         assertThat(files.find(file)).isEmpty();
-        assertThat(referenceDirectory(filesRoot, file)).doesNotExist();
+        assertThat(committed.referenceDirectory(file)).doesNotExist();
     }
 }

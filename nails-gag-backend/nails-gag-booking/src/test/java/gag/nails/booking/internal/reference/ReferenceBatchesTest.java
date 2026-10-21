@@ -1,6 +1,5 @@
 package gag.nails.booking.internal.reference;
 
-import static gag.nails.booking.CommittedData.referenceDirectory;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.booking.BookingReferences;
@@ -76,16 +75,17 @@ class ReferenceBatchesTest {
     @Autowired
     MutableClock clock;
 
-    Path filesRoot;
+    /** Свои зафиксированные данные теста: после него удаляются только они. */
+    CommittedData committed;
 
     @Value("${nails-gag.files.root}")
     void setFilesRoot(Path root) {
-        this.filesRoot = root.toAbsolutePath().normalize();
+        committed = new CommittedData(jdbc, root);
     }
 
     @AfterEach
     void removeCommittedData() throws IOException {
-        CommittedData.removeAll(jdbc, filesRoot);
+        committed.removeAll();
     }
 
     @Test
@@ -119,7 +119,7 @@ class ReferenceBatchesTest {
         // Сбой откатил только свою запись: её референс и файл на месте до следующего запуска.
         assertThat(references.existsById(failing.fileId())).isTrue();
         assertThat(files.find(failing.fileId())).isPresent();
-        assertThat(referenceDirectory(filesRoot, failing.fileId())).exists();
+        assertThat(committed.referenceDirectory(failing.fileId())).exists();
     }
 
     /** Удаление, которое падает на одной записи — уже после того, как удалило референсы всей переданной пачки. */
@@ -139,18 +139,19 @@ class ReferenceBatchesTest {
     private void assertRemoved(UUID fileId) {
         assertThat(references.existsById(fileId)).isFalse();
         assertThat(files.find(fileId)).isEmpty();
-        assertThat(referenceDirectory(filesRoot, fileId)).doesNotExist();
+        assertThat(committed.referenceDirectory(fileId)).doesNotExist();
     }
 
     private Reference cancelledBookingWithReference(int day) {
-        var client = clients.create(new CreateClient("Анна", null, null, null, null, null), master)
-                .id();
+        var client = committed.client(clients.create(new CreateClient("Анна", null, null, null, null, null), master)
+                .id());
         var slot = schedule.addSlot(LocalDate.of(2026, 10, 5).plusDays(day), LocalTime.NOON, master);
+        committed.slot(slot.id());
         var booking = bookings.createByMaster(
                         new CreateBooking(client, slot.id(), MANICURE, List.of(), null), false, master)
                 .id();
         var fileId = bookingReferences
-                .add(booking, ReferenceUploads.upload(files, master), master)
+                .add(booking, committed.file(ReferenceUploads.upload(files, master)), master)
                 .fileId();
         bookings.cancel(booking, master);
         return new Reference(booking, fileId);

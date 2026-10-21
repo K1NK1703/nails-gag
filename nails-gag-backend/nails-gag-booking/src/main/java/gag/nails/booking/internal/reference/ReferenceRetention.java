@@ -81,7 +81,11 @@ public class ReferenceRetention {
         try {
             return removeLocked(cutoff, bookingIds);
         } catch (RuntimeException e) {
-            log.warn("expired references batch failed, removing its {} bookings one by one", bookingIds.size(), e);
+            // Без стека: причину покажет error по записи, на которой сбой повторится.
+            log.warn(
+                    "expired references batch failed ({}), removing its {} bookings one by one",
+                    e.toString(),
+                    bookingIds.size());
         }
         var removed = 0;
         for (var bookingId : bookingIds) {

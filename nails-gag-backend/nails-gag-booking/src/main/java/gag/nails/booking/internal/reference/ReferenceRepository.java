@@ -27,12 +27,13 @@ interface ReferenceRepository extends JpaRepository<ReferenceEntity, UUID> {
     /**
      * Очередная страница записей, у которых есть референсы с истёкшим к {@code cutoff} сроком, — идентификаторы
      * больше {@code after} по возрастанию, без блокировки. Ищет от референсов, чтобы не обходить историю записей:
-     * записей с референсами немного, а записей за годы — много.
+     * записей с референсами немного, а записей за годы — много; курсор сужает и выборку референсов (диапазон по
+     * первичному ключу {@code (booking_id, file_id)}).
      */
     @Query(value = """
                     select b.id from booking.booking b
-                    where b.id = any (array(select distinct r.booking_id from booking.reference r))
-                      and b.id > :after
+                    where b.id = any (array(select distinct r.booking_id from booking.reference r
+                                            where r.booking_id > :after))
                       and ((b.status = 'CANCELLED' and b.cancelled_at < :cutoff)
                            or (b.status <> 'CANCELLED' and coalesce(b.agreed_start, b.slot_starts_at) < :cutoff))
                     order by b.id

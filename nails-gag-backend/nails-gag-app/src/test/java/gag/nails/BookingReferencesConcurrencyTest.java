@@ -117,7 +117,7 @@ class BookingReferencesConcurrencyTest {
         assertThat(erased.failure()).isNull();
         assertThat(references.list(booking, master)).isEmpty();
         assertThat(files.find(file)).isEmpty();
-        assertThat(filesRoot.resolve("reference").resolve(file.toString())).doesNotExist();
+        assertThat(referenceDirectory(file)).doesNotExist();
     }
 
     @Test
@@ -139,6 +139,14 @@ class BookingReferencesConcurrencyTest {
                         .query(Boolean.class)
                         .single())
                 .isTrue();
+    }
+
+    /**
+     * Каталог вариантов файла-референса на диске. Раскладка хранилища — {@code <root>/<назначение>/<id>} ({@code
+     * StorageLayout} модуля files, спецификация §3.1); в модулях тот же помощник — {@code CommittedData}.
+     */
+    private Path referenceDirectory(UUID fileId) {
+        return filesRoot.resolve("reference").resolve(fileId.toString());
     }
 
     private UUID card() {
