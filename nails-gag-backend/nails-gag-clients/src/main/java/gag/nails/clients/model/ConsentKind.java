@@ -1,27 +1,37 @@
 package gag.nails.clients.model;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
  * Вид согласия и документ, версия которого фиксируется вместе с ним. Согласие обычно действует только по
  * действующей редакции документа: новая редакция требует спросить снова. Согласие на публикацию фото действует
- * по любой редакции, пока клиент его не отзовёт ({@link #requiresCurrentVersion()}).
+ * по любой редакции, пока его не отзовут ({@link #requiresCurrentVersion()}).
  */
 public enum ConsentKind {
-    PERSONAL_DATA(DocumentKind.POLICY, true),
-    OFFER(DocumentKind.OFFER, true),
-    REVIEW_PUBLICATION(DocumentKind.POLICY, true),
+    PERSONAL_DATA(DocumentKind.POLICY),
+    OFFER(DocumentKind.OFFER),
+    REVIEW_PUBLICATION(DocumentKind.POLICY),
     /** Публикация фото работ клиента в портфолио; необязательное, действует до отзыва. */
-    PHOTO_PUBLICATION(DocumentKind.POLICY, false);
+    PHOTO_PUBLICATION(DocumentKind.POLICY);
 
     private final DocumentKind document;
-    private final boolean requiresCurrentVersion;
 
-    ConsentKind(DocumentKind document, boolean requiresCurrentVersion) {
+    ConsentKind(DocumentKind document) {
         this.document = document;
-        this.requiresCurrentVersion = requiresCurrentVersion;
     }
 
     public DocumentKind document() {
         return document;
+    }
+
+    /** Обязательное: без него клиента нельзя обслуживать (записать), и отозвать его нельзя. */
+    public boolean required() {
+        return switch (this) {
+            case PERSONAL_DATA, OFFER -> true;
+            case REVIEW_PUBLICATION, PHOTO_PUBLICATION -> false;
+        };
     }
 
     /**
@@ -29,6 +39,14 @@ public enum ConsentKind {
      * редакции, до отзыва.
      */
     public boolean requiresCurrentVersion() {
-        return requiresCurrentVersion;
+        return switch (this) {
+            case PERSONAL_DATA, OFFER, REVIEW_PUBLICATION -> true;
+            case PHOTO_PUBLICATION -> false;
+        };
+    }
+
+    /** Все обязательные виды ({@link #required()}). */
+    public static Set<ConsentKind> requiredKinds() {
+        return Arrays.stream(values()).filter(ConsentKind::required).collect(Collectors.toUnmodifiableSet());
     }
 }

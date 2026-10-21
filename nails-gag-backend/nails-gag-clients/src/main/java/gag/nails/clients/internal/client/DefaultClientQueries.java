@@ -4,6 +4,8 @@ import gag.nails.clients.ClientQueries;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.internal.consent.ConsentEntity;
 import gag.nails.clients.internal.consent.ConsentRepository;
+import gag.nails.clients.internal.consent.ConsentWithdrawalEntity;
+import gag.nails.clients.internal.consent.ConsentWithdrawalRepository;
 import gag.nails.clients.internal.consent.DefaultDocumentVersionService;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagChangeEntity;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagChangeRepository;
@@ -36,16 +38,19 @@ class DefaultClientQueries implements ClientQueries {
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
+    private final ConsentWithdrawalRepository withdrawals;
     private final PrepaymentFlagChangeRepository flagChanges;
     private final DefaultDocumentVersionService documents;
 
     DefaultClientQueries(
             ClientRepository clients,
             ConsentRepository consents,
+            ConsentWithdrawalRepository withdrawals,
             PrepaymentFlagChangeRepository flagChanges,
             DefaultDocumentVersionService documents) {
         this.clients = clients;
         this.consents = consents;
+        this.withdrawals = withdrawals;
         this.flagChanges = flagChanges;
         this.documents = documents;
     }
@@ -131,7 +136,9 @@ class DefaultClientQueries implements ClientQueries {
     @Override
     public List<ConsentWithdrawalView> consentWithdrawals(UUID clientId, Actor actor) {
         actor.requireReadOrSelf(Section.CLIENTS, clientId);
-        return consents.findWithdrawals(clientId);
+        return withdrawals.findAllByClientIdOrderByWithdrawnAtDescIdDesc(clientId).stream()
+                .map(ConsentWithdrawalEntity::toView)
+                .toList();
     }
 
     @Override

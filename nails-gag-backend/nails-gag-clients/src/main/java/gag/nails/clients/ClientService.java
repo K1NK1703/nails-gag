@@ -124,11 +124,14 @@ public interface ClientService {
 
     /**
      * Отзыв согласия: клиент — своего, сотрудник с изменением раздела «Клиенты» — любого клиента. Помечает
-     * отозванными все действующие согласия этого вида у клиента ({@link ClientQueries#consentWithdrawals}) и
-     * публикует внутри транзакции {@link ConsentWithdrawn}. Если отзывать нечего — ничего не меняется и события нет.
-     * Дать согласие снова можно обычным {@link #recordConsent}.
+     * отозванными все неотозванные (по любой редакции) согласия этого вида у клиента, добавляет одну запись в журнал
+     * отзывов ({@link ClientQueries#consentWithdrawals}) и публикует внутри транзакции {@link ConsentWithdrawn}.
+     * Если отзывать нечего — ничего не меняется, записи и события нет. Дать согласие снова можно обычным
+     * {@link #recordConsent}. Запись и отзыв согласия, объединение и обезличивание ждут друг друга на блокировке
+     * карточки, поэтому события согласий публикуются в порядке фиксации.
      *
-     * @throws ConsentRequiredException для {@link ConsentKind#PERSONAL_DATA} и {@link ConsentKind#OFFER}
+     * @throws ConsentRequiredException для обязательного вида ({@link ConsentKind#required()}), раньше проверок
+     *     карточки
      * @throws ClientErasedException если карточка обезличена
      * @throws ClientNotFoundException если клиента нет
      */

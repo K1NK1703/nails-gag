@@ -18,6 +18,8 @@ import gag.nails.clients.event.ConsentGiven;
 import gag.nails.clients.event.ConsentWithdrawn;
 import gag.nails.clients.internal.consent.ConsentEntity;
 import gag.nails.clients.internal.consent.ConsentRepository;
+import gag.nails.clients.internal.consent.ConsentWithdrawalEntity;
+import gag.nails.clients.internal.consent.ConsentWithdrawalRepository;
 import gag.nails.clients.internal.consent.DefaultDocumentVersionService;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagJournal;
 import gag.nails.clients.model.ChangedBy;
@@ -36,7 +38,10 @@ import gag.nails.common.persistence.ConstraintViolations;
 import gag.nails.common.text.Phones;
 import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -54,9 +59,6 @@ class DefaultClientService implements ClientService {
     private static final Set<PrepaymentFlagReason> MASTER_ONLY_REASONS = EnumSet.of(
             PrepaymentFlagReason.MASTER_SET, PrepaymentFlagReason.MASTER_WAIVED, PrepaymentFlagReason.MERGED);
 
-    /** Согласия, без которых клиента нельзя обслуживать: их не отзывают. */
-    private static final Set<ConsentKind> REQUIRED_CONSENTS = EnumSet.of(ConsentKind.PERSONAL_DATA, ConsentKind.OFFER);
-
     /** Та же граница, что у {@link PrepaymentFlagChange#comment()}. */
     private static final int MAX_COMMENT_LENGTH = 500;
 
@@ -68,6 +70,7 @@ class DefaultClientService implements ClientService {
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
+    private final ConsentWithdrawalRepository withdrawals;
     private final PrepaymentFlagJournal flagJournal;
     private final DefaultDocumentVersionService documents;
     private final ClientMerger merger;
@@ -78,6 +81,7 @@ class DefaultClientService implements ClientService {
     DefaultClientService(
             ClientRepository clients,
             ConsentRepository consents,
+            ConsentWithdrawalRepository withdrawals,
             PrepaymentFlagJournal flagJournal,
             DefaultDocumentVersionService documents,
             ClientMerger merger,
@@ -86,6 +90,7 @@ class DefaultClientService implements ClientService {
             Clock clock) {
         this.clients = clients;
         this.consents = consents;
+        this.withdrawals = withdrawals;
         this.flagJournal = flagJournal;
         this.documents = documents;
         this.merger = merger;
@@ -185,8 +190,8 @@ class DefaultClientService implements ClientService {
         if (!currentVersion.equals(command.documentVersion())) {
             throw new ConsentVersionOutdatedException(command.kind(), currentVersion);
         }
-        var client = requireLive(clientId);
-        var now = clock.instant();
+        var client = requireLiveLocked(clientId);
+        var now = now();
         consents.save(new ConsentEntity(client.id(), command.kind(), command.documentVersion(), command.source(), now));
         events.publishEvent(new ConsentGiven(client.id(), command.kind(), now));
     }
@@ -194,17 +199,18 @@ class DefaultClientService implements ClientService {
     @Override
     public void withdrawConsent(UUID clientId, ConsentKind kind, Actor actor) {
         actor.requireWriteOrSelf(Section.CLIENTS, clientId);
-        if (REQUIRED_CONSENTS.contains(kind)) {
+        if (kind.required()) {
             throw new ConsentRequiredException(kind);
         }
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         var current = consents.findAllByClientIdAndKindAndWithdrawnAtIsNull(client.id(), kind);
         if (current.isEmpty()) {
             return;
         }
-        var now = clock.instant();
+        var now = now();
         var by = actor.isClient(clientId) ? WithdrawnBy.CLIENT : WithdrawnBy.STAFF;
-        current.forEach(consent -> consent.withdraw(now, by));
+        current.forEach(consent -> consent.withdraw(now));
+        withdrawals.save(new ConsentWithdrawalEntity(client.id(), kind, now, by));
         events.publishEvent(new ConsentWithdrawn(client.id(), kind, now));
     }
 
@@ -257,7 +263,7 @@ class DefaultClientService implements ClientService {
 
     @Override
     public void erase(UUID clientId) {
-        var client = require(clientId);
+        var client = requireLocked(clientId);
         if (client.isErased()) {
             return;
         }
@@ -272,7 +278,8 @@ class DefaultClientService implements ClientService {
         if (sourceId.equals(targetId)) {
             throw new ValidationException("targetId", "must differ from sourceId");
         }
-        return merger.merge(require(sourceId), require(targetId));
+        var locked = requireLockedPair(sourceId, targetId);
+        return merger.merge(locked.getFirst(), locked.getLast());
     }
 
     @Override
@@ -281,8 +288,9 @@ class DefaultClientService implements ClientService {
         if (otherClientId.equals(ownId)) {
             throw new ValidationException("otherClientId", "must differ from the actor's own client");
         }
-        var own = require(ownId);
-        var other = require(otherClientId);
+        var locked = requireLockedPair(ownId, otherClientId);
+        var own = locked.getFirst();
+        var other = locked.getLast();
         requireNotBlocked(own);
         requireNotBlocked(other);
         return merger.mergeInto(own, other);
@@ -336,6 +344,37 @@ class DefaultClientService implements ClientService {
                 .ifPresent(other -> {
                     throw new PhoneTakenException(phone);
                 });
+    }
+
+    /** Время записи и события одно и то же: база хранит микросекунды. */
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
+    }
+
+    /**
+     * Две карточки под блокировкой строк в том порядке, в каком их передали; блокируются в порядке id — одном для
+     * всех, кто берёт две карточки, чтобы встречные объединения не ждали друг друга по кругу.
+     */
+    private List<ClientEntity> requireLockedPair(UUID first, UUID second) {
+        if (first.toString().compareTo(second.toString()) < 0) {
+            var a = requireLocked(first);
+            return List.of(a, requireLocked(second));
+        }
+        var b = requireLocked(second);
+        return List.of(requireLocked(first), b);
+    }
+
+    private ClientEntity requireLocked(UUID clientId) {
+        return clients.findLockedById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
+    }
+
+    /** Живая карточка под блокировкой строки ({@link ClientRepository#findLockedById}). */
+    private ClientEntity requireLiveLocked(UUID clientId) {
+        var client = requireLocked(clientId);
+        if (client.isErased()) {
+            throw new ClientErasedException(clientId);
+        }
+        return client;
     }
 
     private ClientEntity require(UUID clientId) {

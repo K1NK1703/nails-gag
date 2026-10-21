@@ -14,14 +14,17 @@ import gag.nails.clients.event.ClientMerged;
 import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
+import gag.nails.clients.model.ConsentWithdrawalView;
 import gag.nails.clients.model.MergeResult;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.clients.model.PrepaymentFlagReason;
+import gag.nails.clients.model.WithdrawnBy;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.MutableClock;
+import gag.nails.testsupport.TestTimeConfiguration;
 import java.time.Duration;
 import java.time.MonthDay;
 import java.util.Set;
@@ -270,5 +273,56 @@ class ClientMergeTest {
                 .isInstanceOf(ClientNotFoundException.class);
         assertThatThrownBy(() -> clients.merge(client.id(), client.id(), Actor.client(client.id())))
                 .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void survivorSeesWithdrawalsOfRemovedCard() {
+        var card = clients.create(new CreateClient("Мария", null, null, null, null, null), master);
+        var other = clients.create(new CreateClient("Аня", null, null, null, null, null), master);
+        givePhotoPublication(card.id());
+        clock.advance(Duration.ofMinutes(1));
+        clients.withdrawConsent(card.id(), ConsentKind.PHOTO_PUBLICATION, master);
+
+        clients.merge(card.id(), other.id(), master);
+
+        assertThat(queries.consentWithdrawals(other.id(), master))
+                .containsExactly(new ConsentWithdrawalView(
+                        ConsentKind.PHOTO_PUBLICATION,
+                        TestTimeConfiguration.START.plus(Duration.ofMinutes(1)),
+                        WithdrawnBy.STAFF));
+        assertThat(queries.hasCurrentConsents(other.id(), Set.of(ConsentKind.PHOTO_PUBLICATION)))
+                .isFalse();
+    }
+
+    @Test
+    void consentIsCurrentAfterMergeIfEitherCardHadItNotWithdrawn() {
+        var withdrawnOnRemoved = clients.create(new CreateClient("Мария", null, null, null, null, null), master);
+        var keptOnSurvivor = clients.create(new CreateClient("Аня", null, null, null, null, null), master);
+        givePhotoPublication(withdrawnOnRemoved.id());
+        clients.withdrawConsent(withdrawnOnRemoved.id(), ConsentKind.PHOTO_PUBLICATION, master);
+        givePhotoPublication(keptOnSurvivor.id());
+
+        var keptOnRemoved = clients.create(new CreateClient("Вера", null, null, null, null, null), master);
+        var withdrawnOnSurvivor = clients.create(new CreateClient("Ира", null, null, null, null, null), master);
+        givePhotoPublication(keptOnRemoved.id());
+        givePhotoPublication(withdrawnOnSurvivor.id());
+        clients.withdrawConsent(withdrawnOnSurvivor.id(), ConsentKind.PHOTO_PUBLICATION, master);
+
+        clients.merge(withdrawnOnRemoved.id(), keptOnSurvivor.id(), master);
+        clients.merge(keptOnRemoved.id(), withdrawnOnSurvivor.id(), master);
+
+        assertThat(queries.hasCurrentConsents(keptOnSurvivor.id(), Set.of(ConsentKind.PHOTO_PUBLICATION)))
+                .isTrue();
+        assertThat(queries.hasCurrentConsents(withdrawnOnSurvivor.id(), Set.of(ConsentKind.PHOTO_PUBLICATION)))
+                .isTrue();
+        assertThat(queries.consentWithdrawals(keptOnSurvivor.id(), master)).hasSize(1);
+        assertThat(queries.consentWithdrawals(withdrawnOnSurvivor.id(), master)).hasSize(1);
+    }
+
+    private void givePhotoPublication(UUID clientId) {
+        clients.recordConsent(
+                clientId,
+                new RecordConsent(ConsentKind.PHOTO_PUBLICATION, "2026-09-25", ConsentSource.ENTERED_BY_MASTER),
+                master);
     }
 }

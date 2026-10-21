@@ -3,7 +3,7 @@ package gag.nails.clients.internal.consent;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.ConsentView;
-import gag.nails.clients.model.WithdrawnBy;
+import gag.nails.common.error.InternalException;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -35,9 +35,6 @@ public class ConsentEntity {
 
     private @Nullable Instant withdrawnAt;
 
-    @Enumerated(EnumType.STRING)
-    private @Nullable WithdrawnBy withdrawnBy;
-
     protected ConsentEntity() {}
 
     public ConsentEntity(
@@ -49,10 +46,16 @@ public class ConsentEntity {
         this.givenAt = givenAt;
     }
 
-    /** Строка журнала остаётся, согласие перестаёт действовать. */
-    public void withdraw(Instant at, WithdrawnBy by) {
+    /**
+     * Строка журнала остаётся, согласие перестаёт действовать; кто и когда отозвал — в журнале отзывов.
+     *
+     * @throws InternalException если согласие уже отозвано: отзыв выбирает только неотозванные строки
+     */
+    public void withdraw(Instant at) {
+        if (withdrawnAt != null) {
+            throw new InternalException("consent " + id + " is already withdrawn");
+        }
         this.withdrawnAt = at;
-        this.withdrawnBy = by;
     }
 
     public ConsentView toView() {

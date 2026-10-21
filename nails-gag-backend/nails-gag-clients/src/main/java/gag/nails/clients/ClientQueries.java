@@ -79,7 +79,9 @@ public interface ClientQueries {
     /**
      * Есть ли у клиента неотозванные согласия всех перечисленных видов на действующие версии документов; для вида,
      * которому редакция не важна ({@link ConsentKind#requiresCurrentVersion()}), — на любую. Без
-     * проверки прав. Пустой набор — {@code true}; для несуществующего клиента — {@code false}.
+     * проверки прав. Пустой набор — {@code true}; для несуществующего клиента — {@code false}. Для обезличенной
+     * карточки согласия остаются в журнале, и результат не говорит, можно ли публиковать её фото: ориентир —
+     * {@link gag.nails.clients.event.ClientErased}.
      */
     boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds);
 

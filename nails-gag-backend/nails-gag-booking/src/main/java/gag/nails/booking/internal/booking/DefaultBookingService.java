@@ -37,7 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class DefaultBookingService implements BookingService {
 
-    private static final Set<ConsentKind> REQUIRED_CONSENTS = Set.of(ConsentKind.PERSONAL_DATA, ConsentKind.OFFER);
+    private static final Set<ConsentKind> REQUIRED_CONSENTS = ConsentKind.requiredKinds();
     private static final int MAX_COMMENT_LENGTH = 500;
     private static final int MAX_MASTER_NOTE_LENGTH = 2000;
 

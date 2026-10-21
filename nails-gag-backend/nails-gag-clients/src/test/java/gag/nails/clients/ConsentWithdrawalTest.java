@@ -3,8 +3,12 @@ package gag.nails.clients;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.clients.command.AddDocumentVersion;
 import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.command.RecordConsent;
+import gag.nails.clients.command.RegisterClient;
+import gag.nails.clients.error.ClientErasedException;
+import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.error.ConsentRequiredException;
 import gag.nails.clients.event.ConsentGiven;
 import gag.nails.clients.event.ConsentWithdrawn;
@@ -13,6 +17,7 @@ import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.ConsentView;
 import gag.nails.clients.model.ConsentWithdrawalView;
+import gag.nails.clients.model.DocumentKind;
 import gag.nails.clients.model.WithdrawnBy;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
@@ -20,7 +25,9 @@ import gag.nails.testsupport.ModuleTest;
 import gag.nails.testsupport.MutableClock;
 import gag.nails.testsupport.TestTimeConfiguration;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +43,9 @@ class ConsentWithdrawalTest {
 
     @Autowired
     ClientQueries queries;
+
+    @Autowired
+    DocumentVersionService documents;
 
     @Autowired
     MutableClock clock;
@@ -201,12 +211,81 @@ class ConsentWithdrawalTest {
 
         givePhotoPublication(mariaActor);
         clients.withdrawConsent(maria.id(), ConsentKind.PHOTO_PUBLICATION, mariaActor);
+        clock.advance(Duration.ofMinutes(1));
         clients.withdrawConsent(maria.id(), ConsentKind.PHOTO_PUBLICATION, master);
 
         assertThat(events.ofType(ConsentWithdrawn.class)
                         .matching(e -> e.clientId().equals(maria.id())))
-                .hasSize(1);
-        assertThat(queries.consentWithdrawals(maria.id(), master)).hasSize(1);
+                .containsExactly(
+                        new ConsentWithdrawn(maria.id(), ConsentKind.PHOTO_PUBLICATION, TestTimeConfiguration.START));
+        assertThat(queries.consentWithdrawals(maria.id(), master))
+                .containsExactly(new ConsentWithdrawalView(
+                        ConsentKind.PHOTO_PUBLICATION, TestTimeConfiguration.START, WithdrawnBy.CLIENT));
+    }
+
+    @Test
+    void withdrawalsAtTheSameTimeAreNewestFirst() {
+        givePhotoPublication(mariaActor);
+        clients.recordConsent(
+                maria.id(),
+                new RecordConsent(ConsentKind.REVIEW_PUBLICATION, CURRENT_VERSION, ConsentSource.SITE_CHECKBOX),
+                mariaActor);
+
+        clients.withdrawConsent(maria.id(), ConsentKind.PHOTO_PUBLICATION, mariaActor);
+        clients.withdrawConsent(maria.id(), ConsentKind.REVIEW_PUBLICATION, mariaActor);
+
+        assertThat(queries.consentWithdrawals(maria.id(), mariaActor))
+                .extracting(ConsentWithdrawalView::kind)
+                .containsExactly(ConsentKind.REVIEW_PUBLICATION, ConsentKind.PHOTO_PUBLICATION);
+    }
+
+    @Test
+    void consentGivenForOldVersionIsWithdrawnToo(PublishedEvents events) {
+        clients.recordConsent(
+                maria.id(),
+                new RecordConsent(ConsentKind.REVIEW_PUBLICATION, CURRENT_VERSION, ConsentSource.SITE_CHECKBOX),
+                mariaActor);
+        documents.addVersion(
+                new AddDocumentVersion(
+                        DocumentKind.POLICY, "2026-10-01", LocalDate.of(2026, 10, 1), "Текст редакции 2026-10-01"),
+                Actor.developer());
+
+        clients.withdrawConsent(maria.id(), ConsentKind.REVIEW_PUBLICATION, mariaActor);
+
+        assertThat(events.ofType(ConsentWithdrawn.class)
+                        .matching(e -> e.clientId().equals(maria.id())))
+                .containsExactly(
+                        new ConsentWithdrawn(maria.id(), ConsentKind.REVIEW_PUBLICATION, TestTimeConfiguration.START));
+        assertThat(queries.consentWithdrawals(maria.id(), mariaActor))
+                .containsExactly(new ConsentWithdrawalView(
+                        ConsentKind.REVIEW_PUBLICATION, TestTimeConfiguration.START, WithdrawnBy.CLIENT));
+    }
+
+    @Test
+    void withdrawOnErasedCardIsRejected(PublishedEvents events) {
+        var erased = clients.register(new RegisterClient(UUID.randomUUID(), "Мария", null, null));
+        clients.recordConsent(
+                erased.id(),
+                new RecordConsent(ConsentKind.PHOTO_PUBLICATION, CURRENT_VERSION, ConsentSource.SITE_CHECKBOX),
+                Actor.client(erased.id()));
+        clients.erase(erased.id());
+
+        assertThatThrownBy(() -> clients.withdrawConsent(erased.id(), ConsentKind.PHOTO_PUBLICATION, master))
+                .isInstanceOf(ClientErasedException.class);
+        assertThatThrownBy(() -> clients.withdrawConsent(erased.id(), ConsentKind.PERSONAL_DATA, master))
+                .isInstanceOf(ConsentRequiredException.class);
+        assertThat(events.ofType(ConsentWithdrawn.class)).isEmpty();
+        assertThat(queries.consentWithdrawals(erased.id(), master)).isEmpty();
+    }
+
+    @Test
+    void withdrawForMissingClientIsRejected() {
+        var missing = UUID.randomUUID();
+
+        assertThatThrownBy(() -> clients.withdrawConsent(missing, ConsentKind.PHOTO_PUBLICATION, master))
+                .isInstanceOf(ClientNotFoundException.class);
+        assertThatThrownBy(() -> clients.withdrawConsent(missing, ConsentKind.PHOTO_PUBLICATION, mariaActor))
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     private void givePhotoPublication(Actor actor) {
