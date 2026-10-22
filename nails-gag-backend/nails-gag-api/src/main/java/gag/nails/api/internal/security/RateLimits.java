@@ -49,7 +49,9 @@ final class RateLimits {
         /** Запросы с сессией — по аккаунту. */
         ACCOUNT,
         /** Загрузки фото ({@code POST /api/files}) — по аккаунту, вдобавок к {@link #ACCOUNT}. */
-        UPLOAD;
+        UPLOAD,
+        /** Картинки портфолио ({@code /api/portfolio/images/**}) — по IP, вместо остальных корзин. */
+        IMAGE;
 
         /** За сколько корзина пополняется целиком; столько же ключ живёт без обращений. */
         Duration period() {
@@ -121,6 +123,7 @@ final class RateLimits {
             case ANONYMOUS -> limits.anonymousPerMinute();
             case ACCOUNT -> limits.authenticatedPerMinute();
             case UPLOAD -> limits.uploadsPerHour();
+            case IMAGE -> limits.imagesPerMinute();
         };
     }
 

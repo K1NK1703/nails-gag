@@ -75,6 +75,9 @@ nails-gag:
       authenticated-per-minute: 600
       # Загрузки фото (POST /api/files) одного аккаунта в час, вдобавок к общей корзине аккаунта.
       uploads-per-hour: 30
+      # Картинки портфолио (/api/portfolio/images/**) с одного IP в минуту — своя корзина вместо общей: лендинг
+      # запрашивает их десятками.
+      images-per-minute: 600
     # Пути на сайте, куда обратный вызов провайдера отправляет браузер.
     redirects:
       signed-in: /cabinet

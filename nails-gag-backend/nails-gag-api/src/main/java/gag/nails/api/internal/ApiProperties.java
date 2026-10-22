@@ -65,25 +65,37 @@ public record ApiProperties(
      * @param authenticatedPerMinute запросы с сессией одного аккаунта
      * @param uploadsPerHour загрузки фото ({@code POST /api/files}) одного аккаунта в час — вдобавок к
      *     {@code authenticatedPerMinute}: обработка картинки дорога, а места на диске конечны
+     * @param imagesPerMinute картинки портфолио ({@code /api/portfolio/images/**}) с одного IP — своя корзина вместо
+     *     общей: лендинг запрашивает их десятками
      */
     public record RateLimits(
             @DefaultValue("10") int authPerMinute,
             @DefaultValue("60") int anonymousPerMinute,
             @DefaultValue("600") int authenticatedPerMinute,
+            @DefaultValue("30") int uploadsPerHour,
+            @DefaultValue("600") int imagesPerMinute) {
 
-            @DefaultValue("" + RateLimits.DEFAULT_UPLOADS_PER_HOUR)
-            int uploadsPerHour) {
-
-        /** Загрузок в час по умолчанию. */
+        /** Загрузок в час по умолчанию — как в {@code @DefaultValue} компонента. */
         public static final int DEFAULT_UPLOADS_PER_HOUR = 30;
+
+        /** Картинок портфолио в минуту по умолчанию — как в {@code @DefaultValue} компонента. */
+        public static final int DEFAULT_IMAGES_PER_MINUTE = 600;
 
         /** Привязка настроек — только через этот конструктор. */
         @ConstructorBinding
         public RateLimits {}
 
-        /** Лимиты в минуту и загрузки по умолчанию ({@value #DEFAULT_UPLOADS_PER_HOUR} в час). */
+        /**
+         * Лимиты в минуту, загрузки ({@value #DEFAULT_UPLOADS_PER_HOUR} в час) и картинки
+         * ({@value #DEFAULT_IMAGES_PER_MINUTE} в минуту) — по умолчанию.
+         */
         public RateLimits(int authPerMinute, int anonymousPerMinute, int authenticatedPerMinute) {
-            this(authPerMinute, anonymousPerMinute, authenticatedPerMinute, DEFAULT_UPLOADS_PER_HOUR);
+            this(
+                    authPerMinute,
+                    anonymousPerMinute,
+                    authenticatedPerMinute,
+                    DEFAULT_UPLOADS_PER_HOUR,
+                    DEFAULT_IMAGES_PER_MINUTE);
         }
     }
 

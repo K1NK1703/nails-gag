@@ -19,8 +19,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Лимиты частоты (спецификация API, §5.3). Корзина: вход ({@code /api/auth/**}) — по IP; запрос с сессией — по
  * аккаунту (известен после {@link SessionFilter}, поэтому этот фильтр после него); остальное — по IP. Загрузка фото
  * ({@code POST /api/files}) с сессией берёт запрос ещё и из часовой корзины загрузок аккаунта — после корзины
- * аккаунта: отказ общей корзины загрузку не расходует. IP — уже разобранный Tomcat-ом адрес клиента, IPv6 — с
- * точностью до сети /64. Превышение —
+ * аккаунта: отказ общей корзины загрузку не расходует. Картинки портфолио ({@code /api/portfolio/images/**}) — в
+ * своей корзине по IP, и у вошедшего тоже: лендинг запрашивает их десятками, общая анонимная корзина на них не
+ * тратится. IP — уже разобранный Tomcat-ом адрес клиента, IPv6 — с точностью до сети /64. Превышение —
  * {@code 429 common.rate_limited} с {@code Retry-After} в целых секундах до пополнения, округлённых вверх. В лог —
  * только вид корзины: ни IP, ни аккаунта.
  */
@@ -31,6 +32,7 @@ class RateLimitFilter extends OncePerRequestFilter {
     static final String CODE = "common.rate_limited";
     static final String AUTH_PATH = ApiPaths.AUTH;
     static final String FILES_PATH = ApiPaths.FILES;
+    static final String IMAGES_PATH = ApiPaths.PORTFOLIO_IMAGES;
 
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
 
@@ -50,6 +52,9 @@ class RateLimitFilter extends OncePerRequestFilter {
         var authenticated = ApiRequestAttributes.authenticated(request);
         if (isAuthPath(request)) {
             kind = RateLimits.Kind.AUTH;
+            id = ip(request);
+        } else if (isUnder(request, IMAGES_PATH)) {
+            kind = RateLimits.Kind.IMAGE;
             id = ip(request);
         } else if (authenticated.isPresent()) {
             kind = RateLimits.Kind.ACCOUNT;
@@ -83,8 +88,13 @@ class RateLimitFilter extends OncePerRequestFilter {
      * {@code /api/authx} — нет.
      */
     private static boolean isAuthPath(HttpServletRequest request) {
+        return isUnder(request, AUTH_PATH);
+    }
+
+    /** Сам адрес {@code prefix} или адрес под ним ({@code prefix/…}), но не {@code prefixx}. */
+    private static boolean isUnder(HttpServletRequest request, String prefix) {
         var path = path(request);
-        return path.equals(AUTH_PATH) || path.startsWith(AUTH_PATH + "/");
+        return path.equals(prefix) || path.startsWith(prefix + "/");
     }
 
     /** {@code POST /api/files} — в нормализованном пути, как и вход. */
