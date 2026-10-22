@@ -17,8 +17,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Лимиты частоты (спецификация API, §5.3). Корзина: вход ({@code /api/auth/**}) — по IP; запрос с сессией — по
- * аккаунту (известен после {@link SessionFilter}, поэтому этот фильтр после него); остальное — по IP. IP — уже
- * разобранный Tomcat-ом адрес клиента, IPv6 — с точностью до сети /64. Превышение —
+ * аккаунту (известен после {@link SessionFilter}, поэтому этот фильтр после него); остальное — по IP. Загрузка фото
+ * ({@code POST /api/files}) с сессией берёт запрос ещё и из часовой корзины загрузок аккаунта — после корзины
+ * аккаунта: отказ общей корзины загрузку не расходует. IP — уже разобранный Tomcat-ом адрес клиента, IPv6 — с
+ * точностью до сети /64. Превышение —
  * {@code 429 common.rate_limited} с {@code Retry-After} в целых секундах до пополнения, округлённых вверх. В лог —
  * только вид корзины: ни IP, ни аккаунта.
  */
@@ -28,6 +30,7 @@ class RateLimitFilter extends OncePerRequestFilter {
 
     static final String CODE = "common.rate_limited";
     static final String AUTH_PATH = ApiPaths.AUTH;
+    static final String FILES_PATH = ApiPaths.FILES;
 
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
 
@@ -56,6 +59,10 @@ class RateLimitFilter extends OncePerRequestFilter {
             id = ip(request);
         }
         var probe = limits.tryConsume(kind, id);
+        if (probe.isConsumed() && kind == RateLimits.Kind.ACCOUNT && isUpload(request)) {
+            kind = RateLimits.Kind.UPLOAD;
+            probe = limits.tryConsume(kind, id);
+        }
         if (probe.isConsumed()) {
             chain.doFilter(request, response);
             return;
@@ -76,8 +83,17 @@ class RateLimitFilter extends OncePerRequestFilter {
      * {@code /api/authx} — нет.
      */
     private static boolean isAuthPath(HttpServletRequest request) {
-        var pathInfo = request.getPathInfo();
-        var path = request.getServletPath() + (pathInfo == null ? "" : pathInfo);
+        var path = path(request);
         return path.equals(AUTH_PATH) || path.startsWith(AUTH_PATH + "/");
+    }
+
+    /** {@code POST /api/files} — в нормализованном пути, как и вход. */
+    private static boolean isUpload(HttpServletRequest request) {
+        return "POST".equals(request.getMethod()) && path(request).equals(FILES_PATH);
+    }
+
+    private static String path(HttpServletRequest request) {
+        var pathInfo = request.getPathInfo();
+        return request.getServletPath() + (pathInfo == null ? "" : pathInfo);
     }
 }

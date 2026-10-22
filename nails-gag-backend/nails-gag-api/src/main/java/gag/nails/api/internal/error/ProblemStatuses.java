@@ -41,6 +41,7 @@ import gag.nails.identity.error.RoleBuiltInException;
 import gag.nails.identity.error.RoleCodeTakenException;
 import gag.nails.identity.error.RoleInUseException;
 import gag.nails.identity.error.RoleNotFoundException;
+import gag.nails.portfolio.error.WorkNotFoundException;
 import gag.nails.schedule.error.DayTemplateInUseException;
 import gag.nails.schedule.error.DayTemplateNotFoundException;
 import gag.nails.schedule.error.RotationNotConfiguredException;
@@ -76,7 +77,8 @@ final class ProblemStatuses {
 
     /**
      * {@link AccessDeniedException} здесь — статус для сотрудника; клиенту и анониму обработчик отвечает иначе
-     * (спецификация API, §4.6).
+     * (спецификация API, §4.6). {@link ProcessingBusyException} обработчик дополняет {@code Retry-After}, как
+     * {@code common.busy}.
      */
     private static final Map<Class<? extends UserFacingException>, HttpStatus> STATUSES = Map.ofEntries(
             // common
@@ -101,6 +103,8 @@ final class ProblemStatuses {
             entry(ConsentRequiredException.class, HttpStatus.CONFLICT),
             entry(DocumentVersionExistsException.class, HttpStatus.CONFLICT),
             entry(DocumentVersionDateTakenException.class, HttpStatus.CONFLICT),
+            // portfolio
+            entry(WorkNotFoundException.class, HttpStatus.NOT_FOUND),
             // schedule
             entry(SlotNotFoundException.class, HttpStatus.NOT_FOUND),
             entry(DayTemplateNotFoundException.class, HttpStatus.NOT_FOUND),

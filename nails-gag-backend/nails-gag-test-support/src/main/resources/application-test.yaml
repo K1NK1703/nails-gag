@@ -5,6 +5,11 @@ spring:
       ddl-auto: validate
   liquibase:
     change-log: classpath:db/changelog/test-master.yaml
+  servlet:
+    multipart:
+      # Как в application.yaml приложения: HTTP-тесты загрузки проверяют эти пределы (у Spring Boot по умолчанию 1 МБ).
+      max-file-size: 15MB
+      max-request-size: 16MB
 nails-gag:
   time-zone: Europe/Moscow
   booking:

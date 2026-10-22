@@ -9,5 +9,8 @@ public final class ApiPaths {
      */
     public static final String AUTH = "/api/auth";
 
+    /** Загрузка фото (спецификация файлов и портфолио, §6.1): у {@code POST} своя корзина лимита частоты. */
+    public static final String FILES = "/api/files";
+
     private ApiPaths() {}
 }

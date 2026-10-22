@@ -11,6 +11,7 @@ import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.command.RecordConsent;
 import gag.nails.clients.command.UpdateClient;
 import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentView;
 import gag.nails.clients.model.MergeResult;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
@@ -23,6 +24,7 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -130,6 +132,18 @@ class ClientsController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void recordConsent(@PathVariable UUID id, @Valid @RequestBody RecordConsent body, Actor actor) {
         clients.recordConsent(id, body, actor);
+    }
+
+    /**
+     * Отзыв согласия: клиент — своего, сотрудник с изменением «Клиентов» — любого клиента. Вид — через дефис
+     * ({@code photo-publication}); обязательные ({@code personal-data}, {@code offer}) отозвать нельзя —
+     * {@code 409 clients.consent_required}. Отзывать нечего — ничего не меняется. Отзыв публикации фото сразу снимает
+     * работы клиента с лендинга.
+     */
+    @DeleteMapping("/{id}/consents/{consentKind}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void withdrawConsent(@PathVariable UUID id, @PathVariable ConsentKind consentKind, Actor actor) {
+        clients.withdrawConsent(id, consentKind, actor);
     }
 
     /** Журнал признака предоплаты, новые первыми. */

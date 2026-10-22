@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -406,6 +407,40 @@ class ClientsApiTest extends ApiTestSupport {
                 .expectBody()
                 .jsonPath("$.code")
                 .isEqualTo("clients.phone_taken");
+    }
+
+    @Test
+    void clientWithdrawsPhotoPublication() {
+        var customer = signInClient();
+        var clientId = actor(customer).requireClientId();
+        var kind = ConsentKind.PHOTO_PUBLICATION;
+        clientService.recordConsent(
+                clientId,
+                new RecordConsent(kind, documents.current(kind.document()).version(), ConsentSource.SITE_CHECKBOX),
+                actor(customer));
+        assertThat(clientQueries.hasCurrentConsents(clientId, Set.of(kind))).isTrue();
+
+        as(customer, csrf(client.delete().uri("/api/clients/{id}/consents/photo-publication", clientId)))
+                .exchange()
+                .expectStatus()
+                .isNoContent();
+
+        assertThat(clientQueries.hasCurrentConsents(clientId, Set.of(kind))).isFalse();
+    }
+
+    @Test
+    void personalDataCannotBeWithdrawn() {
+        var customer = signInClient();
+        var clientId = actor(customer).requireClientId();
+
+        var problem = json(
+                as(customer, csrf(client.delete().uri("/api/clients/{id}/consents/personal-data", clientId))),
+                HttpStatus.CONFLICT);
+
+        assertThat(field(problem, "code").asString()).isEqualTo("clients.consent_required");
+        assertThat(field(field(problem, "params"), "kind").asString()).isEqualTo("PERSONAL_DATA");
+        assertThat(clientQueries.hasCurrentConsents(clientId, Set.of(ConsentKind.PERSONAL_DATA)))
+                .isTrue();
     }
 
     private JsonNode details(Session session, UUID clientId) {

@@ -1,9 +1,11 @@
 package gag.nails.api.internal.http;
 
 import gag.nails.api.internal.security.CurrentActorResolver;
+import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
+import gag.nails.files.model.FilePurpose;
 import gag.nails.identity.model.Provider;
 import java.beans.PropertyEditorSupport;
 import java.util.Arrays;
@@ -22,7 +24,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * Аргументы контроллеров слоя: {@code Actor}/{@code Optional<Actor>} вошедшего и {@code ClientInfo} запроса;
  * перечисления в пути и параметрах запроса — провайдер входа ({@code /api/auth/yandex/…}), документ
  * ({@code /api/documents/policy/…}), раздел админки ({@code …/overrides/booking-settings}), записи клиента
- * ({@code ?scope=history}) — по имени в нижнем регистре через дефис.
+ * ({@code ?scope=history}), вид согласия ({@code …/consents/photo-publication}), назначение файла
+ * ({@code ?purpose=reference}) — по имени в нижнем регистре через дефис.
  */
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
@@ -32,7 +35,9 @@ class WebConfiguration implements WebMvcConfigurer {
             KebabCaseEnum.of(Provider.class),
             KebabCaseEnum.of(DocumentKind.class),
             KebabCaseEnum.of(Section.class),
-            KebabCaseEnum.of(BookingScope.class));
+            KebabCaseEnum.of(BookingScope.class),
+            KebabCaseEnum.of(ConsentKind.class),
+            KebabCaseEnum.of(FilePurpose.class));
 
     /** Типы из {@link #KEBAB_CASE_ENUMS}; по ним же схема OpenAPI показывает значения через дефис. */
     static final Set<Class<?>> KEBAB_CASE_TYPES =
