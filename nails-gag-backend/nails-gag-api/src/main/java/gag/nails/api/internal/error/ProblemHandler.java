@@ -230,8 +230,10 @@ class ProblemHandler {
 
     /**
      * Тело multipart не разобрано. Файл или запрос больше пределов {@code spring.servlet.multipart.*} — ответ модуля
-     * файлов {@code 413 files.too_large_file} с {@code maxBytes} — пределом файла (само исключение предела не знает);
-     * прочее (битое тело, оборванная загрузка) — {@code 400 common.bad_request}, DEBUG: это ошибка клиента.
+     * файлов {@code 413 files.too_large_file} с {@code maxBytes} — пределом файла (само исключение предела не знает).
+     * Прочее — {@code 400 common.bad_request}: клиент оборвал загрузку — DEBUG, отвечать некому; иначе — WARN с
+     * причиной и стеком: кроме битого тела, это может быть и сбой сервера (временный каталог, диск), его нельзя
+     * прятать.
      */
     @ExceptionHandler(MultipartException.class)
     ResponseEntity<Problem> unreadableMultipart(MultipartException exception, HttpServletRequest request) {
@@ -242,11 +244,15 @@ class ProblemHandler {
                     : tooLarge.getMaxUploadSize();
             return userFacing(new TooLargeFileException(maxBytes), request);
         }
-        log.debug(
-                "{} {} -> 400 unreadable multipart: {}",
-                request.getMethod(),
-                request.getRequestURI(),
-                exception.toString());
+        if (DisconnectedClientHelper.isClientDisconnectedException(exception)) {
+            log.debug(
+                    "{} {}: client disconnected during multipart upload: {}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    exception.toString());
+        } else {
+            log.warn("{} {} -> 400 unreadable multipart", request.getMethod(), request.getRequestURI(), exception);
+        }
         return respond(writer.problem(request, HttpStatus.BAD_REQUEST, ProblemStatuses.BAD_REQUEST));
     }
 
@@ -297,7 +303,7 @@ class ProblemHandler {
         if (exception instanceof ErrorResponse response) {
             HttpStatusCode status = response.getStatusCode();
             if (status.is5xxServerError()) {
-                log.error("{} {} failed", request.getMethod(), request.getRequestURI(), exception.toString());
+                log.error("{} {} failed", request.getMethod(), request.getRequestURI(), exception);
             } else {
                 log.debug(
                         "{} {} -> {} {}",
@@ -310,7 +316,7 @@ class ProblemHandler {
             headers.putAll(response.getHeaders());
             return respond(writer.problem(request, status, ProblemStatuses.codeOf(status)), headers);
         }
-        log.error("{} {} failed", request.getMethod(), request.getRequestURI(), exception.toString());
+        log.error("{} {} failed", request.getMethod(), request.getRequestURI(), exception);
         return internal(request);
     }
 
