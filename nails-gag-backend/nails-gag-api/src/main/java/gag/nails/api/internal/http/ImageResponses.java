@@ -3,9 +3,9 @@ package gag.nails.api.internal.http;
 import gag.nails.files.model.FileVariant;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -15,8 +15,9 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Отдача картинок из хранилища файлов (спецификация файлов и портфолио, §6.2–6.3): тело — поток файла на диске,
- * {@code Content-Type} и {@code Content-Length} — из варианта, {@code Cache-Control} — по видимости картинки.
+ * Отдача картинок из хранилища файлов (спецификация файлов и портфолио, §6.2–6.3): тело — поток файла на диске
+ * ({@link ImageBody}, без {@code Range}), {@code Content-Type} и {@code Content-Length} — из варианта,
+ * {@code Cache-Control} — по видимости картинки, {@code ETag} — по файлу и ширине: содержимое варианта не меняется.
  */
 public final class ImageResponses {
 
@@ -27,11 +28,14 @@ public final class ImageResponses {
     private ImageResponses() {}
 
     /**
-     * Ответ {@code 200} с вариантом картинки. Поток записывает в ответ и закрывает конвертер Spring MVC; если ответ так
-     * и не запишется (отказ по {@code Accept}, ошибка до записи), поток закроется по завершении запроса — файл на диске
-     * не останется открытым. Вызывать в потоке обработки запроса.
+     * Ответ {@code 200} с вариантом картинки — вызывать после проверки видимости. Запрос с совпавшим
+     * {@code If-None-Match} Spring MVC превращает в {@code 304} с теми же {@code ETag} и {@code Cache-Control} и без
+     * тела. Поток записывает и закрывает {@link ImageBodyConverter}; если тело так и не запишется ({@code 304}, ошибка
+     * до записи), поток закроется по завершении запроса. Вызывать в потоке обработки запроса.
+     *
+     * @param width номинальная ширина варианта — часть {@code ETag}
      */
-    public static ResponseEntity<InputStreamResource> of(FileVariant variant, CacheControl cache) {
+    public static ResponseEntity<ImageBody> of(UUID fileId, int width, FileVariant variant, CacheControl cache) {
         var content = variant.content();
         RequestContextHolder.currentRequestAttributes()
                 .registerDestructionCallback(
@@ -42,7 +46,8 @@ public final class ImageResponses {
                 .contentType(MediaType.parseMediaType(variant.contentType()))
                 .contentLength(variant.length())
                 .cacheControl(cache)
-                .body(new InputStreamResource(content));
+                .eTag(fileId + "-" + width)
+                .body(new ImageBody(content, variant.length()));
     }
 
     /**

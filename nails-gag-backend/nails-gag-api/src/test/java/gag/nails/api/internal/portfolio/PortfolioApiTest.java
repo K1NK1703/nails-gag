@@ -70,16 +70,17 @@ class PortfolioApiTest extends ApiTestSupport {
         assertThat(field(first, "page").asInt()).isZero();
         assertThat(field(first, "items").size()).isLessThanOrEqualTo(12);
 
-        // Новая работа встаёт в конец: она — на последней странице по одной работе.
+        // Своя работа — среди опубликованных; поля — без клиента, записи и источника.
+        assertThat(publishedIds()).contains(UUID.fromString(field(work, "id").asString()));
         var total =
                 field(json(client.get().uri("/api/portfolio?size=1")), "total").asLong();
         var last = json(client.get().uri("/api/portfolio?page={page}&size=1", total - 1));
         var item = field(last, "items").path(0);
-        assertThat(field(item, "id").asString()).isEqualTo(field(work, "id").asString());
-        assertThat(field(item, "fileId").asString())
-                .isEqualTo(field(work, "fileId").asString());
-        assertThat(field(item, "width").asInt()).isEqualTo(Uploads.WIDTH);
+        assertThat(field(last, "items").size()).isEqualTo(1);
+        assertThat(field(item, "fileId").asString()).isNotEmpty();
+        assertThat(item.has("width")).isTrue();
         assertThat(item.has("source")).isFalse();
+        assertThat(item.has("clientId")).isFalse();
     }
 
     @Test
@@ -176,6 +177,66 @@ class PortfolioApiTest extends ApiTestSupport {
         }
         expectProblem(
                 client.get().uri("/api/portfolio/images/{fileId}/500.jpg", fileId),
+                HttpStatus.NOT_FOUND,
+                "common.not_found");
+    }
+
+    /** {@code Range} не поддерживается: ответ — вся картинка, а не {@code 206} и не ошибка. */
+    @Test
+    void rangeIsIgnored() {
+        var fileId = field(addWork(signInMaster(), "EXAMPLE", null), "fileId").asString();
+
+        var result = client.get()
+                .uri("/api/portfolio/images/{fileId}/480.jpg", fileId)
+                .header("Range", "bytes=0-0")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .doesNotExist("Accept-Ranges")
+                .expectBody(byte[].class)
+                .returnResult();
+
+        var body = Objects.requireNonNull(result.getResponseBody());
+        assertThat(body).startsWith(JPEG_SIGNATURE);
+        assertThat(result.getResponseHeaders().getContentLength()).isEqualTo(body.length);
+    }
+
+    /** Содержимое неизменно: {@code ETag} по файлу и ширине, повтор с ним — {@code 304} с тем же кэшем. */
+    @Test
+    void repeatedRequestWithEtagIsNotModified() {
+        var master = signInMaster();
+        var work = addWork(master, "EXAMPLE", null);
+        var fileId = field(work, "fileId").asString();
+        var etag = "\"" + fileId + "-960\"";
+
+        client.get()
+                .uri("/api/portfolio/images/{fileId}/960.jpg", fileId)
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals("ETag", etag);
+        client.get()
+                .uri("/api/portfolio/images/{fileId}/960.jpg", fileId)
+                .header("If-None-Match", etag)
+                .exchange()
+                .expectStatus()
+                .isNotModified()
+                .expectHeader()
+                .valueEquals("ETag", etag)
+                .expectHeader()
+                .value("Cache-Control", value -> assertThat(value).contains("max-age=3600"));
+
+        // Невидимая картинка — 404 и с ETag: видимость проверяется раньше.
+        workAction(master, UUID.fromString(field(work, "id").asString()), "hide")
+                .exchange()
+                .expectStatus()
+                .isNoContent();
+        expectProblem(
+                client.get()
+                        .uri("/api/portfolio/images/{fileId}/960.jpg", fileId)
+                        .header("If-None-Match", etag),
                 HttpStatus.NOT_FOUND,
                 "common.not_found");
     }

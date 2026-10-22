@@ -1,16 +1,19 @@
 package gag.nails.api.internal.booking;
 
 import gag.nails.api.internal.http.CacheControls;
+import gag.nails.api.internal.http.ImageBody;
 import gag.nails.api.internal.http.ImageResponses;
 import gag.nails.booking.BookingReferences;
 import gag.nails.booking.model.ReferenceView;
 import gag.nails.common.actor.Actor;
 import gag.nails.files.FileStorage;
 import gag.nails.files.model.FilePurpose;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -69,15 +72,23 @@ class ReferencesController {
     }
 
     /**
-     * Фото референса в JPEG, не шире 2000 px, без кэша. Фото не референс этой записи — {@code 404} без различия
-     * причин.
+     * Фото референса в JPEG, не шире 2000 px, без кэша и без {@code Range}; {@code ETag} — по файлу. Чужая или
+     * несуществующая запись — как у чтения записи; фото не референс этой записи — {@code 404 common.not_found}.
      */
     @GetMapping(path = "/{fileId}.jpg", produces = MediaType.IMAGE_JPEG_VALUE)
-    ResponseEntity<InputStreamResource> image(@PathVariable UUID id, @PathVariable UUID fileId, Actor actor) {
+    @ApiResponse(
+            responseCode = "200",
+            description = "OK",
+            content =
+                    @Content(
+                            mediaType = MediaType.IMAGE_JPEG_VALUE,
+                            schema = @Schema(type = "string", format = "binary")))
+    ResponseEntity<ImageBody> image(@PathVariable UUID id, @PathVariable UUID fileId, Actor actor) {
         if (!references.imageVisible(id, fileId, actor)) {
             throw ImageResponses.notFound();
         }
-        var variant = files.open(fileId, FilePurpose.REFERENCE.maxWidth()).orElseThrow(ImageResponses::notFound);
-        return ImageResponses.of(variant, CacheControls.NO_STORE);
+        var width = FilePurpose.REFERENCE.maxWidth();
+        var variant = files.open(fileId, width).orElseThrow(ImageResponses::notFound);
+        return ImageResponses.of(fileId, width, variant, CacheControls.NO_STORE);
     }
 }

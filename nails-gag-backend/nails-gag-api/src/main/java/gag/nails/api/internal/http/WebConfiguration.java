@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.converter.HttpMessageConverters;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -42,6 +43,12 @@ class WebConfiguration implements WebMvcConfigurer {
     /** Типы из {@link #KEBAB_CASE_ENUMS}; по ним же схема OpenAPI показывает значения через дефис. */
     static final Set<Class<?>> KEBAB_CASE_TYPES =
             KEBAB_CASE_ENUMS.stream().map(KebabCaseEnum::type).collect(Collectors.toUnmodifiableSet());
+
+    /** Картинки пишутся своим конвертером: он раньше общих, поэтому {@link ImageBody} не уходит в JSON. */
+    @Override
+    public void configureMessageConverters(HttpMessageConverters.ServerBuilder builder) {
+        builder.addCustomConverter(new ImageBodyConverter());
+    }
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
