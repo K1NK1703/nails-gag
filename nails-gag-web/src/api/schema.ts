@@ -3238,7 +3238,7 @@ export interface operations {
       path?: never
       cookie?: never
     }
-    requestBody?: {
+    requestBody: {
       content: {
         'multipart/form-data': {
           /** Format: binary */
