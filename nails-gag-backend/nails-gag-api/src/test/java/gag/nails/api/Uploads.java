@@ -7,9 +7,11 @@ import gag.nails.files.model.FilePurpose;
 import gag.nails.testsupport.TestPictures;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
+import java.util.zip.CRC32;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.client.RestTestClient;
@@ -24,6 +26,8 @@ public final class Uploads {
     public static final int HEIGHT = 48;
 
     private static final String BOUNDARY = "nails-gag-test-boundary";
+
+    private static final String FILE_PART = "file";
 
     private Uploads() {}
 
@@ -40,16 +44,59 @@ public final class Uploads {
      */
     public static RequestHeadersSpec<?> upload(
             RestTestClient client, @Nullable Session session, String purpose, byte[] content, String filename) {
+        return upload(client, session, purpose, FILE_PART, content, filename);
+    }
+
+    /** То же с частью под другим именем: так форма теряет поле {@code file}. */
+    public static RequestHeadersSpec<?> upload(
+            RestTestClient client,
+            @Nullable Session session,
+            String purpose,
+            String partName,
+            byte[] content,
+            String filename) {
         var spec = ApiTestSupport.csrf(client.post().uri("/api/files?purpose={purpose}", purpose))
                 .contentType(new MediaType(MediaType.MULTIPART_FORM_DATA, Map.of("boundary", BOUNDARY)))
-                .body(form(content, filename));
+                .body(form(partName, content, filename));
         return session == null ? spec : ApiTestSupport.as(session, spec);
     }
 
-    /** Тело {@code multipart/form-data} с одной частью {@code file}. */
-    private static byte[] form(byte[] content, String filename) {
+    /**
+     * PNG из одного заголовка заданных размеров и конца файла, без данных картинки: размеры читаются, распаковать
+     * нечего. Так проверяется предел пикселей без многомегабайтного тела.
+     */
+    public static byte[] pngHeaderOnly(int width, int height) {
+        var out = new ByteArrayOutputStream();
+        out.writeBytes(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'});
+        var header = ByteBuffer.allocate(13)
+                .putInt(width)
+                .putInt(height)
+                .put((byte) 8) // бит на канал
+                .put((byte) 2) // RGB
+                .put((byte) 0)
+                .put((byte) 0)
+                .put((byte) 0)
+                .array();
+        writeChunk(out, "IHDR", header);
+        writeChunk(out, "IEND", new byte[0]);
+        return out.toByteArray();
+    }
+
+    private static void writeChunk(ByteArrayOutputStream out, String type, byte[] data) {
+        var typeBytes = type.getBytes(StandardCharsets.US_ASCII);
+        var crc = new CRC32();
+        crc.update(typeBytes);
+        crc.update(data);
+        out.writeBytes(ByteBuffer.allocate(4).putInt(data.length).array());
+        out.writeBytes(typeBytes);
+        out.writeBytes(data);
+        out.writeBytes(ByteBuffer.allocate(4).putInt((int) crc.getValue()).array());
+    }
+
+    /** Тело {@code multipart/form-data} с одной частью. */
+    private static byte[] form(String partName, byte[] content, String filename) {
         var head = ("--" + BOUNDARY + "\r\n"
-                        + "Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\n"
+                        + "Content-Disposition: form-data; name=\"" + partName + "\"; filename=\"" + filename + "\"\r\n"
                         + "Content-Type: application/octet-stream\r\n\r\n")
                 .getBytes(StandardCharsets.US_ASCII);
         var tail = ("\r\n--" + BOUNDARY + "--\r\n").getBytes(StandardCharsets.US_ASCII);

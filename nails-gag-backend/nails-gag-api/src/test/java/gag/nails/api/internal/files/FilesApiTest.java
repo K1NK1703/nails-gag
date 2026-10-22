@@ -76,6 +76,27 @@ class FilesApiTest extends ApiTestSupport {
                 "files.unsupported_format");
     }
 
+    /** Пикселей больше 50 млн по заголовку — отказ до распаковки, тело крошечное. */
+    @Test
+    void tooLargeImageIs400() {
+        var problem = json(
+                Uploads.upload(client, signInClient(), "reference", Uploads.pngHeaderOnly(8000, 7000), "huge.png"),
+                HttpStatus.BAD_REQUEST);
+
+        assertThat(field(problem, "code").asString()).isEqualTo("files.too_large_image");
+        assertThat(field(field(problem, "params"), "maxPixels").asLong()).isEqualTo(50_000_000L);
+    }
+
+    @Test
+    void missingFilePartIsBadRequest() {
+        var problem = json(
+                Uploads.upload(client, signInClient(), "reference", "photo", Uploads.picture(), "photo.png"),
+                HttpStatus.BAD_REQUEST);
+
+        assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
+        assertThat(field(field(problem, "errors").path(0), "field").asString()).isEqualTo("file");
+    }
+
     @Test
     void purposeInJavaCaseIsBadRequest() {
         var problem = json(
