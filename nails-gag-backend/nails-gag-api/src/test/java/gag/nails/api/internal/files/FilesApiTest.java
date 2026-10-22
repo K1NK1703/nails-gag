@@ -20,6 +20,7 @@ import org.springframework.test.context.TestPropertySource;
 @TestPropertySource(
         properties = {
             FilesApiTest.UPLOADS_PER_HOUR,
+            "server.tomcat.max-part-count=" + FilesApiTest.MAX_PARTS,
             // Отказ до чтения тела: Tomcat дочитывает непрочитанное тело, и клиент теста получает ответ, а не обрыв
             // соединения. В работе тело целиком принимает nginx.
             "server.tomcat.max-swallow-size=-1"
@@ -27,6 +28,9 @@ import org.springframework.test.context.TestPropertySource;
 class FilesApiTest extends ApiTestSupport {
 
     static final String UPLOADS_PER_HOUR = "nails-gag.api.rate-limits.uploads-per-hour=2";
+
+    /** Предел числа частей формы у Tomcat в этом классе. */
+    static final int MAX_PARTS = 3;
 
     /** {@code spring.servlet.multipart.max-file-size} (15 МБ) — столько же, сколько у модуля файлов. */
     private static final long MAX_BYTES = 15L * 1024 * 1024;
@@ -123,6 +127,15 @@ class FilesApiTest extends ApiTestSupport {
 
         assertThat(field(problem, "code").asString()).isEqualTo("files.too_large_image");
         assertThat(field(field(problem, "params"), "maxPixels").asLong()).isEqualTo(50_000_000L);
+    }
+
+    /** Частей формы больше {@code max-part-count} — испорченная форма, а не большой файл: {@code 400}, а не 413. */
+    @Test
+    void tooManyPartsIsBadRequest() {
+        expectProblem(
+                Uploads.uploadWithExtraFields(client, signInClient(), "reference", MAX_PARTS),
+                HttpStatus.BAD_REQUEST,
+                "common.bad_request");
     }
 
     @Test

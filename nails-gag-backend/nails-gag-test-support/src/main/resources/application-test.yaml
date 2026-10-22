@@ -18,6 +18,8 @@ nails-gag:
       # Планировщик записей в тестах не работает: тесты вызывают BookingMaintenance сами.
       enabled: false
   files:
+    # Как в application.yaml приложения: с этим пределом сверяются пределы multipart (HTTP-слой проверяет при старте).
+    max-file-bytes: 15728640
     # Запасной каталог для запуска тестов мимо Gradle (из IDE). Gradle задаёт свой каталог каждой задаче тестов —
     # build/test-files/<задача> модуля (системное свойство сильнее этого файла) и очищает его перед прогоном.
     root: ${java.io.tmpdir}/nails-gag-files-test

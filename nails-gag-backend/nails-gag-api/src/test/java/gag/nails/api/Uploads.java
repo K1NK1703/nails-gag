@@ -107,6 +107,32 @@ public final class Uploads {
         return body.toByteArray();
     }
 
+    /**
+     * Форма из картинки {@link #picture()} в поле {@code file} и ещё {@code extraFields} текстовых полей — так
+     * проверяется предел числа частей.
+     */
+    public static RequestHeadersSpec<?> uploadWithExtraFields(
+            RestTestClient client, Session session, String purpose, int extraFields) {
+        var body = new ByteArrayOutputStream();
+        body.writeBytes(form(FILE_PART, picture(), "photo.png"));
+        // Последняя граница формы («--…--») заменяется обычной, за ней — текстовые поля.
+        var closing = ("--" + BOUNDARY + "--\r\n").getBytes(StandardCharsets.US_ASCII);
+        var bytes = body.toByteArray();
+        body.reset();
+        body.write(bytes, 0, bytes.length - closing.length);
+        for (var i = 0; i < extraFields; i++) {
+            body.writeBytes(("--" + BOUNDARY + "\r\n"
+                            + "Content-Disposition: form-data; name=\"note" + i + "\"\r\n\r\n"
+                            + "x\r\n")
+                    .getBytes(StandardCharsets.US_ASCII));
+        }
+        body.writeBytes(closing);
+        var spec = ApiTestSupport.csrf(client.post().uri("/api/files?purpose={purpose}", purpose))
+                .contentType(new MediaType(MediaType.MULTIPART_FORM_DATA, Map.of("boundary", BOUNDARY)))
+                .body(body.toByteArray());
+        return ApiTestSupport.as(session, spec);
+    }
+
     /** Картинка {@link #picture()} от имени вошедшего. */
     public static RequestHeadersSpec<?> upload(RestTestClient client, Session session, String purpose) {
         return upload(client, session, purpose, picture(), "photo.png");
