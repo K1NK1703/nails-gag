@@ -31,7 +31,7 @@ final class RateLimits {
     /** Период корзины загрузок фото. */
     static final Duration UPLOAD_PERIOD = Duration.ofHours(1);
 
-    /** Потолок ключей корзин по IP (вход, анонимы): с запасом больше живых клиентов салона за минуту. */
+    /** Потолок ключей корзин по IP (вход, анонимы, картинки): с запасом больше живых клиентов салона за минуту. */
     static final long IP_KEYS = 100_000;
 
     /** Потолок ключей корзин по аккаунту: аккаунтов заведомо меньше, чем адресов. */
@@ -115,6 +115,17 @@ final class RateLimits {
                     .append(':');
         }
         return prefix.append(":/64").toString();
+    }
+
+    /**
+     * Возвращает один жетон в корзину {@code kind} с ключом {@code key} — за запрос, который не состоялся по вине
+     * сервера. Сверх ёмкости корзина не наполняется; забытой корзины нет — и возвращать некуда.
+     */
+    void refund(Kind kind, String key) {
+        var bucket = buckets.get(kind).getIfPresent(key);
+        if (bucket != null) {
+            bucket.addTokens(1);
+        }
     }
 
     private int perPeriod(Kind kind) {

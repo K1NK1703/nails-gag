@@ -6,6 +6,7 @@ import gag.nails.common.actor.Section;
 import gag.nails.files.FileStorage;
 import gag.nails.files.model.FilePurpose;
 import gag.nails.files.model.StoredFileView;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import java.io.IOException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -32,12 +33,15 @@ class FilesController {
 
     /**
      * Картинка JPEG, PNG или WebP в поле {@code file}: формат — по содержимому, имя и заявленный тип не важны.
-     * Референс загружает любой вошедший, фото портфолио — с изменением раздела «Портфолио». Файл больше 15 МБ —
-     * {@code 413}; не картинка или больше 50 Мп — {@code 400}; обработка занята — {@code 503} с {@code Retry-After}.
-     * Транзакции нет: обработка идёт секундами и не держит соединение с базой.
+     * Референс загружает любой вошедший, фото портфолио — с изменением раздела «Портфолио»; сессию, права и
+     * {@code Content-Length} ещё до чтения тела проверяет фильтр загрузки, здесь — второй барьер. Файл больше
+     * {@code spring.servlet.multipart.max-file-size} (он же {@code nails-gag.files.max-file-bytes}) — {@code 413};
+     * не картинка или пикселей больше {@code nails-gag.files.max-pixels} — {@code 400}; обработка занята —
+     * {@code 503} с {@code Retry-After}. Транзакции нет: обработка идёт секундами и не держит соединение с базой.
      */
     @PostMapping(path = ApiPaths.FILES, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
+    @RequestBody(required = true)
     StoredFileView upload(@RequestParam FilePurpose purpose, @RequestPart MultipartFile file, Actor actor)
             throws IOException {
         if (purpose == FilePurpose.PORTFOLIO) {

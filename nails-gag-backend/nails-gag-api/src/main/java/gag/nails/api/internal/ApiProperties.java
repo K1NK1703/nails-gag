@@ -27,6 +27,12 @@ public record ApiProperties(
         @DefaultValue RateLimits rateLimits,
         @DefaultValue Redirects redirects) {
 
+    /** Загрузок в час по умолчанию: единственное место значения — и для привязки, и для конструктора тестов. */
+    public static final String DEFAULT_UPLOADS_PER_HOUR = "30";
+
+    /** Картинок портфолио в минуту по умолчанию: единственное место значения. */
+    public static final String DEFAULT_IMAGES_PER_MINUTE = "600";
+
     /** Длина ключа {@code login-state-key} в байтах: AES-256. */
     public static final int LOGIN_STATE_KEY_BYTES = 32;
 
@@ -72,30 +78,24 @@ public record ApiProperties(
             @DefaultValue("10") int authPerMinute,
             @DefaultValue("60") int anonymousPerMinute,
             @DefaultValue("600") int authenticatedPerMinute,
-            @DefaultValue("30") int uploadsPerHour,
-            @DefaultValue("600") int imagesPerMinute) {
-
-        /** Загрузок в час по умолчанию — как в {@code @DefaultValue} компонента. */
-        public static final int DEFAULT_UPLOADS_PER_HOUR = 30;
-
-        /** Картинок портфолио в минуту по умолчанию — как в {@code @DefaultValue} компонента. */
-        public static final int DEFAULT_IMAGES_PER_MINUTE = 600;
+            @DefaultValue(DEFAULT_UPLOADS_PER_HOUR) int uploadsPerHour,
+            @DefaultValue(DEFAULT_IMAGES_PER_MINUTE) int imagesPerMinute) {
 
         /** Привязка настроек — только через этот конструктор. */
         @ConstructorBinding
         public RateLimits {}
 
         /**
-         * Лимиты в минуту, загрузки ({@value #DEFAULT_UPLOADS_PER_HOUR} в час) и картинки
-         * ({@value #DEFAULT_IMAGES_PER_MINUTE} в минуту) — по умолчанию.
+         * Лимиты в минуту, загрузки ({@value ApiProperties#DEFAULT_UPLOADS_PER_HOUR} в час) и картинки
+         * ({@value ApiProperties#DEFAULT_IMAGES_PER_MINUTE} в минуту) — по умолчанию.
          */
         public RateLimits(int authPerMinute, int anonymousPerMinute, int authenticatedPerMinute) {
             this(
                     authPerMinute,
                     anonymousPerMinute,
                     authenticatedPerMinute,
-                    DEFAULT_UPLOADS_PER_HOUR,
-                    DEFAULT_IMAGES_PER_MINUTE);
+                    Integer.parseInt(DEFAULT_UPLOADS_PER_HOUR),
+                    Integer.parseInt(DEFAULT_IMAGES_PER_MINUTE));
         }
     }
 

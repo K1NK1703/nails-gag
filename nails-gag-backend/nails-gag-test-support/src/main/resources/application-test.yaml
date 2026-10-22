@@ -10,6 +10,7 @@ spring:
       # Как в application.yaml приложения: HTTP-тесты загрузки проверяют эти пределы (у Spring Boot по умолчанию 1 МБ).
       max-file-size: 15MB
       max-request-size: 16MB
+      resolve-lazily: true
 nails-gag:
   time-zone: Europe/Moscow
   booking:

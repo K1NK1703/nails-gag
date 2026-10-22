@@ -80,6 +80,12 @@ class ProblemHandler {
     /** Поле ошибки уровня всего тела (ограничение на классе, а не на поле). */
     static final String BODY = "body";
 
+    /**
+     * Пакет разборщика multipart Tomcat: его исключения ({@code FileUploadException}, {@code MalformedStreamException}
+     * и т. п.) — о негодном теле от клиента, а не о сбое сервера.
+     */
+    static final String MULTIPART_PARSER_PACKAGE = "org.apache.tomcat.util.http.fileupload.";
+
     /** Через сколько секунд повторить запрос, упавший на блокировке в БД или на занятой обработке картинок. */
     static final String BUSY_RETRY_AFTER_SECONDS = "1";
 
@@ -229,11 +235,12 @@ class ProblemHandler {
     }
 
     /**
-     * Тело multipart не разобрано. Файл или запрос больше пределов {@code spring.servlet.multipart.*} — ответ модуля
-     * файлов {@code 413 files.too_large_file} с {@code maxBytes} — пределом файла (само исключение предела не знает).
-     * Прочее — {@code 400 common.bad_request}: клиент оборвал загрузку — DEBUG, отвечать некому; иначе — WARN с
-     * причиной и стеком: кроме битого тела, это может быть и сбой сервера (временный каталог, диск), его нельзя
-     * прятать.
+     * Тело multipart не разобрано (multipart разбирается лениво — при чтении аргументов адреса загрузки). Файл или
+     * запрос больше пределов {@code spring.servlet.multipart.*} — ответ модуля файлов {@code 413 files.too_large_file}
+     * с {@code maxBytes} — пределом файла (само исключение предела не знает). Прочее, в том числе частей больше
+     * {@code server.tomcat.max-part-count}, — {@code 400 common.bad_request}: клиент оборвал загрузку — DEBUG,
+     * отвечать некому; тело испорчено клиентом (ошибку дал разборщик multipart Tomcat) — WARN без стека; иначе — WARN
+     * со стеком: это сбой сервера (временный каталог, диск), его нельзя прятать.
      */
     @ExceptionHandler(MultipartException.class)
     ResponseEntity<Problem> unreadableMultipart(MultipartException exception, HttpServletRequest request) {
@@ -244,12 +251,19 @@ class ProblemHandler {
                     : tooLarge.getMaxUploadSize();
             return userFacing(new TooLargeFileException(maxBytes), request);
         }
+        var cause = NestedExceptionUtils.getMostSpecificCause(exception);
         if (DisconnectedClientHelper.isClientDisconnectedException(exception)) {
             log.debug(
                     "{} {}: client disconnected during multipart upload: {}",
                     request.getMethod(),
                     request.getRequestURI(),
-                    exception.toString());
+                    cause.toString());
+        } else if (cause.getClass().getName().startsWith(MULTIPART_PARSER_PACKAGE)) {
+            log.warn(
+                    "{} {} -> 400 unreadable multipart: {}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    cause.getClass().getName());
         } else {
             log.warn("{} {} -> 400 unreadable multipart", request.getMethod(), request.getRequestURI(), exception);
         }

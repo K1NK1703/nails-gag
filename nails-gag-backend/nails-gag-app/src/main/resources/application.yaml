@@ -13,10 +13,12 @@ spring:
     change-log: classpath:db/changelog/master.yaml
   servlet:
     multipart:
-      # Загрузка фото (POST /api/files): файл — как max-file-bytes модуля файлов, запрос — с запасом на заголовки
-      # формы. Больше — 413 files.too_large_file.
+      # Загрузка фото (POST /api/files): файл — ровно max-file-bytes модуля файлов, запрос — больше, с запасом на
+      # заголовки формы (оба сверяются при старте). Больше — 413 files.too_large_file.
       max-file-size: 15MB
       max-request-size: 16MB
+      # Тело разбирается только адресом загрузки, после проверки сессии, прав и Content-Length.
+      resolve-lazily: true
 
 nails-gag:
   time-zone: Europe/Moscow
@@ -68,15 +70,16 @@ nails-gag:
     # Ключ шифрования cookie этапа входа: base64, ровно 32 байта. В prod обязателен; вне prod пустой ключ
     # заменяется случайным при старте. Задавать через переменную окружения, не в файле.
     login-state-key: ""
-    # Лимиты частоты запросов в минуту: вход (/api/auth/**) и анонимные — по IP, с сессией — по аккаунту.
+    # Лимиты частоты запросов (в минуту, загрузки — в час): вход (/api/auth/**), анонимные и картинки — по IP, с
+    # сессией и загрузки — по аккаунту.
     rate-limits:
       auth-per-minute: 10
       anonymous-per-minute: 60
       authenticated-per-minute: 600
       # Загрузки фото (POST /api/files) одного аккаунта в час, вдобавок к общей корзине аккаунта.
       uploads-per-hour: 30
-      # Картинки портфолио (/api/portfolio/images/**) с одного IP в минуту — своя корзина вместо общей: лендинг
-      # запрашивает их десятками.
+      # Чтение картинок портфолио (GET/HEAD /api/portfolio/images/**) с одного IP в минуту — своя корзина вместо
+      # общей: лендинг запрашивает их десятками.
       images-per-minute: 600
     # Пути на сайте, куда обратный вызов провайдера отправляет браузер.
     redirects:

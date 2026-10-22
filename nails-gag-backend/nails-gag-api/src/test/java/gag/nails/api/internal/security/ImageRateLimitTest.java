@@ -66,6 +66,21 @@ class ImageRateLimitTest extends ApiTestSupport {
         image("198.51.100.33", UUID.randomUUID()).expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
     }
 
+    /** Своя корзина — только у чтения картинок: другой метод на том же адресе идёт в общую корзину. */
+    @Test
+    void otherMethodsOnImageAddressSpendAnonymousBucket() {
+        for (var i = 0; i < ANONYMOUS; i++) {
+            csrf(client.post().uri("/api/portfolio/images/{fileId}/480.jpg", UUID.randomUUID()))
+                    .header("X-Forwarded-For", "198.51.100.34")
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        }
+
+        anonymous("198.51.100.34").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        image("198.51.100.34", UUID.randomUUID()).expectStatus().isNotFound();
+    }
+
     private ResponseSpec image(String ip, UUID fileId) {
         return client.get()
                 .uri("/api/portfolio/images/{fileId}/480.jpg", fileId)

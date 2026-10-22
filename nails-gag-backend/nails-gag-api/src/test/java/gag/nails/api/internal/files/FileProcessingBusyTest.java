@@ -1,45 +1,53 @@
 package gag.nails.api.internal.files;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.when;
+
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
 import gag.nails.api.Uploads;
-import gag.nails.files.internal.storage.ProcessingSlots;
+import gag.nails.files.FileStorage;
+import gag.nails.files.error.ProcessingBusyException;
+import gag.nails.files.model.FilePurpose;
+import gag.nails.files.model.StoredFileView;
+import java.time.Instant;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
- * Все места обработки картинок заняты: загрузка не ждёт ({@code processing-wait=0s}) и отвечает
- * {@code 503 files.busy} с {@code Retry-After: 1} — фронт повторит. Место занимает сам тест через бин модуля файлов.
+ * Обработка картинок занята: {@code 503 files.busy} с {@code Retry-After: 1} — фронт повторит, и повтор не упирается в
+ * корзину загрузок: жетон отказа возвращается. Хранилище подменено — занятость задаётся им, а не настройками модуля.
  */
 @ApiTest
-@TestPropertySource(properties = {"nails-gag.files.max-concurrent-processing=1", "nails-gag.files.processing-wait=0s"})
+@TestPropertySource(properties = "nails-gag.api.rate-limits.uploads-per-hour=1")
 class FileProcessingBusyTest extends ApiTestSupport {
 
-    @Autowired
-    ProcessingSlots slots;
+    @MockitoBean
+    FileStorage files;
 
     @Test
-    void busyProcessingIs503WithRetryAfter() {
+    void busyProcessingIs503WithRetryAfterAndKeepsUploadToken() {
         var session = signInClient();
+        var stored = new StoredFileView(UUID.randomUUID(), FilePurpose.REFERENCE, 64, 48, Instant.now(clock));
+        when(files.store(any(), anyLong(), any(), any()))
+                .thenThrow(new ProcessingBusyException())
+                .thenReturn(stored);
 
-        var slot = slots.acquire();
-        try {
-            Uploads.upload(client, session, "reference")
-                    .exchange()
-                    .expectStatus()
-                    .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
-                    .expectHeader()
-                    .valueEquals("Retry-After", "1")
-                    .expectBody()
-                    .jsonPath("$.code")
-                    .isEqualTo("files.busy");
-        } finally {
-            slot.close();
-        }
+        Uploads.upload(client, session, "reference")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+                .expectHeader()
+                .valueEquals("Retry-After", "1")
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("files.busy");
 
-        // Место освободилось — та же загрузка проходит.
+        // Корзина — одна загрузка в час, но отказ «занято» её не потратил.
         Uploads.upload(client, session, "reference").exchange().expectStatus().isCreated();
     }
 }
