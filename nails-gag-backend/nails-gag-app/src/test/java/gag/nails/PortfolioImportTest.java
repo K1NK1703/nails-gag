@@ -1,10 +1,12 @@
 package gag.nails;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import gag.nails.app.portfolio.PortfolioImport;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.error.InternalException;
 import gag.nails.common.paging.Paging;
 import gag.nails.files.FileStorage;
 import gag.nails.files.model.FilePurpose;
@@ -27,6 +29,9 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -137,6 +142,82 @@ class PortfolioImportTest {
         var imported = imported(developer, Set.of("Импорт: третья"));
         assertThat(imported).hasSize(1);
         assertThat(imported.get(0).fileId()).isNotEqualTo(orphan.id());
+    }
+
+    @Test
+    void entryWithoutAltStopsTheImportBeforeAnyUpload() throws IOException {
+        var developer = signInDeveloper();
+        var content = Pictures.png(80, 36);
+        Files.write(directory.resolve("fourth.png"), content);
+        Files.write(directory.resolve("fifth.png"), Pictures.png(36, 80));
+        var list = list("""
+                [
+                  { "file": "fourth.png", "alt": "Импорт: четвёртая", "caption": null },
+                  { "file": "fifth.png", "caption": "Без описания" }
+                ]
+                """);
+
+        assertThatThrownBy(() -> importer.importFrom(list))
+                .isInstanceOf(InternalException.class)
+                .hasMessageContaining("entry 2: needs 'alt'");
+
+        assertNothingImported(developer, content, "Импорт: четвёртая");
+    }
+
+    @Test
+    void missingFileStopsTheImportBeforeAnyUpload() throws IOException {
+        var developer = signInDeveloper();
+        var content = Pictures.png(88, 32);
+        Files.write(directory.resolve("sixth.png"), content);
+        var list = list("""
+                [
+                  { "file": "sixth.png", "alt": "Импорт: шестая", "caption": null },
+                  { "file": "missing.png", "alt": "Импорт: нет файла", "caption": null }
+                ]
+                """);
+
+        assertThatThrownBy(() -> importer.importFrom(list))
+                .isInstanceOf(InternalException.class)
+                .hasMessageContaining("entry 2: file")
+                .hasMessageContaining("missing.png");
+
+        assertNothingImported(developer, content, "Импорт: шестая");
+    }
+
+    @Test
+    void malformedListIsRejected() throws IOException {
+        Files.write(directory.resolve("seventh.png"), Pictures.png(96, 30));
+
+        // Опечатка в имени поля: подпись не должна молча потеряться.
+        assertThatThrownBy(() -> importer.importFrom(list("""
+                        [{ "file": "seventh.png", "alt": "Импорт: седьмая", "capton": "Опечатка" }]
+                        """)))
+                .isInstanceOf(InternalException.class)
+                .hasMessageContaining("cannot read portfolio import list");
+        assertThatThrownBy(() -> importer.importFrom(list("[null]")))
+                .isInstanceOf(InternalException.class)
+                .hasMessageContaining("entry 1: is null");
+        assertThatThrownBy(() -> importer.importFrom(list("null")))
+                .isInstanceOf(InternalException.class)
+                .hasMessageContaining("must be a JSON array");
+        assertThatThrownBy(() -> importer.importFrom(list("""
+                        [{ "file": "seventh.png", "alt": "%s", "caption": null }]
+                        """.formatted("ж".repeat(201)))))
+                .isInstanceOf(InternalException.class)
+                .hasMessageContaining("entry 1: 'alt' is longer than 200 characters");
+    }
+
+    private void assertNothingImported(Actor actor, byte[] content, String alt) {
+        assertThat(files.findBySha256(sha256(content))).isEmpty();
+        assertThat(imported(actor, Set.of(alt))).isEmpty();
+    }
+
+    private static String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new AssertionError(e);
+        }
     }
 
     private Path list(String content) throws IOException {
