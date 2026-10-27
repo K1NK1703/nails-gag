@@ -1,7 +1,12 @@
 import { about } from '../../content/about'
-import { src, srcSet } from '../../content/gallery'
 import { useTilt } from '../../lib/useTilt'
 import styles from './About.module.css'
+
+const { photo } = about
+
+function photoSrc(width: number): string {
+  return `/${photo.name}-${width}.webp`
+}
 
 export function About() {
   const tiltRef = useTilt<HTMLDivElement>()
@@ -10,10 +15,10 @@ export function About() {
       <div className={`container ${styles.inner}`}>
         <div ref={tiltRef} className={`reveal ${styles.photo}`}>
           <img
-            src={src(about.photo.slug, 960)}
-            srcSet={srcSet(about.photo.slug)}
+            src={photoSrc(960)}
+            srcSet={photo.widths.map((w) => `${photoSrc(w)} ${w}w`).join(', ')}
             sizes="(min-width: 1264px) 480px, (min-width: 768px) 40vw, 92vw"
-            alt={about.photo.alt}
+            alt={photo.alt}
             loading="lazy"
             width={960}
             height={1280}

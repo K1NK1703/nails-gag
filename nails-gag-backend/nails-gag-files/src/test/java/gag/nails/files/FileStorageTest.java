@@ -139,6 +139,22 @@ class FileStorageTest extends FilesTestSupport {
     }
 
     @Test
+    void findBySha256ReturnsFilesWithThatContent() throws NoSuchAlgorithmException {
+        var content = png(640, 480);
+        var first = store(content, FilePurpose.PORTFOLIO);
+        clock.set(clock.instant().plusSeconds(1));
+        var second = store(content, FilePurpose.REFERENCE);
+        store(png(480, 640), FilePurpose.PORTFOLIO);
+        storage.attach(first.id(), FilePurpose.PORTFOLIO, ACCOUNT);
+        var sha256 =
+                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+
+        // Привязанные и «сироты», любого назначения — по времени загрузки.
+        assertThat(storage.findBySha256(sha256)).containsExactly(first, second);
+        assertThat(storage.findBySha256("0".repeat(64))).isEmpty();
+    }
+
+    @Test
     void attachChecksPurposeAndUploader() {
         var stored = store(png(640, 480), FilePurpose.PORTFOLIO);
 

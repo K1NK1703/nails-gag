@@ -65,6 +65,10 @@ interface StoredFileRepository extends JpaRepository<StoredFileEntity, UUID> {
     @Query("delete from StoredFileEntity f where f.id = :id")
     int deleteRow(UUID id);
 
+    /** Файлы с этим содержимым по времени загрузки; без индекса — для редких служебных задач. */
+    @Query("select f from StoredFileEntity f where f.sha256 = :sha256 order by f.createdAt, f.id")
+    List<StoredFileEntity> findBySha256(String sha256);
+
     /** Какие из идентификаторов есть в таблице. */
     @Query("select f.id from StoredFileEntity f where f.id in :ids")
     List<UUID> findExistingIds(Collection<UUID> ids);

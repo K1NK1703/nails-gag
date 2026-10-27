@@ -26,6 +26,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -130,6 +131,12 @@ class DefaultFileStorage implements FileStorage {
     @Transactional(readOnly = true)
     public Optional<StoredFileView> find(UUID fileId) {
         return files.findById(fileId).map(StoredFileEntity::toView);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StoredFileView> findBySha256(String sha256) {
+        return files.findBySha256(sha256).stream().map(StoredFileEntity::toView).toList();
     }
 
     @Override

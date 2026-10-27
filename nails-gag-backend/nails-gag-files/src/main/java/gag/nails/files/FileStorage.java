@@ -11,6 +11,7 @@ import gag.nails.files.model.FilePurpose;
 import gag.nails.files.model.FileVariant;
 import gag.nails.files.model.StoredFileView;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -58,6 +59,14 @@ public interface FileStorage {
 
     /** Файл, привязанный или нет. */
     Optional<StoredFileView> find(UUID fileId);
+
+    /**
+     * Файлы с таким содержимым, привязанные и нет, по времени загрузки. Для служебных задач — например, чтобы
+     * повторный импорт не загружал то же фото второй раз; индекса по контрольной сумме нет, на горячем пути не звать.
+     *
+     * @param sha256 SHA-256 загруженного содержимого, строчный hex — как его считает {@link #store}
+     */
+    List<StoredFileView> findBySha256(String sha256);
 
     /**
      * Вариант для отдачи. Пусто, если файла нет или ширина не из {@link FilePurpose#widths()} его назначения.
