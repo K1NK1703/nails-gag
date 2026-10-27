@@ -123,4 +123,43 @@ class ConsentsTest {
                         mariaActor))
                 .isInstanceOf(AccessDeniedException.class);
     }
+
+    @Test
+    void photoPublicationIsRecorded() {
+        clients.recordConsent(
+                maria.id(),
+                new RecordConsent(ConsentKind.PHOTO_PUBLICATION, "2026-09-25", ConsentSource.SITE_CHECKBOX),
+                mariaActor);
+
+        assertThat(queries.hasCurrentConsents(maria.id(), Set.of(ConsentKind.PHOTO_PUBLICATION)))
+                .isTrue();
+        assertThat(queries.consents(maria.id(), mariaActor))
+                .singleElement()
+                .isEqualTo(new ConsentView(
+                        ConsentKind.PHOTO_PUBLICATION,
+                        "2026-09-25",
+                        TestTimeConfiguration.START,
+                        ConsentSource.SITE_CHECKBOX));
+    }
+
+    @Test
+    void photoPublicationSurvivesNewPolicyVersion() {
+        clients.recordConsent(
+                maria.id(),
+                new RecordConsent(ConsentKind.PHOTO_PUBLICATION, "2026-09-25", ConsentSource.SITE_CHECKBOX),
+                mariaActor);
+        clients.recordConsent(
+                maria.id(),
+                new RecordConsent(ConsentKind.PERSONAL_DATA, "2026-09-25", ConsentSource.SITE_CHECKBOX),
+                mariaActor);
+        documents.addVersion(
+                new AddDocumentVersion(
+                        DocumentKind.POLICY, "2026-10-01", LocalDate.of(2026, 10, 1), "Текст редакции 2026-10-01"),
+                Actor.developer());
+
+        assertThat(queries.hasCurrentConsents(maria.id(), Set.of(ConsentKind.PHOTO_PUBLICATION)))
+                .isTrue();
+        assertThat(queries.hasCurrentConsents(maria.id(), Set.of(ConsentKind.PERSONAL_DATA)))
+                .isFalse();
+    }
 }

@@ -109,6 +109,8 @@ class ApiPropertiesGuard implements InitializingBean {
         requirePositive("nails-gag.api.rate-limits.auth-per-minute", limits.authPerMinute());
         requirePositive("nails-gag.api.rate-limits.anonymous-per-minute", limits.anonymousPerMinute());
         requirePositive("nails-gag.api.rate-limits.authenticated-per-minute", limits.authenticatedPerMinute());
+        requirePositive("nails-gag.api.rate-limits.uploads-per-hour", limits.uploadsPerHour());
+        requirePositive("nails-gag.api.rate-limits.images-per-minute", limits.imagesPerMinute());
     }
 
     private static void requirePositive(String key, int value) {

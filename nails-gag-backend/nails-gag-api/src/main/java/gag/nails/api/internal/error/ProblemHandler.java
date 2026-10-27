@@ -4,6 +4,9 @@ import gag.nails.api.internal.http.ApiRequestAttributes;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.UserFacingException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.files.error.ProcessingBusyException;
+import gag.nails.files.error.TooLargeFileException;
+import jakarta.servlet.MultipartConfigElement;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -17,6 +20,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.NestedExceptionUtils;
@@ -40,6 +44,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.util.DisconnectedClientHelper;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.UnrecognizedPropertyException;
@@ -48,7 +55,8 @@ import tools.jackson.databind.exc.UnrecognizedPropertyException;
  * Ошибки контроллеров → {@link Problem} с {@code Content-Type: application/problem+json} (спецификация API,
  * §4.5–4.6). Ошибка модуля отвечает статусом из {@link ProblemStatuses} со своими {@code code} и {@code params};
  * нарушения формы запроса — {@code 400 common.validation} с перечнем {@code errors}; всё непредусмотренное —
- * {@code 500 common.internal} без подробностей, причина только в логе.
+ * {@code 500 common.internal} без подробностей, причина только в логе. Файл больше предела multipart —
+ * {@code 413 files.too_large_file}, как и отказ модуля файлов: клиенту всё равно, кто заметил первым.
  *
  * <p>Не сотрудник (клиент или аноним) не должен отличать чужое от несуществующего: любой его {@code 404} и
  * {@link AccessDeniedException} вошедшего клиента отвечают {@code 404 common.not_found} без параметров. Сотрудник
@@ -72,13 +80,28 @@ class ProblemHandler {
     /** Поле ошибки уровня всего тела (ограничение на классе, а не на поле). */
     static final String BODY = "body";
 
-    /** Через сколько секунд повторить запрос, упавший на блокировке в БД. */
+    /**
+     * Пакет разборщика multipart Tomcat: его исключения ({@code FileUploadException}, {@code MalformedStreamException}
+     * и т. п.) — о негодном теле от клиента, а не о сбое сервера.
+     */
+    static final String MULTIPART_PARSER_PACKAGE = "org.apache.tomcat.util.http.fileupload.";
+
+    /** Причина от Tomcat, когда частей формы больше {@code server.tomcat.max-part-count}. */
+    static final String PART_COUNT_EXCEEDED = MULTIPART_PARSER_PACKAGE + "impl.FileCountLimitExceededException";
+
+    /** Через сколько секунд повторить запрос, упавший на блокировке в БД или на занятой обработке картинок. */
     static final String BUSY_RETRY_AFTER_SECONDS = "1";
 
     private final ProblemWriter writer;
+    private final ObjectProvider<MultipartConfigElement> multipart;
 
-    ProblemHandler(ProblemWriter writer) {
+    /**
+     * @param multipart пределы multipart, которые Spring Boot выставил сервлету
+     *     ({@code spring.servlet.multipart.*}); из них — {@code maxBytes} ответа о слишком большом файле
+     */
+    ProblemHandler(ProblemWriter writer, ObjectProvider<MultipartConfigElement> multipart) {
         this.writer = writer;
+        this.multipart = multipart;
     }
 
     @ExceptionHandler(UserFacingException.class)
@@ -110,8 +133,13 @@ class ProblemHandler {
         if (status.get() == HttpStatus.NOT_FOUND && !staff) {
             return respond(writer.problem(request, HttpStatus.NOT_FOUND, ProblemStatuses.NOT_FOUND));
         }
+        var headers = new HttpHeaders();
+        if (exception instanceof ProcessingBusyException) {
+            headers.set(HttpHeaders.RETRY_AFTER, BUSY_RETRY_AFTER_SECONDS);
+        }
         return respond(
-                writer.problem(request.getRequestURI(), status.get(), exception.code(), exception.params(), List.of()));
+                writer.problem(request.getRequestURI(), status.get(), exception.code(), exception.params(), List.of()),
+                headers);
     }
 
     /**
@@ -199,6 +227,53 @@ class ProblemHandler {
         var errors = List.of(new Problem.FieldError(exception.getParameterName(), REQUIRED));
         logInvalid(request, errors);
         return validation(request, errors);
+    }
+
+    /** Нет части multipart ({@code file} загрузки) — как нет параметра: {@code 400} с её именем. */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    ResponseEntity<Problem> missingPart(MissingServletRequestPartException exception, HttpServletRequest request) {
+        var errors = List.of(new Problem.FieldError(exception.getRequestPartName(), REQUIRED));
+        logInvalid(request, errors);
+        return validation(request, errors);
+    }
+
+    /**
+     * Тело multipart не разобрано (multipart разбирается лениво — при чтении аргументов адреса загрузки). Файл или
+     * запрос больше пределов {@code spring.servlet.multipart.*} — ответ модуля файлов {@code 413 files.too_large_file}
+     * с {@code maxBytes} — пределом файла (само исключение предела не знает). Частей больше
+     * {@code server.tomcat.max-part-count} Spring тоже выдаёт за превышение размера, но это испорченная форма, а не
+     * большой файл: по причине от Tomcat ({@link #PART_COUNT_EXCEEDED}) — {@code 400 common.bad_request}. Прочее —
+     * {@code 400 common.bad_request}: клиент оборвал загрузку — DEBUG, отвечать некому; тело испорчено клиентом (ошибку
+     * дал разборщик multipart Tomcat) — WARN без стека; иначе — WARN со стеком: это сбой сервера (временный каталог,
+     * диск), его нельзя прятать.
+     */
+    @ExceptionHandler(MultipartException.class)
+    ResponseEntity<Problem> unreadableMultipart(MultipartException exception, HttpServletRequest request) {
+        var cause = NestedExceptionUtils.getMostSpecificCause(exception);
+        if (exception instanceof MaxUploadSizeExceededException tooLarge
+                && !cause.getClass().getName().equals(PART_COUNT_EXCEEDED)) {
+            var config = multipart.getIfAvailable();
+            var maxBytes = config != null && config.getMaxFileSize() > 0
+                    ? config.getMaxFileSize()
+                    : tooLarge.getMaxUploadSize();
+            return userFacing(new TooLargeFileException(maxBytes), request);
+        }
+        if (DisconnectedClientHelper.isClientDisconnectedException(exception)) {
+            log.debug(
+                    "{} {}: client disconnected during multipart upload: {}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    cause.toString());
+        } else if (cause.getClass().getName().startsWith(MULTIPART_PARSER_PACKAGE)) {
+            log.warn(
+                    "{} {} -> 400 unreadable multipart: {}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    cause.getClass().getName());
+        } else {
+            log.warn("{} {} -> 400 unreadable multipart", request.getMethod(), request.getRequestURI(), exception);
+        }
+        return respond(writer.problem(request, HttpStatus.BAD_REQUEST, ProblemStatuses.BAD_REQUEST));
     }
 
     /** {@code getName()} — имя из {@code @RequestParam}/{@code @PathVariable}, а не имя параметра в Java. */

@@ -1,6 +1,7 @@
 package gag.nails.api.internal.error;
 
 import gag.nails.api.internal.http.JsonConfiguration;
+import gag.nails.common.error.UserFacingException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -16,9 +17,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Собирает {@link Problem} и пишет его в ответ. Публичный: фильтры защиты работают до {@code DispatcherServlet}, и
- * {@code @RestControllerAdvice} их отказов ({@code 403 common.csrf}, {@code 429}) не видит. {@code 401} приходит не
- * отсюда: его бросает резолвер актора, и отвечает {@link ProblemHandler}. Тело пишется тем же mapper-ом, что и ответы
- * контроллеров.
+ * {@code @RestControllerAdvice} их отказов ({@code 403 common.csrf}, {@code 429}, ранние отказы загрузки) не видит.
+ * {@code 401} контроллеров приходит не отсюда: его бросает резолвер актора, и отвечает {@link ProblemHandler}. Тело
+ * пишется тем же mapper-ом, что и ответы контроллеров.
  */
 @Component
 public class ProblemWriter {
@@ -60,6 +61,16 @@ public class ProblemWriter {
     public void write(HttpServletRequest request, HttpServletResponse response, HttpStatusCode status, String code)
             throws IOException {
         write(response, problem(request, status, code));
+    }
+
+    /** Пишет отказ фильтра ошибкой модуля: её код и параметры, статус — решение фильтра. */
+    public void write(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            HttpStatusCode status,
+            UserFacingException exception)
+            throws IOException {
+        write(response, problem(request.getRequestURI(), status, exception.code(), exception.params(), List.of()));
     }
 
     /**

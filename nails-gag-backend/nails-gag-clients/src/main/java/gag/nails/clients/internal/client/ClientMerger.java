@@ -4,6 +4,7 @@ import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.event.ClientBlocked;
 import gag.nails.clients.event.ClientMerged;
 import gag.nails.clients.internal.consent.ConsentRepository;
+import gag.nails.clients.internal.consent.ConsentWithdrawalRepository;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagChangeRepository;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagJournal;
 import gag.nails.clients.model.ChangedBy;
@@ -15,13 +16,15 @@ import org.springframework.stereotype.Component;
 
 /**
  * Объединение двух клиентов в одного. Порядок шагов важен: телефон и аккаунт уникальны, а журналы
- * ссылаются на клиента.
+ * ссылаются на клиента. Обе карточки вызывающий передаёт уже заблокированными
+ * ({@link ClientLocking#findLockedById}).
  */
 @Component
 class ClientMerger {
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
+    private final ConsentWithdrawalRepository withdrawals;
     private final PrepaymentFlagChangeRepository flagChanges;
     private final PrepaymentFlagJournal flagJournal;
     private final ApplicationEventPublisher events;
@@ -30,12 +33,14 @@ class ClientMerger {
     ClientMerger(
             ClientRepository clients,
             ConsentRepository consents,
+            ConsentWithdrawalRepository withdrawals,
             PrepaymentFlagChangeRepository flagChanges,
             PrepaymentFlagJournal flagJournal,
             ApplicationEventPublisher events,
             Clock clock) {
         this.clients = clients;
         this.consents = consents;
+        this.withdrawals = withdrawals;
         this.flagChanges = flagChanges;
         this.flagJournal = flagJournal;
         this.events = events;
@@ -69,6 +74,7 @@ class ClientMerger {
         var blockToCarry = removed.isBlocked() && !survivor.isBlocked();
 
         consents.reassign(removed.id(), survivor.id());
+        withdrawals.reassign(removed.id(), survivor.id());
         flagChanges.reassign(removed.id(), survivor.id());
         survivor.absorb(removed);
         // удаляем до переноса телефона и аккаунта: иначе уникальные индексы увидят два одинаковых значения

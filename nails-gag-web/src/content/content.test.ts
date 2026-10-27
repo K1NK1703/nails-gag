@@ -1,16 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { faq } from './faq'
-import { gallery } from './gallery'
 import { prices } from './prices'
 import { reviews } from './reviews'
 import { site } from './site'
 
 describe('content', () => {
-  it('has unique gallery slugs', () => {
-    const slugs = gallery.map((p) => p.slug)
-    expect(new Set(slugs).size).toBe(slugs.length)
-  })
-
   it('has unique faq ids', () => {
     const ids = faq.map((q) => q.id)
     expect(new Set(ids).size).toBe(ids.length)

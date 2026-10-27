@@ -1,27 +1,12 @@
 import { mkdir, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
+import { about } from '../src/content/about.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const SRC = path.resolve(ROOT, '..', 'media', 'photos')
 const OUT = path.resolve(ROOT, 'public')
-const GALLERY_OUT = path.join(OUT, 'gallery')
-const SIZES = [480, 960, 1600]
-
-/** Порядок в галерее. Ключ: имя файла в media/photos без расширения. */
-const WORKS: Array<[file: string, slug: string]> = [
-  ['IMG_4241', 'work-01'],
-  ['IMG_4401', 'work-02'],
-  ['IMG_4398', 'work-03'],
-  ['IMG_4403', 'work-04'],
-  ['IMG_4978', 'work-05'],
-  ['IMG_4404', 'work-06'],
-  ['IMG_4406', 'work-07'],
-  ['IMG_4977', 'work-08'],
-  ['IMG_4997', 'work-09'],
-  ['IMG_5084', 'work-10'],
-  ['IMG_5163', 'work-11'],
-]
+// Работы портфолио сюда не входят: их ведёт мастер, картинки отдаёт бэкенд (GET /api/portfolio).
 
 async function findSource(base: string): Promise<string> {
   const files = await readdir(SRC)
@@ -30,7 +15,7 @@ async function findSource(base: string): Promise<string> {
   return path.join(SRC, hit)
 }
 
-async function webpSet(input: string, outDir: string, slug: string, sizes: number[]) {
+async function webpSet(input: string, outDir: string, slug: string, sizes: readonly number[]) {
   for (const w of sizes) {
     await sharp(input)
       .rotate()
@@ -41,15 +26,11 @@ async function webpSet(input: string, outDir: string, slug: string, sizes: numbe
 }
 
 async function main() {
-  await mkdir(GALLERY_OUT, { recursive: true })
+  await mkdir(OUT, { recursive: true })
 
-  for (const [file, slug] of WORKS) {
-    await webpSet(await findSource(file), GALLERY_OUT, slug, SIZES)
-    console.log('gallery', slug)
-  }
-
-  await webpSet(await findSource('studio'), GALLERY_OUT, 'studio', SIZES)
-  console.log('gallery studio')
+  // Фото мастера в студии для раздела «О мастере»: имя и ширины — те же, что берёт About.
+  await webpSet(await findSource('studio'), OUT, about.photo.name, about.photo.widths)
+  console.log(about.photo.name)
 
   const heroSrc = await findSource('hero-cutout')
   const trimmed = await sharp(heroSrc).trim().png().toBuffer({ resolveWithObject: true })

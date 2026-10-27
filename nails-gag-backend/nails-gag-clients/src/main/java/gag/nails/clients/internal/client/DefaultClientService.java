@@ -9,19 +9,26 @@ import gag.nails.clients.command.UpdateClient;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentRequiredException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.clients.event.ClientBlocked;
 import gag.nails.clients.event.ClientErased;
+import gag.nails.clients.event.ConsentGiven;
+import gag.nails.clients.event.ConsentWithdrawn;
 import gag.nails.clients.internal.consent.ConsentEntity;
 import gag.nails.clients.internal.consent.ConsentRepository;
+import gag.nails.clients.internal.consent.ConsentWithdrawalEntity;
+import gag.nails.clients.internal.consent.ConsentWithdrawalRepository;
 import gag.nails.clients.internal.consent.DefaultDocumentVersionService;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagJournal;
 import gag.nails.clients.model.ChangedBy;
 import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.MergeResult;
 import gag.nails.clients.model.PrepaymentFlagReason;
+import gag.nails.clients.model.WithdrawnBy;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
@@ -31,10 +38,15 @@ import gag.nails.common.persistence.ConstraintViolations;
 import gag.nails.common.text.Phones;
 import gag.nails.common.validation.CommandValidator;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import org.jspecify.annotations.Nullable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -55,11 +67,15 @@ class DefaultClientService implements ClientService {
     /** Та же граница, что в ограничении {@code client_block_reason_check}. */
     private static final int MAX_BLOCK_REASON_LENGTH = 500;
 
+    /** Сколько раз регистрация ищет карточку по телефону заново, если найденную объединили, пока ждали. */
+    private static final int PHONE_LOOKUP_ATTEMPTS = 3;
+
     /** Уникальный индекс телефона из миграции {@code 0001-init}. */
     private static final String PHONE_KEY = "client_phone_key";
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
+    private final ConsentWithdrawalRepository withdrawals;
     private final PrepaymentFlagJournal flagJournal;
     private final DefaultDocumentVersionService documents;
     private final ClientMerger merger;
@@ -70,6 +86,7 @@ class DefaultClientService implements ClientService {
     DefaultClientService(
             ClientRepository clients,
             ConsentRepository consents,
+            ConsentWithdrawalRepository withdrawals,
             PrepaymentFlagJournal flagJournal,
             DefaultDocumentVersionService documents,
             ClientMerger merger,
@@ -78,6 +95,7 @@ class DefaultClientService implements ClientService {
             Clock clock) {
         this.clients = clients;
         this.consents = consents;
+        this.withdrawals = withdrawals;
         this.flagJournal = flagJournal;
         this.documents = documents;
         this.merger = merger;
@@ -104,7 +122,7 @@ class DefaultClientService implements ClientService {
         }
         var phone = Phones.normalize(command.phone()).orElse(null);
         if (phone != null) {
-            var sameNumber = clients.findByPhone(phone);
+            var sameNumber = lockedByPhone(phone);
             if (sameNumber.isPresent()) {
                 return attachAccount(sameNumber.get(), command);
             }
@@ -114,7 +132,11 @@ class DefaultClientService implements ClientService {
             // Между двумя карточками с одной почтой не угадываем: заводится новая, дубль разрешит мастер.
             var sameEmail = clients.findAllUnregisteredByEmail(email);
             if (sameEmail.size() == 1) {
-                return attachAccount(sameEmail.getFirst(), command);
+                var cardId = sameEmail.getFirst().id();
+                var card = lockedIf(cardId, locked -> isOnlyUnregisteredWithEmail(cardId, email));
+                if (card.isPresent()) {
+                    return attachAccount(card.get(), command);
+                }
             }
         }
         return clients.save(ClientEntity.registered(command, phone)).toView();
@@ -124,7 +146,7 @@ class DefaultClientService implements ClientService {
     public ClientView update(UUID clientId, UpdateClient command, Actor actor) {
         actor.requireWriteOrSelf(Section.CLIENTS, clientId);
         validator.requireValid(command);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         client.apply(command);
         return client.toView();
     }
@@ -133,7 +155,7 @@ class DefaultClientService implements ClientService {
     public ClientView changePhone(UUID clientId, String phone, Actor actor) {
         actor.requireWrite(Section.CLIENTS);
         var normalized = Phones.require(phone);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         requirePhoneFree(normalized, clientId);
         client.setPhone(normalized);
         return client.toView();
@@ -143,7 +165,7 @@ class DefaultClientService implements ClientService {
     public ClientView changeContactPhone(UUID clientId, @Nullable String phone, Actor actor) {
         actor.requireWriteOrSelf(Section.CLIENTS, clientId);
         var normalized = Phones.normalize(phone).orElse(null);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         client.setContactPhone(normalized);
         return client.toView();
     }
@@ -151,7 +173,7 @@ class DefaultClientService implements ClientService {
     @Override
     public boolean confirmPhone(UUID clientId, String phone) {
         var normalized = Phones.require(phone);
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         if (client.phone().isPresent() || clients.findByPhone(normalized).isPresent()) {
             return false;
         }
@@ -163,7 +185,7 @@ class DefaultClientService implements ClientService {
     @Override
     public void updateMasterNote(UUID clientId, String note, Actor actor) {
         actor.requireWrite(Section.CLIENTS);
-        requireLive(clientId).setMasterNote(note);
+        requireLiveLocked(clientId).setMasterNote(note);
     }
 
     @Override
@@ -177,9 +199,28 @@ class DefaultClientService implements ClientService {
         if (!currentVersion.equals(command.documentVersion())) {
             throw new ConsentVersionOutdatedException(command.kind(), currentVersion);
         }
-        var client = requireLive(clientId);
-        consents.save(new ConsentEntity(
-                client.id(), command.kind(), command.documentVersion(), command.source(), clock.instant()));
+        var client = requireLiveLocked(clientId);
+        var now = now();
+        consents.save(new ConsentEntity(client.id(), command.kind(), command.documentVersion(), command.source(), now));
+        events.publishEvent(new ConsentGiven(client.id(), command.kind(), now));
+    }
+
+    @Override
+    public void withdrawConsent(UUID clientId, ConsentKind kind, Actor actor) {
+        actor.requireWriteOrSelf(Section.CLIENTS, clientId);
+        if (kind.required()) {
+            throw new ConsentRequiredException(kind);
+        }
+        var client = requireLiveLocked(clientId);
+        var current = consents.findAllByClientIdAndKindAndWithdrawnAtIsNull(client.id(), kind);
+        if (current.isEmpty()) {
+            return;
+        }
+        var now = now();
+        var by = actor.isClient(clientId) ? WithdrawnBy.CLIENT : WithdrawnBy.STAFF;
+        current.forEach(consent -> consent.withdraw(now));
+        withdrawals.save(new ConsentWithdrawalEntity(client.id(), kind, now, by));
+        events.publishEvent(new ConsentWithdrawn(client.id(), kind, now));
     }
 
     @Override
@@ -189,7 +230,7 @@ class DefaultClientService implements ClientService {
             throw new ValidationException("reason", "reserved for the master");
         }
         flagJournal.record(
-                require(clientId),
+                requireLocked(clientId),
                 change.required(),
                 change.reason(),
                 ChangedBy.SYSTEM,
@@ -204,7 +245,7 @@ class DefaultClientService implements ClientService {
             throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
         }
         var reason = required ? PrepaymentFlagReason.MASTER_SET : PrepaymentFlagReason.MASTER_WAIVED;
-        flagJournal.record(requireLive(clientId), required, reason, ChangedBy.MASTER, null, comment);
+        flagJournal.record(requireLiveLocked(clientId), required, reason, ChangedBy.MASTER, null, comment);
     }
 
     @Override
@@ -214,7 +255,7 @@ class DefaultClientService implements ClientService {
         if (reason != null && reason.codePointCount(0, reason.length()) > MAX_BLOCK_REASON_LENGTH) {
             throw new ValidationException("reason", "must be at most " + MAX_BLOCK_REASON_LENGTH + " characters");
         }
-        var client = requireLive(clientId);
+        var client = requireLiveLocked(clientId);
         var now = clock.instant();
         client.block(reason, now);
         events.publishEvent(new ClientBlocked(client.id(), client.accountId().orElse(null), now));
@@ -224,14 +265,14 @@ class DefaultClientService implements ClientService {
     @Override
     public ClientView unblock(UUID clientId, Actor actor) {
         actor.requireWrite(Section.CLIENTS);
-        var client = require(clientId);
+        var client = requireLocked(clientId);
         client.unblock();
         return client.toView();
     }
 
     @Override
     public void erase(UUID clientId) {
-        var client = require(clientId);
+        var client = requireLocked(clientId);
         if (client.isErased()) {
             return;
         }
@@ -246,7 +287,8 @@ class DefaultClientService implements ClientService {
         if (sourceId.equals(targetId)) {
             throw new ValidationException("targetId", "must differ from sourceId");
         }
-        return merger.merge(require(sourceId), require(targetId));
+        var locked = requireLockedPair(sourceId, targetId);
+        return merger.merge(locked.getFirst(), locked.getLast());
     }
 
     @Override
@@ -255,8 +297,9 @@ class DefaultClientService implements ClientService {
         if (otherClientId.equals(ownId)) {
             throw new ValidationException("otherClientId", "must differ from the actor's own client");
         }
-        var own = require(ownId);
-        var other = require(otherClientId);
+        var locked = requireLockedPair(ownId, otherClientId);
+        var own = locked.getFirst();
+        var other = locked.getLast();
         requireNotBlocked(own);
         requireNotBlocked(other);
         return merger.mergeInto(own, other);
@@ -312,13 +355,75 @@ class DefaultClientService implements ClientService {
                 });
     }
 
-    private ClientEntity require(UUID clientId) {
-        return clients.findById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
+    /** Время записи и события одно и то же: база хранит микросекунды. */
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 
-    /** Клиент, которого ещё можно менять: обезличенная карточка — только для системных отметок. */
-    private ClientEntity requireLive(UUID clientId) {
-        var client = require(clientId);
+    /**
+     * Две карточки под блокировкой строк в том порядке, в каком их передали; блокируются в порядке id — одном для
+     * всех, кто берёт две карточки, чтобы встречные объединения не ждали друг друга по кругу. Порядок — по строке
+     * {@link UUID#toString()}: он совпадает с порядком {@code uuid} в PostgreSQL (байты без знака), а
+     * {@link UUID#compareTo} сравнивает половины как знаковые {@code long} и с ним расходится.
+     */
+    private List<ClientEntity> requireLockedPair(UUID first, UUID second) {
+        if (first.toString().compareTo(second.toString()) < 0) {
+            var a = requireLocked(first);
+            return List.of(a, requireLocked(second));
+        }
+        var b = requireLocked(second);
+        return List.of(requireLocked(first), b);
+    }
+
+    /**
+     * Карточка с этим телефоном — под блокировкой и перечитанная. Пока ждали блокировку, найденную карточку могли
+     * объединить с другой, и телефон перешёл к оставшейся: тогда поиск повторяется (как {@code ClientLocks.acquire}
+     * в модуле записей). Пусто — только если карточки с этим телефоном действительно нет.
+     */
+    private Optional<ClientEntity> lockedByPhone(String phone) {
+        for (var attempt = 0; attempt < PHONE_LOOKUP_ATTEMPTS; attempt++) {
+            var found = clients.findByPhone(phone);
+            if (found.isEmpty()) {
+                return Optional.empty();
+            }
+            var locked = lockedIf(
+                    found.get().id(), card -> card.phone().filter(phone::equals).isPresent());
+            if (locked.isPresent()) {
+                return locked;
+            }
+        }
+        throw new InternalException(
+                "client card with the matched phone changed " + PHONE_LOOKUP_ATTEMPTS + " times while waiting for it");
+    }
+
+    /**
+     * Перечитанная карточка всё ещё единственная без аккаунта с этой почтой — тем же запросом, что нашёл её: та же
+     * нормализация почты, что и при поиске.
+     */
+    private boolean isOnlyUnregisteredWithEmail(UUID cardId, String email) {
+        var same = clients.findAllUnregisteredByEmail(email);
+        return same.size() == 1 && same.getFirst().id().equals(cardId);
+    }
+
+    /**
+     * Найденная без блокировки карточка — под блокировкой и перечитанная, если она всё ещё подходит: пока ждали
+     * блокировку, её могли объединить, обезличить или привязать к другому аккаунту.
+     */
+    private Optional<ClientEntity> lockedIf(UUID clientId, Predicate<ClientEntity> stillMatches) {
+        return clients.findLockedById(clientId).filter(stillMatches);
+    }
+
+    /** Карточка под блокировкой строки, перечитанная под ней ({@link ClientLocking#findLockedById}). */
+    private ClientEntity requireLocked(UUID clientId) {
+        return clients.findLockedById(clientId).orElseThrow(() -> new ClientNotFoundException(clientId));
+    }
+
+    /**
+     * Карточка, которую ещё можно менять, — под блокировкой строки и перечитанная под ней; обезличенная — только для
+     * системных отметок ({@link #requireLocked}).
+     */
+    private ClientEntity requireLiveLocked(UUID clientId) {
+        var client = requireLocked(clientId);
         if (client.isErased()) {
             throw new ClientErasedException(clientId);
         }

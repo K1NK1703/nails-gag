@@ -1,14 +1,25 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Photo } from '../../content/gallery'
-import { Lightbox } from './Lightbox'
+import { Lightbox, type LightboxPhoto } from './Lightbox'
 
-const photos: Photo[] = [
-  { slug: 'a', alt: 'Первое', caption: 'Молочный' },
-  { slug: 'b', alt: 'Второе' },
-  { slug: 'c', alt: 'Третье', caption: 'Шиммер' },
-  { slug: 'd', alt: 'Четвёртое' },
-  { slug: 'e', alt: 'Пятое' },
+function photo(id: string, alt: string, caption?: string): LightboxPhoto {
+  return {
+    id,
+    alt,
+    caption,
+    src: `/${id}-1600.jpg`,
+    srcSet: `/${id}-1600.jpg 1600w`,
+    width: 1200,
+    height: 1600,
+  }
+}
+
+const photos: LightboxPhoto[] = [
+  photo('a', 'Первое', 'Молочный'),
+  photo('b', 'Второе'),
+  photo('c', 'Третье', 'Шиммер'),
+  photo('d', 'Четвёртое'),
+  photo('e', 'Пятое'),
 ]
 
 const noop = () => {}

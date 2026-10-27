@@ -14,20 +14,24 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Корзины лимитов частоты (спецификация API, §5.3) в памяти процесса: один экземпляр бэкенда. Лимит «N в минуту» —
- * ёмкость N и пополнение N за минуту равномерно; время корзин — {@link ClockTimeMeter} поверх часов приложения.
+ * Корзины лимитов частоты (спецификация API, §5.3) в памяти процесса: один экземпляр бэкенда. Лимит «N за период» —
+ * ёмкость N и пополнение N за период равномерно (минута, у загрузок фото — час); время корзин — {@link ClockTimeMeter}
+ * поверх часов приложения.
  *
- * <p>Ключ корзины забывается через {@link #IDLE} без обращений: за минуту простоя корзина пополняется целиком и ничем
- * не отличается от новой. Каждый вид корзины — в своём кэше с потолком числа ключей: память ограничена, а поток
- * анонимных запросов с множества адресов не вытесняет корзины входа и аккаунтов. Вытесненная корзина — просто новая
- * полная; чтобы выиграть от этого, нужно больше разных адресов в минуту, чем потолок.
+ * <p>Ключ корзины забывается через свой период без обращений: за это время корзина пополняется целиком и ничем не
+ * отличается от новой. Раньше забывать нельзя — новая полная корзина обошла бы лимит. Каждый вид корзины — в своём
+ * кэше с потолком числа ключей: память ограничена, а поток анонимных запросов с множества адресов не вытесняет корзины
+ * входа и аккаунтов. Вытесненная корзина — просто новая полная; чтобы выиграть от этого, нужно больше разных адресов в
+ * минуту, чем потолок.
  */
 final class RateLimits {
 
-    static final Duration IDLE = Duration.ofMinutes(1);
     static final Duration PERIOD = Duration.ofMinutes(1);
 
-    /** Потолок ключей корзин по IP (вход, анонимы): с запасом больше живых клиентов салона за минуту. */
+    /** Период корзины загрузок фото. */
+    static final Duration UPLOAD_PERIOD = Duration.ofHours(1);
+
+    /** Потолок ключей корзин по IP (вход, анонимы, картинки): с запасом больше живых клиентов салона за минуту. */
     static final long IP_KEYS = 100_000;
 
     /** Потолок ключей корзин по аккаунту: аккаунтов заведомо меньше, чем адресов. */
@@ -43,7 +47,20 @@ final class RateLimits {
         /** Остальные запросы без сессии — по IP. */
         ANONYMOUS,
         /** Запросы с сессией — по аккаунту. */
-        ACCOUNT
+        ACCOUNT,
+        /** Загрузки фото ({@code POST /api/files}) — по аккаунту, вдобавок к {@link #ACCOUNT}. */
+        UPLOAD,
+        /** Картинки портфолио ({@code /api/portfolio/images/**}) — по IP, вместо остальных корзин. */
+        IMAGE;
+
+        /** За сколько корзина пополняется целиком; столько же ключ живёт без обращений. */
+        Duration period() {
+            return this == UPLOAD ? UPLOAD_PERIOD : PERIOD;
+        }
+
+        private boolean byAccount() {
+            return this == ACCOUNT || this == UPLOAD;
+        }
     }
 
     private final ApiProperties.RateLimits limits;
@@ -57,8 +74,8 @@ final class RateLimits {
             buckets.put(
                     kind,
                     Caffeine.newBuilder()
-                            .expireAfterAccess(IDLE)
-                            .maximumSize(kind == Kind.ACCOUNT ? ACCOUNT_KEYS : IP_KEYS)
+                            .expireAfterAccess(kind.period())
+                            .maximumSize(kind.byAccount() ? ACCOUNT_KEYS : IP_KEYS)
                             .build());
         }
     }
@@ -68,7 +85,9 @@ final class RateLimits {
      * время до пополнения.
      */
     ConsumptionProbe tryConsume(Kind kind, String key) {
-        return buckets.get(kind).get(key, ignored -> bucket(perMinute(kind))).tryConsumeAndReturnRemaining(1);
+        return buckets.get(kind)
+                .get(key, ignored -> bucket(perPeriod(kind), kind.period()))
+                .tryConsumeAndReturnRemaining(1);
     }
 
     /**
@@ -98,19 +117,32 @@ final class RateLimits {
         return prefix.append(":/64").toString();
     }
 
-    private int perMinute(Kind kind) {
+    /**
+     * Возвращает один жетон в корзину {@code kind} с ключом {@code key} — за запрос, который не состоялся по вине
+     * сервера. Сверх ёмкости корзина не наполняется; забытой корзины нет — и возвращать некуда.
+     */
+    void refund(Kind kind, String key) {
+        var bucket = buckets.get(kind).getIfPresent(key);
+        if (bucket != null) {
+            bucket.addTokens(1);
+        }
+    }
+
+    private int perPeriod(Kind kind) {
         return switch (kind) {
             case AUTH -> limits.authPerMinute();
             case ANONYMOUS -> limits.anonymousPerMinute();
             case ACCOUNT -> limits.authenticatedPerMinute();
+            case UPLOAD -> limits.uploadsPerHour();
+            case IMAGE -> limits.imagesPerMinute();
         };
     }
 
-    private Bucket bucket(int perMinute) {
+    private Bucket bucket(int perPeriod, Duration period) {
         return Bucket.builder()
                 .addLimit(Bandwidth.builder()
-                        .capacity(perMinute)
-                        .refillGreedy(perMinute, PERIOD)
+                        .capacity(perPeriod)
+                        .refillGreedy(perPeriod, period)
                         .build())
                 .withCustomTimePrecision(time)
                 .build();

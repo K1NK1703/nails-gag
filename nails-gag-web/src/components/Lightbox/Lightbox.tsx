@@ -1,10 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { src, srcSet, type Photo } from '../../content/gallery'
 import styles from './Lightbox.module.css'
 
+/** Фото для просмотра: адреса вариантов собирает тот, кто открывает лайтбокс. */
+export type LightboxPhoto = {
+  id: string
+  alt: string
+  caption?: string | null
+  /** Самый крупный вариант — для браузеров без srcset. */
+  src: string
+  srcSet: string
+  /** Размеры фото: по ним браузер держит место под картинку, пока она грузится. */
+  width: number
+  height: number
+}
+
 type Props = {
-  photos: Photo[]
+  photos: LightboxPhoto[]
   index: number | null
   onClose: () => void
   onNavigate: (index: number) => void
@@ -204,15 +216,15 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
       >
         <div ref={trackRef} className={styles.track}>
           {photos.map((p, i) => (
-            <div key={p.slug} className={styles.slide} aria-hidden={i === index ? undefined : true}>
+            <div key={p.id} className={styles.slide} aria-hidden={i === index ? undefined : true}>
               {/* настоящие картинки — только у текущего и соседей, остальные слайды пустые */}
               {Math.abs(i - index) <= 1 && (
                 <img
-                  src={src(p.slug, 1600)}
-                  srcSet={srcSet(p.slug)}
+                  src={p.src}
+                  srcSet={p.srcSet}
                   sizes="(min-aspect-ratio: 3/4) 75vh, 100vw"
-                  width={1200}
-                  height={1600}
+                  width={p.width}
+                  height={p.height}
                   alt={p.alt}
                   decoding="async"
                   loading={i === index ? 'eager' : 'lazy'}
@@ -255,7 +267,7 @@ export function Lightbox({ photos, index, onClose, onNavigate }: Props) {
           </p>
           <ol className={styles.dots} data-testid="lightbox-dots">
             {photos.map((p, i) => (
-              <li key={p.slug} className={styles.dot} data-active={i === shown || undefined} />
+              <li key={p.id} className={styles.dot} data-active={i === shown || undefined} />
             ))}
           </ol>
         </div>

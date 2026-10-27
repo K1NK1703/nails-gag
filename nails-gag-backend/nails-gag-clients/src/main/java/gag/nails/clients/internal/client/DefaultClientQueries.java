@@ -4,12 +4,15 @@ import gag.nails.clients.ClientQueries;
 import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.internal.consent.ConsentEntity;
 import gag.nails.clients.internal.consent.ConsentRepository;
+import gag.nails.clients.internal.consent.ConsentWithdrawalEntity;
+import gag.nails.clients.internal.consent.ConsentWithdrawalRepository;
 import gag.nails.clients.internal.consent.DefaultDocumentVersionService;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagChangeEntity;
 import gag.nails.clients.internal.prepayment.PrepaymentFlagChangeRepository;
 import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentView;
+import gag.nails.clients.model.ConsentWithdrawalView;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
@@ -35,16 +38,19 @@ class DefaultClientQueries implements ClientQueries {
 
     private final ClientRepository clients;
     private final ConsentRepository consents;
+    private final ConsentWithdrawalRepository withdrawals;
     private final PrepaymentFlagChangeRepository flagChanges;
     private final DefaultDocumentVersionService documents;
 
     DefaultClientQueries(
             ClientRepository clients,
             ConsentRepository consents,
+            ConsentWithdrawalRepository withdrawals,
             PrepaymentFlagChangeRepository flagChanges,
             DefaultDocumentVersionService documents) {
         this.clients = clients;
         this.consents = consents;
+        this.withdrawals = withdrawals;
         this.flagChanges = flagChanges;
         this.documents = documents;
     }
@@ -108,9 +114,15 @@ class DefaultClientQueries implements ClientQueries {
 
     @Override
     public boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds) {
-        return kinds.stream()
-                .allMatch(kind -> consents.existsByClientIdAndKindAndDocumentVersion(
-                        clientId, kind, documents.currentVersion(kind.document())));
+        return kinds.stream().allMatch(kind -> hasCurrentConsent(clientId, kind));
+    }
+
+    private boolean hasCurrentConsent(UUID clientId, ConsentKind kind) {
+        if (!kind.requiresCurrentVersion()) {
+            return consents.existsByClientIdAndKindAndWithdrawnAtIsNull(clientId, kind);
+        }
+        return consents.existsByClientIdAndKindAndDocumentVersionAndWithdrawnAtIsNull(
+                clientId, kind, documents.currentVersion(kind.document()));
     }
 
     @Override
@@ -118,6 +130,14 @@ class DefaultClientQueries implements ClientQueries {
         actor.requireReadOrSelf(Section.CLIENTS, clientId);
         return consents.findAllByClientIdOrderByGivenAtDescIdDesc(clientId).stream()
                 .map(ConsentEntity::toView)
+                .toList();
+    }
+
+    @Override
+    public List<ConsentWithdrawalView> consentWithdrawals(UUID clientId, Actor actor) {
+        actor.requireReadOrSelf(Section.CLIENTS, clientId);
+        return withdrawals.findAllByClientIdOrderByWithdrawnAtDescIdDesc(clientId).stream()
+                .map(ConsentWithdrawalEntity::toView)
                 .toList();
     }
 

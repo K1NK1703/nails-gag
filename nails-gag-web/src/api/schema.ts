@@ -52,6 +52,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/portfolio/order': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['works_reorder']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/clients/{id}/prepayment-required': {
     parameters: {
       query?: never
@@ -340,6 +356,70 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/portfolio/works': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['works_all']
+    put?: never
+    post: operations['works_add']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/portfolio/works/{id}/show': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['works_show']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/portfolio/works/{id}/hide': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['works_hide']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/files': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['files_upload']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/documents/{kind}/versions': {
     parameters: {
       query?: never
@@ -494,6 +574,22 @@ export interface paths {
     get?: never
     put?: never
     post: operations['bookings_refuseLateArrival']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/bookings/{id}/references': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['references_list']
+    put?: never
+    post: operations['references_attach']
     delete?: never
     options?: never
     head?: never
@@ -820,6 +916,22 @@ export interface paths {
     patch: operations['dayTemplates_update']
     trace?: never
   }
+  '/api/portfolio/works/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['works_get']
+    put?: never
+    post?: never
+    delete: operations['works_delete']
+    options?: never
+    head?: never
+    patch: operations['works_update']
+    trace?: never
+  }
   '/api/clients/{id}': {
     parameters: {
       query?: never
@@ -932,6 +1044,38 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/portfolio': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['portfolio_published']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/portfolio/images/{fileId}/{width}.jpg': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['portfolioImages_image']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/me': {
     parameters: {
       query?: never
@@ -1020,6 +1164,22 @@ export interface paths {
       cookie?: never
     }
     get: operations['bookings_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/bookings/{id}/references/{fileId}.jpg': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['references_image']
     put?: never
     post?: never
     delete?: never
@@ -1172,6 +1332,38 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/clients/{id}/consents/{consentKind}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['clients_withdrawConsent']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/bookings/{id}/references/{fileId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['references_remove']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/access/accounts/{id}/roles/{roleId}': {
     parameters: {
       query?: never
@@ -1216,6 +1408,9 @@ export interface components {
       anchorMonday: string
       /** Format: int32 */
       anchorIndex: number
+    }
+    ReorderWorks: {
+      orderedWorkIds: string[]
     }
     SetPrepaymentRequired: {
       required: boolean
@@ -1477,6 +1672,54 @@ export interface components {
       sortOrder: number
       startTimes: string[]
     }
+    AddPortfolioWork: {
+      /** Format: uuid */
+      fileId: string
+      alt: string
+      caption: string | null
+      /** @enum {string} */
+      source: 'CLIENT' | 'CLIENT_OUTSIDE_SITE' | 'EXAMPLE'
+      /** Format: uuid */
+      bookingId: string | null
+    }
+    WorkView: {
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      fileId: string
+      alt: string
+      caption: string | null
+      /** Format: int32 */
+      position: number
+      visible: boolean
+      /** @enum {string} */
+      source: 'CLIENT' | 'CLIENT_OUTSIDE_SITE' | 'EXAMPLE'
+      /** Format: uuid */
+      bookingId: string | null
+      /** Format: uuid */
+      clientId: string | null
+      /** Format: int32 */
+      width: number
+      /** Format: int32 */
+      height: number
+      published: boolean
+      /** @enum {string} */
+      consent: 'GIVEN' | 'MISSING' | 'OUTSIDE_SITE' | 'NOT_NEEDED'
+      /** Format: date-time */
+      createdAt: string
+    }
+    StoredFileView: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      purpose: 'PORTFOLIO' | 'REFERENCE'
+      /** Format: int32 */
+      width: number
+      /** Format: int32 */
+      height: number
+      /** Format: date-time */
+      createdAt: string
+    }
     NewDocumentVersion: {
       version: string
       /** Format: date */
@@ -1516,7 +1759,7 @@ export interface components {
     }
     RecordConsent: {
       /** @enum {string} */
-      kind: 'PERSONAL_DATA' | 'OFFER' | 'REVIEW_PUBLICATION'
+      kind: 'PERSONAL_DATA' | 'OFFER' | 'REVIEW_PUBLICATION' | 'PHOTO_PUBLICATION'
       documentVersion: string
       /** @enum {string} */
       source: 'SITE_CHECKBOX' | 'ENTERED_BY_MASTER'
@@ -1537,6 +1780,22 @@ export interface components {
     RescheduleBooking: {
       /** Format: uuid */
       newSlotId: string
+    }
+    AttachReference: {
+      /** Format: uuid */
+      fileId: string
+    }
+    ReferenceView: {
+      /** Format: uuid */
+      fileId: string
+      /** @enum {string} */
+      addedBy: 'CLIENT' | 'STAFF'
+      /** Format: int32 */
+      width: number
+      /** Format: int32 */
+      height: number
+      /** Format: date-time */
+      createdAt: string
     }
     ProposeEarlierTime: {
       /** Format: date-time */
@@ -1636,6 +1895,14 @@ export interface components {
       name: string
       startTimes: string[]
     }
+    UpdatePortfolioWork: {
+      alt: string
+      caption: string | null
+      /** @enum {string} */
+      source: 'CLIENT' | 'CLIENT_OUTSIDE_SITE' | 'EXAMPLE'
+      /** Format: uuid */
+      bookingId: string | null
+    }
     UpdateClient: {
       firstName: string
       lastName: string | null
@@ -1681,6 +1948,27 @@ export interface components {
       weekTemplateName: string
       days: components['schemas']['DayPlan'][]
     }
+    PagedPublicWork: {
+      items: components['schemas']['PublicWork'][]
+      /** Format: int32 */
+      page: number
+      /** Format: int32 */
+      size: number
+      /** Format: int64 */
+      total: number
+    }
+    PublicWork: {
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      fileId: string
+      alt: string
+      caption: string | null
+      /** Format: int32 */
+      width: number
+      /** Format: int32 */
+      height: number
+    }
     DocumentVersionText: {
       version: components['schemas']['DocumentVersionView']
       text: string | null
@@ -1722,7 +2010,7 @@ export interface components {
     }
     ConsentView: {
       /** @enum {string} */
-      kind: 'PERSONAL_DATA' | 'OFFER' | 'REVIEW_PUBLICATION'
+      kind: 'PERSONAL_DATA' | 'OFFER' | 'REVIEW_PUBLICATION' | 'PHOTO_PUBLICATION'
       documentVersion: string
       /** Format: date-time */
       givenAt: string
@@ -1954,6 +2242,37 @@ export interface operations {
         content: {
           'application/json': components['schemas']['RotationView']
         }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  works_reorder: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReorderWorks']
+      }
+    }
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
       /** @description Problem (RFC 9457) */
       default: {
@@ -2790,6 +3109,164 @@ export interface operations {
       }
     }
   }
+  works_all: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkView'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  works_add: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AddPortfolioWork']
+      }
+    }
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  works_show: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  works_hide: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  files_upload: {
+    parameters: {
+      query: {
+        purpose: 'portfolio' | 'reference'
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          /** Format: binary */
+          file: string
+        }
+      }
+    }
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['StoredFileView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   documents_history: {
     parameters: {
       query?: never
@@ -3240,6 +3717,72 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['BookingView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  references_list: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReferenceView'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  references_attach: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AttachReference']
+      }
+    }
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReferenceView']
         }
       }
       /** @description Problem (RFC 9457) */
@@ -4073,6 +4616,101 @@ export interface operations {
       }
     }
   }
+  works_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  works_delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  works_update: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdatePortfolioWork']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   clients_details: {
     parameters: {
       query?: never
@@ -4354,6 +4992,70 @@ export interface operations {
       }
     }
   }
+  portfolio_published: {
+    parameters: {
+      query?: {
+        page?: number
+        size?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PagedPublicWork']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  portfolioImages_image: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        fileId: string
+        width: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'image/jpeg': string
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   me_me: {
     parameters: {
       query?: never
@@ -4553,6 +5255,38 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['BookingView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  references_image: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        fileId: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'image/jpeg': string
         }
       }
       /** @description Problem (RFC 9457) */
@@ -4818,6 +5552,66 @@ export interface operations {
       header?: never
       path: {
         id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  clients_withdrawConsent: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        consentKind: 'personal-data' | 'offer' | 'review-publication' | 'photo-publication'
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  references_remove: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        fileId: string
       }
       cookie?: never
     }

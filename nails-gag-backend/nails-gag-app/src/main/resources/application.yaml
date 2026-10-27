@@ -11,9 +11,38 @@ spring:
       ddl-auto: validate
   liquibase:
     change-log: classpath:db/changelog/master.yaml
+  servlet:
+    multipart:
+      # Загрузка фото (POST /api/files): файл — ровно max-file-bytes модуля файлов, запрос — больше, с запасом на
+      # заголовки формы (оба сверяются при старте). Больше — 413 files.too_large_file.
+      max-file-size: 15MB
+      max-request-size: 16MB
+      # Тело разбирается только адресом загрузки, после проверки сессии, прав и Content-Length.
+      resolve-lazily: true
 
 nails-gag:
   time-zone: Europe/Moscow
+  booking:
+    # Сколько дней хранятся фото-референсы после визита или отмены записи: политика конфиденциальности обещает 30.
+    reference-retention-days: 30
+    jobs:
+      enabled: true
+      # Ночное удаление референсов с истёкшим сроком, по времени салона; отмена и истечение идут раз в минуту.
+      reference-cleanup-cron: "0 0 4 * * *"
+  files:
+    # Корень хранилища фото; в Docker — том. Создаётся при первой загрузке.
+    root: /var/lib/nails-gag/files
+    # 15 МБ: фронт ужимает фото до 2000 px, а сервер всё равно проверяет сам.
+    max-file-bytes: 15728640
+    max-pixels: 50000000
+    # Обработка картинки занимает память и процессор: одновременно не больше этого числа, остальные ждут.
+    max-concurrent-processing: 2
+    # Сколько загрузка ждёт места обработки, прежде чем ответить 503 files.busy.
+    processing-wait: 10s
+    jobs:
+      enabled: true
+      # Ночная уборка по времени салона: «сироты» старше суток и каталоги на диске без строки в базе.
+      cleanup-cron: "0 30 3 * * *"
   identity:
     # Пары provider:subject, которым при входе выдаётся роль «Разработчик»: ["YANDEX:1234567", "VK:7654321"]
     bootstrap-developers: []
@@ -41,11 +70,17 @@ nails-gag:
     # Ключ шифрования cookie этапа входа: base64, ровно 32 байта. В prod обязателен; вне prod пустой ключ
     # заменяется случайным при старте. Задавать через переменную окружения, не в файле.
     login-state-key: ""
-    # Лимиты частоты запросов в минуту: вход (/api/auth/**) и анонимные — по IP, с сессией — по аккаунту.
+    # Лимиты частоты запросов (в минуту, загрузки — в час): вход (/api/auth/**), анонимные и картинки — по IP, с
+    # сессией и загрузки — по аккаунту.
     rate-limits:
       auth-per-minute: 10
       anonymous-per-minute: 60
       authenticated-per-minute: 600
+      # Загрузки фото (POST /api/files) одного аккаунта в час, вдобавок к общей корзине аккаунта.
+      uploads-per-hour: 30
+      # Чтение картинок портфолио (GET/HEAD /api/portfolio/images/**) с одного IP в минуту — своя корзина вместо
+      # общей: лендинг запрашивает их десятками.
+      images-per-minute: 600
     # Пути на сайте, куда обратный вызов провайдера отправляет браузер.
     redirects:
       signed-in: /cabinet

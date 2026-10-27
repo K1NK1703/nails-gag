@@ -8,7 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-interface ClientRepository extends JpaRepository<ClientEntity, UUID> {
+interface ClientRepository extends JpaRepository<ClientEntity, UUID>, ClientLocking {
 
     /**
      * Условие поиска, общее для списка, страницы и её подсчёта. {@code pattern} — уже в нижнем регистре, с

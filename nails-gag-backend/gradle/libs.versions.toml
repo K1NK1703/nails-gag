@@ -13,6 +13,10 @@ bucket4j = "8.21.0"
 springdoc = "3.1.1"
 # span-ы SQL в трассах; 2.x собрана под Spring Boot 4.1, не входит в BOM
 datasourceMicrometer = "2.3.0"
+# Чтение JPEG (CMYK, ICC-профили) и WebP плагинами ImageIO на чистой Java; не входит в BOM
+twelvemonkeys = "3.15.3"
+# EXIF-ориентация фото в JPEG, PNG и WebP; не входит в BOM
+metadataExtractor = "2.21.0"
 
 [libraries]
 # BOM-ы: версии всего остального из Spring Boot и Spring Modulith
@@ -52,6 +56,10 @@ caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
 springdoc-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 # Только для компиляции настройки схемы в api (SpringDocUtils, ParameterCustomizer); в рабочий classpath не попадает
 springdoc-common = { module = "org.springdoc:springdoc-openapi-starter-common", version.ref = "springdoc" }
+# Плагины ImageIO для файлов: JPEG вместо встроенного (CMYK, ICC-профили, битые маркеры) и WebP, которого в JDK нет
+twelvemonkeys-imageio-jpeg = { module = "com.twelvemonkeys.imageio:imageio-jpeg", version.ref = "twelvemonkeys" }
+twelvemonkeys-imageio-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
+metadata-extractor = { module = "com.drewnoakes:metadata-extractor", version.ref = "metadataExtractor" }
 
 spring-modulith-starter-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
 spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }

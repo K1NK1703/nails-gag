@@ -22,8 +22,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ResolvableType;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import tools.jackson.databind.JsonNode;
@@ -263,15 +265,17 @@ class OpenApiSchemaTest extends ApiTestSupport {
 
     /**
      * Успешные ответы — {@code application/json}, а не {@code *}{@code /*} springdoc по умолчанию: генератор типов
-     * фронта берёт тип ответа по типу содержимого. Метод контроллера без тела ответа ({@code void},
-     * {@code ResponseEntity<Void>}) — ответ {@code 204} или {@code 303} без содержимого.
+     * фронта берёт тип ответа по типу содержимого. Адрес, который объявил свой тип ({@code produces}, — картинки),
+     * отвечает ровно им. Метод контроллера без тела ответа ({@code void}, {@code ResponseEntity<Void>}) — ответ
+     * {@code 204} или {@code 303} без содержимого.
      */
     @Test
     void successResponsesAreJson() {
         var handlers = controllerOperations();
 
         for (var operation : operations(openApi())) {
-            var hasBody = hasBody(handlers.get(operation.name()));
+            var handler = handlers.get(operation.name());
+            var hasBody = hasBody(handler);
             for (var response : operation.node().path("responses").properties()) {
                 if (response.getKey().equals("default")) {
                     continue;
@@ -279,12 +283,54 @@ class OpenApiSchemaTest extends ApiTestSupport {
                 var name = operation.name() + " " + response.getKey();
                 var content = response.getValue().path("content");
                 if (hasBody) {
-                    assertThat(content.propertyNames()).as(name).containsExactly("application/json");
+                    assertThat(content.propertyNames()).as(name).containsExactlyElementsOf(produces(handler));
                 } else {
                     assertThat(content.isMissingNode()).as(name).isTrue();
                     assertThat(response.getKey()).as(name).isIn("204", "303");
                 }
             }
+        }
+    }
+
+    /**
+     * Картинки портфолио и референсов отвечают {@code image/jpeg} с двоичным телом, а не JSON: фронт ставит их адреса в
+     * {@code <img>}, генератору типов нужен верный тип.
+     */
+    @Test
+    void imageResponsesAreJpeg() {
+        var paths = openApi().path("paths");
+
+        for (var path :
+                List.of("/api/portfolio/images/{fileId}/{width}.jpg", "/api/bookings/{id}/references/{fileId}.jpg")) {
+            var content =
+                    paths.path(path).path("get").path("responses").path("200").path("content");
+            assertThat(content.propertyNames()).as(path).containsExactly("image/jpeg");
+            assertThat(content.path("image/jpeg").path("schema").path("format").asString())
+                    .as(path)
+                    .isEqualTo("binary");
+        }
+    }
+
+    /**
+     * Длины описания и подписи работы проверяет модуль в символах, а не аннотациями тела; схема всё равно сообщает их
+     * фронту.
+     */
+    @Test
+    void workTextLengthsAreInSchema() {
+        var schemas = openApi().path("components").path("schemas");
+
+        for (var body : List.of("AddPortfolioWork", "UpdatePortfolioWork")) {
+            var properties = schemas.path(body).path("properties");
+            assertThat(properties.path("alt").path("minLength").asInt())
+                    .as(body)
+                    .isEqualTo(1);
+            assertThat(properties.path("alt").path("maxLength").asInt())
+                    .as(body)
+                    .isEqualTo(200);
+            assertThat(properties.path("caption").path("maxLength").asInt())
+                    .as(body)
+                    .isEqualTo(200);
+            assertThat(types(properties.path("caption"))).as(body).containsExactlyInAnyOrder("string", "null");
         }
     }
 
@@ -317,6 +363,15 @@ class OpenApiSchemaTest extends ApiTestSupport {
         var controller = method.getBeanType().getSimpleName().replaceFirst("Controller$", "");
         return Character.toLowerCase(controller.charAt(0)) + controller.substring(1) + "_"
                 + method.getMethod().getName();
+    }
+
+    /** Тип содержимого успешного ответа: объявленный методом ({@code produces}) или JSON. */
+    private static List<String> produces(HandlerMethod method) {
+        var mapping = AnnotatedElementUtils.findMergedAnnotation(method.getMethod(), RequestMapping.class);
+        if (mapping == null || mapping.produces().length == 0) {
+            return List.of("application/json");
+        }
+        return List.of(mapping.produces());
     }
 
     /** Есть ли у ответа метода тело: не {@code void} и не {@code ResponseEntity<Void>}. */

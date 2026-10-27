@@ -4,6 +4,7 @@ import gag.nails.clients.error.ClientNotFoundException;
 import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentView;
+import gag.nails.clients.model.ConsentWithdrawalView;
 import gag.nails.clients.model.PrepaymentFlagChangeView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
@@ -76,13 +77,22 @@ public interface ClientQueries {
     Optional<String> blockReason(UUID clientId, Actor actor);
 
     /**
-     * Есть ли у клиента согласия всех перечисленных видов на действующие версии документов. Без
-     * проверки прав. Пустой набор — {@code true}; для несуществующего клиента — {@code false}.
+     * Есть ли у клиента неотозванные согласия всех перечисленных видов на действующие версии документов; для вида,
+     * которому редакция не важна ({@link ConsentKind#requiresCurrentVersion()}), — на любую. Без
+     * проверки прав. Пустой набор — {@code true}; для несуществующего клиента — {@code false}. Для обезличенной
+     * карточки согласия остаются в журнале, и результат не говорит, можно ли публиковать её фото: ориентир —
+     * {@link gag.nails.clients.event.ClientErased}.
      */
     boolean hasCurrentConsents(UUID clientId, Set<ConsentKind> kinds);
 
-    /** Журнал согласий клиента, новые первыми. Чтение раздела «Клиенты» или сам клиент. */
+    /**
+     * Журнал согласий клиента, новые первыми. Отозванные согласия остаются в нём, отзывы — в
+     * {@link #consentWithdrawals}. Чтение раздела «Клиенты» или сам клиент.
+     */
     List<ConsentView> consents(UUID clientId, Actor actor);
+
+    /** Отзывы согласий клиента, новые первыми. Чтение раздела «Клиенты» или сам клиент. */
+    List<ConsentWithdrawalView> consentWithdrawals(UUID clientId, Actor actor);
 
     /** Журнал изменений признака предоплаты, новые первыми. Нужен уровень чтения раздела «Клиенты». */
     List<PrepaymentFlagChangeView> prepaymentHistory(UUID clientId, Actor actor);

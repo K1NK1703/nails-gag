@@ -11,6 +11,83 @@
   gap: var(--space-2);
 }
 
+/* Работы приходят после загрузки страницы, поэтому не .reveal (его наблюдатель видит только
+   разметку первого рендера), а своё мягкое появление. */
+.item {
+  animation: tile-in var(--dur) var(--ease);
+}
+
+@keyframes tile-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Заглушка на месте работы, которая сейчас придёт: того же размера, что плитка, — сетка не
+   прыгает, когда приходят фото. */
+.placeholder {
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  background: var(--surface);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.footer {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.note {
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* Живой регион ошибки есть всегда; пустой не занимает места (не display: none — иначе его текст
+   не объявят). */
+.status {
+  display: block;
+  margin-top: var(--space-5);
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.status:empty {
+  margin-top: 0;
+}
+
+.status:not(:empty) + .footer {
+  margin-top: var(--space-3);
+}
+
+/* Пока идёт загрузка, кнопка остаётся на месте (фокус не теряется), но не выглядит
+   нажимаемой: без заливки акцентом, подъёма и тени по наведению, фокусу и нажатию. */
+.footer :global(.button)[aria-disabled],
+.footer :global(.button)[aria-disabled]:hover,
+.footer :global(.button)[aria-disabled]:focus-visible,
+.footer :global(.button)[aria-disabled]:active {
+  transform: none;
+  box-shadow: none;
+  background: var(--button-bg);
+  color: var(--button-ink);
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* Без JavaScript работы не придут: заглушки не показываем, вместо них — текст из <noscript>. */
+@media (scripting: none) {
+  .placeholder {
+    display: none;
+  }
+}
+
 .tile {
   display: block;
   width: 100%;
@@ -69,5 +146,10 @@
   .tile,
   .tile img {
     transition: none;
+  }
+
+  .item,
+  .placeholder {
+    animation: none;
   }
 }

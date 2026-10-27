@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/clients/0003-identity-support.sql
   - include:
       file: db/changelog/clients/0004-document-text.sql
+  - include:
+      file: db/changelog/clients/0005-consent-withdrawal.sql

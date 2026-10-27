@@ -8,12 +8,16 @@ import gag.nails.clients.command.UpdateClient;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentRequiredException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.clients.event.ClientBlocked;
 import gag.nails.clients.event.ClientErased;
 import gag.nails.clients.event.ClientMerged;
+import gag.nails.clients.event.ConsentGiven;
+import gag.nails.clients.event.ConsentWithdrawn;
 import gag.nails.clients.model.ClientView;
+import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.clients.model.MergeResult;
 import gag.nails.common.actor.Actor;
@@ -51,6 +55,10 @@ public interface ClientService {
      * разрешается сотрудником через merge. Вызывает модуль входа, поэтому {@code Actor} не нужен.
      * Телефон — только подтверждённый провайдером входа (Яндекс ID / VK ID); телефон, введённый
      * пользователем, сюда не передавать ({@code null}).
+     *
+     * <p>Найденная карточка блокируется и перечитывается. Если пока ждали, её объединили, телефон ищется
+     * заново (он перешёл к оставшейся карточке); если карточку по почте за это время обезличили, привязали к
+     * другому аккаунту или почта перестала совпадать — поиск идёт дальше, как если бы её не нашли.
      *
      * @throws ClientBlockedException если найденная по телефону или почте карточка заблокирована
      * @throws PhoneTakenException если телефон принадлежит клиенту, у которого уже есть другой аккаунт
@@ -109,13 +117,29 @@ public interface ClientService {
     /**
      * Записывает согласие. Клиент — только своё и только {@link ConsentSource#SITE_CHECKBOX};
      * сотрудник с изменением раздела «Клиенты» — любому клиенту и любым способом. Версия
-     * документа должна быть действующей.
+     * документа должна быть действующей. Каждая запись — новая строка журнала и событие {@link ConsentGiven}
+     * внутри транзакции, даже если такое согласие уже действует.
      *
      * @throws ConsentVersionOutdatedException если версия не действующая; в параметрах — действующая
      * @throws ClientErasedException если карточка обезличена
      * @throws ClientNotFoundException если клиента нет
      */
     void recordConsent(UUID clientId, RecordConsent command, Actor actor);
+
+    /**
+     * Отзыв согласия: клиент — своего, сотрудник с изменением раздела «Клиенты» — любого клиента. Помечает
+     * отозванными все неотозванные (по любой редакции) согласия этого вида у клиента, добавляет одну запись в журнал
+     * отзывов ({@link ClientQueries#consentWithdrawals}) и публикует внутри транзакции {@link ConsentWithdrawn}.
+     * Если отзывать нечего — ничего не меняется, записи и события нет. Дать согласие снова можно обычным
+     * {@link #recordConsent}. Запись и отзыв согласия, объединение и обезличивание ждут друг друга на блокировке
+     * карточки, поэтому события согласий публикуются в порядке фиксации.
+     *
+     * @throws ConsentRequiredException для обязательного вида ({@link ConsentKind#required()}), раньше проверок
+     *     карточки
+     * @throws ClientErasedException если карточка обезличена
+     * @throws ClientNotFoundException если клиента нет
+     */
+    void withdrawConsent(UUID clientId, ConsentKind kind, Actor actor);
 
     /**
      * Изменение признака по правилу системы — вызывает модуль записей (поздняя отмена, неявка,

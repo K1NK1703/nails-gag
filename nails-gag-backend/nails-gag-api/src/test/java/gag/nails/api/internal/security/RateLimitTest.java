@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.api.ApiTest;
 import gag.nails.api.ApiTestSupport;
+import gag.nails.api.Uploads;
 import gag.nails.identity.model.LoginPurpose;
 import java.time.Duration;
 import java.util.Map;
@@ -171,6 +172,23 @@ class RateLimitTest extends ApiTestSupport {
             get("/api/authx", "198.51.100.14").expectStatus().isNotFound();
         }
         get("/api/authx", "198.51.100.14").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    /** Загрузка идёт и в корзину аккаунта, а не только в свою: у загрузок нет обхода общего лимита. */
+    @Test
+    void uploadAlsoCountsInAccountBucket() {
+        var session = signInClient();
+
+        Uploads.upload(client, session, "reference")
+                .header("X-Forwarded-For", "203.0.113.120")
+                .exchange()
+                .expectStatus()
+                .isCreated();
+        for (var i = 1; i < AUTHENTICATED; i++) {
+            signedIn(session, "203.0.113.120").expectStatus().isOk();
+        }
+
+        signedIn(session, "203.0.113.120").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
     }
 
     private ResponseSpec start(String ip) {

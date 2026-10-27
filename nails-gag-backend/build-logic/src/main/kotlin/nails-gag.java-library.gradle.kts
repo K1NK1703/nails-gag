@@ -33,6 +33,15 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Хранилище файлов тестов (nails-gag.files.root) — свой каталог задачи в build/ модуля, очищается перед каждым
+    // прогоном: мусор не копится между прогонами, параллельные модули не делят файлы.
+    val filesRoot = objects.newInstance<TestFilesRoot>().apply {
+        directory = layout.buildDirectory.dir("test-files/$name")
+    }
+    jvmArgumentProviders.add(filesRoot)
+    doFirst {
+        filesRoot.clear()
+    }
     testLogging {
         events("failed", "skipped")
         exceptionFormat = TestExceptionFormat.FULL

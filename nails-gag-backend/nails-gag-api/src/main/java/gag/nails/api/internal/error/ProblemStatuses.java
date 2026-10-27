@@ -8,6 +8,8 @@ import gag.nails.booking.error.CorrectionWindowClosedException;
 import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.error.LateRescheduleNotAllowedException;
 import gag.nails.booking.error.LimitReachedException;
+import gag.nails.booking.error.ReferencesClosedException;
+import gag.nails.booking.error.ReferencesLimitReachedException;
 import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.error.VisitNotStartedException;
 import gag.nails.catalog.error.ServiceInactiveException;
@@ -15,6 +17,7 @@ import gag.nails.catalog.error.ServiceNotFoundException;
 import gag.nails.clients.error.ClientBlockedException;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.clients.error.ClientNotFoundException;
+import gag.nails.clients.error.ConsentRequiredException;
 import gag.nails.clients.error.ConsentVersionOutdatedException;
 import gag.nails.clients.error.DocumentVersionDateTakenException;
 import gag.nails.clients.error.DocumentVersionExistsException;
@@ -24,6 +27,10 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.UnauthenticatedException;
 import gag.nails.common.error.UserFacingException;
 import gag.nails.common.error.ValidationException;
+import gag.nails.files.error.ProcessingBusyException;
+import gag.nails.files.error.TooLargeFileException;
+import gag.nails.files.error.TooLargeImageException;
+import gag.nails.files.error.UnsupportedFormatException;
 import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.error.LastAccessAdminException;
@@ -34,6 +41,7 @@ import gag.nails.identity.error.RoleBuiltInException;
 import gag.nails.identity.error.RoleCodeTakenException;
 import gag.nails.identity.error.RoleInUseException;
 import gag.nails.identity.error.RoleNotFoundException;
+import gag.nails.portfolio.error.WorkNotFoundException;
 import gag.nails.schedule.error.DayTemplateInUseException;
 import gag.nails.schedule.error.DayTemplateNotFoundException;
 import gag.nails.schedule.error.RotationNotConfiguredException;
@@ -69,13 +77,19 @@ final class ProblemStatuses {
 
     /**
      * {@link AccessDeniedException} здесь — статус для сотрудника; клиенту и анониму обработчик отвечает иначе
-     * (спецификация API, §4.6).
+     * (спецификация API, §4.6). {@link ProcessingBusyException} обработчик дополняет {@code Retry-After}, как
+     * {@code common.busy}.
      */
     private static final Map<Class<? extends UserFacingException>, HttpStatus> STATUSES = Map.ofEntries(
             // common
             entry(ValidationException.class, HttpStatus.BAD_REQUEST),
             entry(UnauthenticatedException.class, HttpStatus.UNAUTHORIZED),
             entry(AccessDeniedException.class, HttpStatus.FORBIDDEN),
+            // files
+            entry(UnsupportedFormatException.class, HttpStatus.BAD_REQUEST),
+            entry(TooLargeImageException.class, HttpStatus.BAD_REQUEST),
+            entry(TooLargeFileException.class, HttpStatus.CONTENT_TOO_LARGE),
+            entry(ProcessingBusyException.class, HttpStatus.SERVICE_UNAVAILABLE),
             // catalog
             entry(ServiceNotFoundException.class, HttpStatus.NOT_FOUND),
             entry(ServiceInactiveException.class, HttpStatus.CONFLICT),
@@ -86,8 +100,11 @@ final class ProblemStatuses {
             entry(ClientErasedException.class, HttpStatus.FORBIDDEN),
             entry(PhoneTakenException.class, HttpStatus.CONFLICT),
             entry(ConsentVersionOutdatedException.class, HttpStatus.CONFLICT),
+            entry(ConsentRequiredException.class, HttpStatus.CONFLICT),
             entry(DocumentVersionExistsException.class, HttpStatus.CONFLICT),
             entry(DocumentVersionDateTakenException.class, HttpStatus.CONFLICT),
+            // portfolio
+            entry(WorkNotFoundException.class, HttpStatus.NOT_FOUND),
             // schedule
             entry(SlotNotFoundException.class, HttpStatus.NOT_FOUND),
             entry(DayTemplateNotFoundException.class, HttpStatus.NOT_FOUND),
@@ -108,6 +125,8 @@ final class ProblemStatuses {
             entry(CorrectionWindowClosedException.class, HttpStatus.CONFLICT),
             entry(VisitNotStartedException.class, HttpStatus.CONFLICT),
             entry(ConsentMissingException.class, HttpStatus.CONFLICT),
+            entry(ReferencesLimitReachedException.class, HttpStatus.CONFLICT),
+            entry(ReferencesClosedException.class, HttpStatus.CONFLICT),
             // identity
             entry(LoginFailedException.class, HttpStatus.UNAUTHORIZED),
             entry(RegistrationExpiredException.class, HttpStatus.UNAUTHORIZED),

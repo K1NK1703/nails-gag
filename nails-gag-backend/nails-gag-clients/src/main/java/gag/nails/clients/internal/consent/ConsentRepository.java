@@ -12,7 +12,13 @@ public interface ConsentRepository extends JpaRepository<ConsentEntity, UUID> {
     /** Новые первыми; при равном времени — по id (UUID v7 растёт со временем создания). */
     List<ConsentEntity> findAllByClientIdOrderByGivenAtDescIdDesc(UUID clientId);
 
-    boolean existsByClientIdAndKindAndDocumentVersion(UUID clientId, ConsentKind kind, String documentVersion);
+    boolean existsByClientIdAndKindAndDocumentVersionAndWithdrawnAtIsNull(
+            UUID clientId, ConsentKind kind, String documentVersion);
+
+    boolean existsByClientIdAndKindAndWithdrawnAtIsNull(UUID clientId, ConsentKind kind);
+
+    /** Вызывать под блокировкой карточки клиента: она сериализует запись, отзыв и объединение. */
+    List<ConsentEntity> findAllByClientIdAndKindAndWithdrawnAtIsNull(UUID clientId, ConsentKind kind);
 
     /** Без clearAutomatically: сущности клиентов, загруженные в той же транзакции, остаются управляемыми. */
     @Modifying(flushAutomatically = true)
