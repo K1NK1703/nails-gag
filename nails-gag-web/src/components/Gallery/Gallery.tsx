@@ -38,7 +38,7 @@ function toPhoto(work: PublicWork): LightboxPhoto {
   }
 }
 
-/** Куда перевести фокус после загрузки, начатой человеком: плитка по номеру или кнопка под сеткой. */
+/** Куда перевести фокус после загрузки, начатой с клавиатуры: плитка по номеру или кнопка под сеткой. */
 type FocusTarget = { tile: number } | 'button'
 
 /**
@@ -49,8 +49,10 @@ type FocusTarget = { tile: number } | 'button'
  *
  * Под сеткой — одна и та же кнопка: «Показать ещё» или, после ошибки, «Повторить». Пока идёт
  * загрузка, она остаётся на месте (aria-disabled), поэтому фокус на ней не теряется. После
- * загрузки, начатой человеком, фокус переходит на первую новую работу (нет новых — на последнюю),
- * но только если он был на этой кнопке или потерян и лайтбокс закрыт.
+ * загрузки, начатой с клавиатуры, фокус переходит на первую новую работу (нет новых — на
+ * последнюю), но только если он был на этой кнопке или потерян и лайтбокс закрыт; после клика
+ * мышью фокус остаётся на кнопке и страница не прокручивается. Текст ошибки — в живом регионе,
+ * который есть в разметке всегда: меняется только его текст, иначе скринридер его не объявит.
  */
 export function Gallery() {
   const [works, setWorks] = useState<PublicWork[]>([])
@@ -74,7 +76,7 @@ export function Gallery() {
   const openedFrom = useRef<HTMLButtonElement | null>(null)
   const errorId = useId()
 
-  const load = useCallback((byUser: boolean) => {
+  const load = useCallback((byKeyboard: boolean) => {
     if (request.current) return
     const controller = new AbortController()
     request.current = controller
@@ -91,7 +93,7 @@ export function Gallery() {
         // показанные не повторяем.
         const known = new Set(shown.current.map((w) => w.id))
         const fresh = result.items.filter((w) => !known.has(w.id))
-        if (byUser && shown.current.length + fresh.length > 0) {
+        if (byKeyboard && shown.current.length + fresh.length > 0) {
           focusTarget.current = {
             tile: fresh.length > 0 ? shown.current.length : shown.current.length - 1,
           }
@@ -112,7 +114,7 @@ export function Gallery() {
       } catch {
         // И сбой сети или ответ не 2xx, и ответ неожиданной формы: раздел не остаётся в загрузке.
         if (controller.signal.aborted) return
-        if (byUser) focusTarget.current = 'button'
+        if (byKeyboard) focusTarget.current = 'button'
         setFailed(true)
       } finally {
         if (request.current === controller) {
@@ -228,15 +230,13 @@ export function Gallery() {
             </a>
           </p>
         )}
+        {/* <output> — живой регион с ролью status, а не alert: ошибку загрузки, которую никто не
+            запускал, не выкрикиваем. Он в разметке всегда (и в пререндере), меняется только текст. */}
+        <output id={errorId} className={styles.status}>
+          {showError ? ui.gallery.loadError : null}
+        </output>
         {showButton && (
           <div className={styles.footer}>
-            {/* <output> — роль status, а не alert: ошибку загрузки, которую никто не запускал, не
-                выкрикиваем; после действия человека фокус и так на кнопке, а текст связан с ней. */}
-            {showError && (
-              <output id={errorId} className={styles.note}>
-                {ui.gallery.loadError}
-              </output>
-            )}
             {/* aria-disabled, а не disabled: кнопка с фокусом не теряет его на время загрузки */}
             <button
               ref={button}
@@ -244,7 +244,8 @@ export function Gallery() {
               className="button"
               aria-disabled={loading || undefined}
               aria-describedby={showError ? errorId : undefined}
-              onClick={() => load(true)}
+              // detail === 0 — активация с клавиатуры (Enter, пробел), а не клик мышью.
+              onClick={(e) => load(e.detail === 0)}
             >
               {failed ? ui.gallery.retry : ui.gallery.loadMore}
             </button>

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
-import { hydrateRoot } from 'react-dom/client'
+import { hydrateRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { components } from '../../api/schema'
@@ -105,10 +105,26 @@ function queryLoadMoreButton() {
   return screen.queryByRole('button', { name: ui.gallery.loadMore })
 }
 
-/** Клик, как его делает человек: кнопка получает фокус. */
+/** Активация с клавиатуры (Enter, пробел): кнопка в фокусе, у click detail === 0. */
 function press(button: HTMLElement) {
   button.focus()
-  fireEvent.click(button)
+  fireEvent.click(button, { detail: 0 })
+}
+
+/** Клик мышью: кнопка в фокусе, у click detail === 1. */
+function clickWithMouse(button: HTMLElement) {
+  button.focus()
+  fireEvent.click(button, { detail: 1 })
+}
+
+/** Живой регион ошибки: есть в разметке всегда, меняется только текст. */
+function status() {
+  return screen.getByRole('status')
+}
+
+async function failedToLoad() {
+  await waitFor(() => expect(status()).toHaveTextContent(ui.gallery.loadError))
+  return status()
 }
 
 beforeEach(() => {
@@ -188,6 +204,22 @@ describe('Gallery', () => {
     expect(tiles()[12]).toHaveFocus()
   })
 
+  it('movesFocusToNewWorksOnlyForKeyboardActivation', async () => {
+    serve(page(0, 40), page(1, 40), page(2, 40))
+    render(<Gallery />)
+    await loaded(12)
+
+    // Мышью: фокус остаётся на кнопке, страница не прыгает к новым работам.
+    clickWithMouse(loadMoreButton())
+    await loaded(24)
+    expect(loadMoreButton()).toHaveFocus()
+
+    // С клавиатуры: фокус — на первой новой работе, чтобы продолжить с неё.
+    press(loadMoreButton())
+    await loaded(36)
+    expect(tiles()[24]).toHaveFocus()
+  })
+
   it('loadsExactlyTwentyFourOfTwentyFour', async () => {
     const fetchMock = serve(page(0, 24), page(1, 24))
     render(<Gallery />)
@@ -261,7 +293,7 @@ describe('Gallery', () => {
 
     await waitFor(() => expect(queryLoadMoreButton()).toBeNull())
     expect(tiles()).toHaveLength(12)
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(status()).toBeEmptyDOMElement()
     // Кнопка исчезла, новых работ нет: фокус — на последней работе, а не на body.
     expect(tiles()[11]).toHaveFocus()
   })
@@ -271,7 +303,7 @@ describe('Gallery', () => {
     const fetchMock = serve(500, retried.promise)
     render(<Gallery />)
 
-    expect(await screen.findByRole('status')).toHaveTextContent(ui.gallery.loadError)
+    const region = await failedToLoad()
     expect(tiles()).toHaveLength(0)
     // Пустой сетки после ошибки нет: только текст и кнопка.
     expect(grid()).toBeNull()
@@ -280,10 +312,11 @@ describe('Gallery', () => {
 
     press(retry)
 
-    // На время повтора кнопка та же и с фокусом; текст ошибки убран.
+    // На время повтора кнопка та же и с фокусом; регион тот же, текст ошибки убран.
     expect(retry).toHaveAttribute('aria-disabled', 'true')
     expect(retry).toHaveFocus()
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(status()).toBe(region)
+    expect(region).toBeEmptyDOMElement()
 
     await retried.respond(page(0, 5))
 
@@ -299,19 +332,25 @@ describe('Gallery', () => {
     await loaded(12)
     const button = loadMoreButton()
 
+    const region = status()
+    expect(region).toBeEmptyDOMElement()
+
     press(button)
 
-    expect(await screen.findByRole('status')).toHaveTextContent(ui.gallery.loadError)
+    // Ошибка появляется текстом в том же регионе, который был в разметке до неё.
+    expect(await failedToLoad()).toBe(region)
     expect(tiles()).toHaveLength(12)
     // Та же кнопка стала «Повторить» и не потеряла фокус.
     expect(button).toHaveTextContent(ui.gallery.retry)
     expect(button).toHaveFocus()
 
     press(button)
+    expect(region).toBeEmptyDOMElement()
     await loaded(20)
 
     expect(requestedUrl(fetchMock, 2)).toBe('/api/portfolio?page=1&size=12')
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(status()).toBe(region)
+    expect(region).toBeEmptyDOMElement()
     expect(tiles()[12]).toHaveFocus()
   })
 
@@ -319,7 +358,7 @@ describe('Gallery', () => {
     serve({ page: 0 } as unknown as PagedPublicWork, page(0, 2))
     render(<Gallery />)
 
-    expect(await screen.findByRole('status')).toHaveTextContent(ui.gallery.loadError)
+    await failedToLoad()
     expect(placeholders()).toHaveLength(0)
 
     press(screen.getByRole('button', { name: ui.gallery.retry }))
@@ -331,7 +370,7 @@ describe('Gallery', () => {
     render(<Gallery />)
 
     expect(await screen.findByText(ui.gallery.empty, { exact: false })).toBeInTheDocument()
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(status()).toBeEmptyDOMElement()
     expect(queryLoadMoreButton()).toBeNull()
     expect(placeholders()).toHaveLength(0)
     expect(screen.getByText(ui.gallery.kicker(0))).toBeInTheDocument()
@@ -414,16 +453,20 @@ describe('Gallery', () => {
     const container = document.createElement('div')
     container.innerHTML = html
     document.body.append(container)
+    let root: Root | undefined
+    try {
+      root = await act(async () =>
+        hydrateRoot(container, <Gallery />, { onRecoverableError: recoverable }),
+      )
+      await loaded(5)
 
-    const root = await act(async () =>
-      hydrateRoot(container, <Gallery />, { onRecoverableError: recoverable }),
-    )
-    await loaded(5)
-
-    expect(recoverable).not.toHaveBeenCalled()
-    expect(errors).not.toHaveBeenCalled()
-    act(() => root.unmount())
-    container.remove()
+      expect(recoverable).not.toHaveBeenCalled()
+      expect(errors).not.toHaveBeenCalled()
+    } finally {
+      errors.mockRestore()
+      if (root) act(() => root.unmount())
+      container.remove()
+    }
   })
 
   it('prerenderHasHeadingWithoutFetch', () => {
@@ -438,6 +481,8 @@ describe('Gallery', () => {
     expect(placeholders(section)).toHaveLength(12)
     expect(section.querySelector('ul')).toHaveAttribute('aria-busy', 'true')
     expect(section.querySelector('noscript')?.innerHTML).toContain(ui.gallery.noScript)
+    // Живой регион ошибки уже в пререндере, пустой: ошибку объявят, когда в нём появится текст.
+    expect(section.querySelector('output')).toBeEmptyDOMElement()
     expect(html).not.toContain('/api/portfolio/images/')
   })
 })

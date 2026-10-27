@@ -9,7 +9,7 @@ export const ui = {
   },
   /** Подпись мастера в карточке героя и в alt фото. */
   masterRole: 'мастер маникюра',
-  /** Подпись над «Работами» с числом работ; оставлена для совместимости — то же, что gallery.kicker. */
+  /** @deprecated используйте ui.gallery.kicker */
   galleryKicker: (count: number) => ui.gallery.kicker(count),
   /** Раздел «Работы» на главной: работы приходят из GET /api/portfolio. */
   gallery: {
