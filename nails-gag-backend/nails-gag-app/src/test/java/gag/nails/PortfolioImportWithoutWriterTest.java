@@ -22,7 +22,8 @@ import org.springframework.test.context.ActiveProfiles;
 
 /**
  * Импорт ({@link PortfolioImport}) на базе, где никто не входил: аккаунта с правом записи в «Портфолио» нет. Свой
- * контекст и своя база (набор свойств отличается от {@link PortfolioImportTest}), поэтому в этом классе никто не входит.
+ * контекст и своя база (набор свойств отличается от {@link PortfolioImportTest}), поэтому в этом классе никто не
+ * входит.
  */
 @SpringBootTest(
         webEnvironment = WebEnvironment.NONE,

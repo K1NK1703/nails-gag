@@ -190,7 +190,9 @@ public class PortfolioImport implements ApplicationRunner {
     private Actor portfolioWriter() {
         return access.staff(Actor.developer()).stream()
                 .filter(account -> !account.blocked())
-                .filter(account -> account.effective().get(Section.PORTFOLIO) == AccessLevel.WRITE)
+                .filter(account -> account.effective()
+                        .getOrDefault(Section.PORTFOLIO, AccessLevel.NONE)
+                        .allows(AccessLevel.WRITE))
                 .findFirst()
                 .map(account -> Actor.of(account.accountId(), account.clientId(), account.effective()))
                 .orElseThrow(() -> new InternalException("portfolio import needs an account with write access to"
