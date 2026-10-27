@@ -11,6 +11,50 @@
   gap: var(--space-2);
 }
 
+/* Работы приходят после загрузки страницы, поэтому не .reveal (его наблюдатель видит только
+   разметку первого рендера), а своё мягкое появление. */
+.item {
+  animation: tile-in var(--dur) var(--ease);
+}
+
+@keyframes tile-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Заглушка на месте работы, которая сейчас придёт: того же размера, что плитка, — сетка не
+   прыгает, когда приходят фото. */
+.placeholder {
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  background: var(--surface);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.footer {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.note {
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.footer :global(.button)[aria-disabled] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 .tile {
   display: block;
   width: 100%;
@@ -69,5 +113,10 @@
   .tile,
   .tile img {
     transition: none;
+  }
+
+  .item,
+  .placeholder {
+    animation: none;
   }
 }
