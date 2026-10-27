@@ -118,13 +118,13 @@ function clickWithMouse(button: HTMLElement) {
 }
 
 /** Живой регион ошибки: есть в разметке всегда, меняется только текст. */
-function status() {
+function errorRegion() {
   return screen.getByRole('status')
 }
 
 async function failedToLoad() {
-  await waitFor(() => expect(status()).toHaveTextContent(ui.gallery.loadError))
-  return status()
+  await waitFor(() => expect(errorRegion()).toHaveTextContent(ui.gallery.loadError))
+  return errorRegion()
 }
 
 beforeEach(() => {
@@ -293,7 +293,7 @@ describe('Gallery', () => {
 
     await waitFor(() => expect(queryLoadMoreButton()).toBeNull())
     expect(tiles()).toHaveLength(12)
-    expect(status()).toBeEmptyDOMElement()
+    expect(errorRegion()).toBeEmptyDOMElement()
     // Кнопка исчезла, новых работ нет: фокус — на последней работе, а не на body.
     expect(tiles()[11]).toHaveFocus()
   })
@@ -315,7 +315,7 @@ describe('Gallery', () => {
     // На время повтора кнопка та же и с фокусом; регион тот же, текст ошибки убран.
     expect(retry).toHaveAttribute('aria-disabled', 'true')
     expect(retry).toHaveFocus()
-    expect(status()).toBe(region)
+    expect(errorRegion()).toBe(region)
     expect(region).toBeEmptyDOMElement()
 
     await retried.respond(page(0, 5))
@@ -332,7 +332,7 @@ describe('Gallery', () => {
     await loaded(12)
     const button = loadMoreButton()
 
-    const region = status()
+    const region = errorRegion()
     expect(region).toBeEmptyDOMElement()
 
     press(button)
@@ -349,7 +349,7 @@ describe('Gallery', () => {
     await loaded(20)
 
     expect(requestedUrl(fetchMock, 2)).toBe('/api/portfolio?page=1&size=12')
-    expect(status()).toBe(region)
+    expect(errorRegion()).toBe(region)
     expect(region).toBeEmptyDOMElement()
     expect(tiles()[12]).toHaveFocus()
   })
@@ -370,7 +370,7 @@ describe('Gallery', () => {
     render(<Gallery />)
 
     expect(await screen.findByText(ui.gallery.empty, { exact: false })).toBeInTheDocument()
-    expect(status()).toBeEmptyDOMElement()
+    expect(errorRegion()).toBeEmptyDOMElement()
     expect(queryLoadMoreButton()).toBeNull()
     expect(placeholders()).toHaveLength(0)
     expect(screen.getByText(ui.gallery.kicker(0))).toBeInTheDocument()
@@ -464,7 +464,8 @@ describe('Gallery', () => {
       expect(errors).not.toHaveBeenCalled()
     } finally {
       errors.mockRestore()
-      if (root) act(() => root.unmount())
+      const hydrated = root
+      if (hydrated) act(() => hydrated.unmount())
       container.remove()
     }
   })
