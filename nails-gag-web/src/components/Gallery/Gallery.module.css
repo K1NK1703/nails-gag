@@ -46,13 +46,30 @@
 }
 
 .note {
+  display: block;
   color: var(--ink-muted);
   text-align: center;
 }
 
-.footer :global(.button)[aria-disabled] {
+/* Пока идёт загрузка, кнопка остаётся на месте (фокус не теряется), но не выглядит
+   нажимаемой: без заливки акцентом, подъёма и тени по наведению, фокусу и нажатию. */
+.footer :global(.button)[aria-disabled],
+.footer :global(.button)[aria-disabled]:hover,
+.footer :global(.button)[aria-disabled]:focus-visible,
+.footer :global(.button)[aria-disabled]:active {
+  transform: none;
+  box-shadow: none;
+  background: var(--button-bg);
+  color: var(--button-ink);
   cursor: progress;
   opacity: 0.7;
+}
+
+/* Без JavaScript работы не придут: заглушки не показываем, вместо них — текст из <noscript>. */
+@media (scripting: none) {
+  .placeholder {
+    display: none;
+  }
 }
 
 .tile {

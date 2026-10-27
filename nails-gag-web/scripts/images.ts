@@ -1,12 +1,12 @@
 import { mkdir, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
+import { about } from '../src/content/about.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const SRC = path.resolve(ROOT, '..', 'media', 'photos')
 const OUT = path.resolve(ROOT, 'public')
 // Работы портфолио сюда не входят: их ведёт мастер, картинки отдаёт бэкенд (GET /api/portfolio).
-const STUDIO_SIZES = [480, 960, 1600]
 
 async function findSource(base: string): Promise<string> {
   const files = await readdir(SRC)
@@ -15,7 +15,7 @@ async function findSource(base: string): Promise<string> {
   return path.join(SRC, hit)
 }
 
-async function webpSet(input: string, outDir: string, slug: string, sizes: number[]) {
+async function webpSet(input: string, outDir: string, slug: string, sizes: readonly number[]) {
   for (const w of sizes) {
     await sharp(input)
       .rotate()
@@ -28,9 +28,9 @@ async function webpSet(input: string, outDir: string, slug: string, sizes: numbe
 async function main() {
   await mkdir(OUT, { recursive: true })
 
-  // Фото мастера в студии для раздела «О мастере».
-  await webpSet(await findSource('studio'), OUT, 'studio', STUDIO_SIZES)
-  console.log('studio')
+  // Фото мастера в студии для раздела «О мастере»: имя и ширины — те же, что берёт About.
+  await webpSet(await findSource('studio'), OUT, about.photo.name, about.photo.widths)
+  console.log(about.photo.name)
 
   const heroSrc = await findSource('hero-cutout')
   const trimmed = await sharp(heroSrc).trim().png().toBuffer({ resolveWithObject: true })

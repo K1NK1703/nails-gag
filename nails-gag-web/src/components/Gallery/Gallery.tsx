@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { apiGet } from '../../api/client'
 import type { components } from '../../api/schema'
 import { site } from '../../content/site'
@@ -38,24 +38,27 @@ function toPhoto(work: PublicWork): LightboxPhoto {
   }
 }
 
-/**
- * loading — запрос в пути; с него же начинается первый рендер, поэтому пререндер и гидрация
- * показывают заглушки, а запрос уходит из эффекта. error — последний запрос не удался, уже
- * показанные работы остаются.
- */
-type Status = 'loading' | 'ready' | 'error'
+/** Куда перевести фокус после загрузки, начатой человеком: плитка по номеру или кнопка под сеткой. */
+type FocusTarget = { tile: number } | 'button'
 
 /**
  * Раздел «Работы»: опубликованные работы из GET /api/portfolio по 12 штук. Пререндер в API не
- * ходит: в разметке заголовок и заглушки сетки, работы грузит браузер. Запрос в пути всегда один:
- * повторный клик «Показать ещё» во время загрузки ничего не делает, ответ после размонтирования
- * отбрасывается.
+ * ходит: в разметке заголовок и заглушки сетки, работы грузит браузер (первый рендер — уже
+ * загрузка, поэтому пререндер и гидрация совпадают). Запрос в пути всегда один: повторный клик во
+ * время загрузки ничего не делает, ответ после размонтирования отбрасывается.
+ *
+ * Под сеткой — одна и та же кнопка: «Показать ещё» или, после ошибки, «Повторить». Пока идёт
+ * загрузка, она остаётся на месте (aria-disabled), поэтому фокус на ней не теряется. После
+ * загрузки, начатой человеком, фокус переходит на первую новую работу (нет новых — на последнюю),
+ * но только если он был на этой кнопке или потерян и лайтбокс закрыт.
  */
 export function Gallery() {
   const [works, setWorks] = useState<PublicWork[]>([])
   const [total, setTotal] = useState<number | null>(null)
-  const [status, setStatus] = useState<Status>('loading')
-  /** Загружено всё: кнопка «Показать ещё» не нужна. */
+  const [loading, setLoading] = useState(true)
+  /** Последний запрос не удался: уже показанные работы остаются, кнопка — «Повторить». */
+  const [failed, setFailed] = useState(false)
+  /** Загружено всё: «Показать ещё» не нужна. */
   const [complete, setComplete] = useState(false)
   const [index, setIndex] = useState<number | null>(null)
 
@@ -65,34 +68,39 @@ export function Gallery() {
   const request = useRef<AbortController | null>(null)
   /** Номер следующей страницы (с нуля). */
   const nextPage = useRef(0)
-  /** Первая новая работа после загрузки, начатой человеком: на неё переходит фокус. */
-  const focusTile = useRef<number | null>(null)
-  /** Загрузку, начатую человеком, постигла ошибка: фокус — на «Повторить». */
-  const focusRetry = useRef(false)
-  const tiles = useRef<(HTMLButtonElement | null)[]>([])
-  const retry = useRef<HTMLButtonElement>(null)
+  const focusTarget = useRef<FocusTarget | null>(null)
+  const grid = useRef<HTMLUListElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
   const openedFrom = useRef<HTMLButtonElement | null>(null)
+  const errorId = useId()
 
   const load = useCallback((byUser: boolean) => {
     if (request.current) return
     const controller = new AbortController()
     request.current = controller
     const page = nextPage.current
-    setStatus('loading')
-    apiGet('/api/portfolio', { query: { page, size: PAGE_SIZE }, signal: controller.signal }).then(
-      (result) => {
+    setLoading(true)
+    const run = async () => {
+      try {
+        const result = await apiGet('/api/portfolio', {
+          query: { page, size: PAGE_SIZE },
+          signal: controller.signal,
+        })
         if (controller.signal.aborted) return
-        request.current = null
-        nextPage.current = page + 1
         // Между запросами мастер мог добавить или убрать работу, и страницы сдвинулись: уже
         // показанные не повторяем.
         const known = new Set(shown.current.map((w) => w.id))
         const fresh = result.items.filter((w) => !known.has(w.id))
+        if (byUser && shown.current.length + fresh.length > 0) {
+          focusTarget.current = {
+            tile: fresh.length > 0 ? shown.current.length : shown.current.length - 1,
+          }
+        }
         if (fresh.length > 0) {
-          if (byUser) focusTile.current = shown.current.length
           shown.current = [...shown.current, ...fresh]
           setWorks(shown.current)
         }
+        nextPage.current = page + 1
         setTotal(result.total)
         // Конец списка: страница неполная, дошли до total или страница не добавила ничего нового.
         setComplete(
@@ -100,15 +108,20 @@ export function Gallery() {
             (page + 1) * PAGE_SIZE >= result.total ||
             fresh.length === 0,
         )
-        setStatus('ready')
-      },
-      () => {
+        setFailed(false)
+      } catch {
+        // И сбой сети или ответ не 2xx, и ответ неожиданной формы: раздел не остаётся в загрузке.
         if (controller.signal.aborted) return
-        request.current = null
-        focusRetry.current = byUser
-        setStatus('error')
-      },
-    )
+        if (byUser) focusTarget.current = 'button'
+        setFailed(true)
+      } finally {
+        if (request.current === controller) {
+          request.current = null
+          setLoading(false)
+        }
+      }
+    }
+    void run()
   }, [])
 
   useEffect(() => {
@@ -119,24 +132,26 @@ export function Gallery() {
     }
   }, [load])
 
-  // Фокус — после того как новые плитки попали в DOM.
+  // Фокус — после того как новые плитки попали в DOM. Не отнимаем его у лайтбокса и у того, что
+  // человек успел выбрать сам, пока шла загрузка.
   useEffect(() => {
-    const first = focusTile.current
-    if (first === null || first >= works.length) return
-    focusTile.current = null
-    tiles.current[first]?.focus()
-  }, [works])
-
-  useEffect(() => {
-    if (status !== 'error' || !focusRetry.current) return
-    focusRetry.current = false
-    retry.current?.focus()
-  }, [status])
+    const target = focusTarget.current
+    if (target === null || loading) return
+    focusTarget.current = null
+    if (index !== null) return
+    const active = document.activeElement
+    if (active && active !== document.body && active !== button.current) return
+    const element =
+      target === 'button'
+        ? button.current
+        : grid.current?.querySelectorAll<HTMLButtonElement>('[data-tile]')[target.tile]
+    element?.focus()
+  })
 
   const photos = useMemo(() => works.map(toPhoto), [works])
 
-  const open = (i: number, button: HTMLButtonElement) => {
-    openedFrom.current = button
+  const open = (i: number, tile: HTMLButtonElement) => {
+    openedFrom.current = tile
     setIndex(i)
     track({ name: 'gallery_open', index: i })
   }
@@ -147,53 +162,60 @@ export function Gallery() {
   }
 
   // Заглушки — на месте работ, которые сейчас придут: до первого ответа целая страница.
-  const placeholders =
-    status !== 'loading'
-      ? 0
-      : total === null
-        ? PAGE_SIZE
-        : Math.max(0, Math.min(PAGE_SIZE, total - works.length))
+  const placeholders = !loading
+    ? 0
+    : total === null
+      ? PAGE_SIZE
+      : Math.max(0, Math.min(PAGE_SIZE, total - works.length))
+  const showButton = failed || (works.length > 0 && !complete)
+  const showError = failed && !loading
 
   return (
     <section id="gallery" className="section">
       <div className="container">
-        <span className="kicker">{total ? ui.galleryKicker(total) : ui.gallery.kicker}</span>
+        <span className="kicker">{ui.gallery.kicker(total)}</span>
         <h2 className={styles.title}>{ui.gallery.title}</h2>
-        <ul className={styles.grid} aria-busy={status === 'loading' || undefined}>
-          {works.map((work, i) => (
-            <li key={work.id} className={styles.item}>
-              <button
-                ref={(el) => {
-                  tiles.current[i] = el
-                }}
-                type="button"
-                className={styles.tile}
-                data-cursor="photo"
-                aria-label={ui.gallery.open(work.alt)}
-                onClick={(e) => open(i, e.currentTarget)}
-              >
-                <img
-                  src={imageUrl(work.fileId, 480)}
-                  srcSet={imageSrcSet(work.fileId)}
-                  sizes={TILE_SIZES}
-                  alt={work.alt}
-                  loading={i < 2 ? 'eager' : 'lazy'}
-                  width={work.width}
-                  height={work.height}
-                />
-              </button>
-            </li>
-          ))}
-          {Array.from({ length: placeholders }, (_, i) => (
-            <li
-              key={`placeholder-${i}`}
-              className={styles.placeholder}
-              data-placeholder
-              aria-hidden
-            />
-          ))}
-        </ul>
-        {status === 'ready' && works.length === 0 && (
+        {(works.length > 0 || placeholders > 0) && (
+          <ul ref={grid} className={styles.grid} aria-busy={loading || undefined}>
+            {works.map((work, i) => (
+              <li key={work.id} className={styles.item}>
+                <button
+                  type="button"
+                  className={styles.tile}
+                  data-tile
+                  data-cursor="photo"
+                  aria-label={ui.gallery.open(work.alt)}
+                  onClick={(e) => open(i, e.currentTarget)}
+                >
+                  <img
+                    src={imageUrl(work.fileId, 480)}
+                    srcSet={imageSrcSet(work.fileId)}
+                    sizes={TILE_SIZES}
+                    alt={work.alt}
+                    loading="lazy"
+                    decoding="async"
+                    width={work.width}
+                    height={work.height}
+                  />
+                </button>
+              </li>
+            ))}
+            {Array.from({ length: placeholders }, (_, i) => (
+              <li
+                key={`placeholder-${i}`}
+                className={styles.placeholder}
+                data-placeholder
+                aria-hidden
+              />
+            ))}
+          </ul>
+        )}
+        <noscript>
+          <p className={styles.note}>
+            {ui.gallery.noScript} <a href={site.channelUrl}>{site.channelHandle}</a>
+          </p>
+        </noscript>
+        {!loading && !failed && works.length === 0 && (
           <p className={styles.note}>
             {ui.gallery.empty}{' '}
             <a
@@ -206,26 +228,25 @@ export function Gallery() {
             </a>
           </p>
         )}
-        {status === 'error' && (
+        {showButton && (
           <div className={styles.footer}>
-            <p role="alert" className={styles.note}>
-              {ui.gallery.loadError}
-            </p>
-            <button ref={retry} type="button" className="button" onClick={() => load(true)}>
-              {ui.gallery.retry}
-            </button>
-          </div>
-        )}
-        {status !== 'error' && works.length > 0 && !complete && (
-          <div className={styles.footer}>
+            {/* <output> — роль status, а не alert: ошибку загрузки, которую никто не запускал, не
+                выкрикиваем; после действия человека фокус и так на кнопке, а текст связан с ней. */}
+            {showError && (
+              <output id={errorId} className={styles.note}>
+                {ui.gallery.loadError}
+              </output>
+            )}
             {/* aria-disabled, а не disabled: кнопка с фокусом не теряет его на время загрузки */}
             <button
+              ref={button}
               type="button"
               className="button"
-              aria-disabled={status === 'loading' || undefined}
+              aria-disabled={loading || undefined}
+              aria-describedby={showError ? errorId : undefined}
               onClick={() => load(true)}
             >
-              {ui.gallery.loadMore}
+              {failed ? ui.gallery.retry : ui.gallery.loadMore}
             </button>
           </div>
         )}
