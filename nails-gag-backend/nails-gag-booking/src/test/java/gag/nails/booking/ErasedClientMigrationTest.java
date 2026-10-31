@@ -58,6 +58,22 @@ class ErasedClientMigrationTest extends BookingTestSupport {
         assertThat(storedOverride(withoutPrepayment)).isNull();
     }
 
+    /** Явное решение мастера по старой отмене миграция не перезаписывает. */
+    @Test
+    void oldCancellationWithMasterOverrideIsNotTouched() throws IOException {
+        var booking = received(clientOwingPrepayment("Анна"), "10:00");
+        bookings.cancel(booking.id(), master);
+        asCancelledByOldAccountDeletion(booking);
+        jdbc.sql("update booking.booking set prepayment_outcome_override = 'KEPT' where id = :id")
+                .param("id", booking.id())
+                .update();
+
+        jdbc.sql(MigrationStatements.bookingUpdate(MIGRATION, CHANGESET)).update();
+
+        assertThat(storedOverride(booking)).isEqualTo("KEPT");
+        assertThat(reloaded(booking).prepaymentOutcome()).isEqualTo(PrepaymentOutcome.KEPT);
+    }
+
     @Test
     void cancellationOfBookingUnderReviewIsNotTouched() throws IOException {
         var anna = clientOwingPrepayment("Анна");

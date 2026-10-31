@@ -11,10 +11,12 @@ ALTER TABLE booking.booking ADD COLUMN client_erased_at timestamptz;
 
 -- Записи, которые раньше отменило само удаление аккаунта (причина ACCOUNT_DELETED, отметки нет), сохраняют прежний
 -- исход полученной предоплаты — возвращена: правило для ACCOUNT_DELETED теперь «удержана» (отмена мастером записи
--- на рассмотрении), и без переопределения исход старых отмен задним числом изменился бы.
+-- на рассмотрении), и без переопределения исход старых отмен задним числом изменился бы. Явное решение мастера
+-- (уже стоящее переопределение) не перезаписывается.
 UPDATE booking.booking
 SET prepayment_outcome_override = 'RETURNED'
 WHERE status = 'CANCELLED'
   AND cancel_reason = 'ACCOUNT_DELETED'
   AND client_erased_at IS NULL
-  AND prepayment_received_at IS NOT NULL;
+  AND prepayment_received_at IS NOT NULL
+  AND prepayment_outcome_override IS NULL;
