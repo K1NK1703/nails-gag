@@ -1,6 +1,7 @@
 package gag.nails.booking.internal.booking;
 
 import gag.nails.booking.model.BookedServiceView;
+import gag.nails.booking.model.VisitServiceFact;
 import gag.nails.catalog.model.ServiceKind;
 import gag.nails.catalog.model.ServiceView;
 import jakarta.persistence.Column;
@@ -82,5 +83,9 @@ class BookedServiceEntity {
 
     BookedServiceView toView() {
         return new BookedServiceView(serviceId, kind, title, price);
+    }
+
+    VisitServiceFact toFact() {
+        return new VisitServiceFact(serviceId, kind, title, price);
     }
 }

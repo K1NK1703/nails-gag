@@ -8,7 +8,10 @@ import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.CancelReason;
 import gag.nails.booking.model.EarlierTimeStatus;
 import gag.nails.booking.model.EarlierTimeView;
+import gag.nails.booking.model.KeptPrepaymentFact;
 import gag.nails.booking.model.PrepaymentOutcome;
+import gag.nails.booking.model.VisitFact;
+import gag.nails.booking.model.VisitServiceFact;
 import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
@@ -26,6 +29,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -340,6 +344,39 @@ public class BookingEntity {
         requirePrepaymentSettled();
         var byRule = PrepaymentOutcomes.byRule(status, cancelReason);
         prepaymentOutcomeOverride = override.outcome() == byRule ? null : override;
+    }
+
+    /**
+     * Денежный факт выполненного визита: фактический состав, его прайс, итог и причина суммы; клиента в нём нет.
+     *
+     * @param day день визита в поясе салона — его считает вызывающий по {@link #visitStart}
+     * @throws InternalException если визит не выполнен
+     */
+    public VisitFact toVisitFact(LocalDate day) {
+        var amount = finalAmount;
+        if (status != BookingStatus.COMPLETED || amount == null) {
+            throw new InternalException("visit fact of booking " + id + " in status " + status);
+        }
+        var actual = services.stream()
+                .filter(service -> service.phase() == ServicePhase.ACTUAL)
+                .map(BookedServiceEntity::toFact)
+                .toList();
+        var priceSum = actual.stream().map(VisitServiceFact::price).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new VisitFact(id, day, actual, priceSum, amount, amountNote);
+    }
+
+    /**
+     * Удержанная предоплата: исход по правилу с учётом переопределения — {@link PrepaymentOutcome#KEPT}.
+     *
+     * @param day день отмены или неявки в поясе салона — его считает вызывающий по {@link #requirePrepaymentSettled}
+     * @throws InternalException если предоплата не удержана
+     */
+    public KeptPrepaymentFact toKeptPrepaymentFact(LocalDate day) {
+        var amount = prepaymentAmount;
+        if (prepaymentOutcome() != PrepaymentOutcome.KEPT || amount == null) {
+            throw new InternalException("prepayment of booking " + id + " is not kept");
+        }
+        return new KeptPrepaymentFact(id, day, amount);
     }
 
     /** Прайс выбранного при записи состава. */

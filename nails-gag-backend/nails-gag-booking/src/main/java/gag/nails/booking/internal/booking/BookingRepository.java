@@ -62,6 +62,24 @@ public interface BookingRepository extends JpaRepository<BookingEntity, UUID> {
 
     List<BookingEntity> findAllByStatusOrderByPrepaymentDeadlineAscIdAsc(BookingStatus status);
 
+    /**
+     * Записи в состоянии {@code status}, начало визита которых (согласованное более раннее время или начало слота) в
+     * полуинтервале {@code [from, to)}, вместе с составом — одним запросом; по началу визита.
+     */
+    @Query("select b from BookingEntity b left join fetch b.services where b.status = :status"
+            + " and coalesce(b.agreedStart, b.slotStartsAt) >= :from and coalesce(b.agreedStart, b.slotStartsAt) < :to"
+            + " order by coalesce(b.agreedStart, b.slotStartsAt), b.id")
+    List<BookingEntity> completedVisitsWithServices(BookingStatus status, Instant from, Instant to);
+
+    /**
+     * Отменённые записи и неявки ({@code statuses}) с полученной предоплатой, момент отмены или неявки которых в
+     * полуинтервале {@code [from, to)}; по этому моменту. Только кандидаты: удержана ли предоплата, решает правило.
+     */
+    @Query("select b from BookingEntity b where b.status in :statuses and b.prepaymentReceivedAt is not null"
+            + " and coalesce(b.cancelledAt, b.noShowAt) >= :from and coalesce(b.cancelledAt, b.noShowAt) < :to"
+            + " order by coalesce(b.cancelledAt, b.noShowAt), b.id")
+    List<BookingEntity> settledWithReceivedPrepayment(Collection<BookingStatus> statuses, Instant from, Instant to);
+
     @Query("select b.id from BookingEntity b where b.status = :status and b.prepaymentDeadline < :now")
     List<UUID> idsWithPrepaymentDeadlineBefore(BookingStatus status, Instant now);
 
