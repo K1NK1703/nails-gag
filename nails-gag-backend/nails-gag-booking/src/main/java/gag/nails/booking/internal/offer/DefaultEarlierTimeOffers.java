@@ -34,6 +34,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
     public BookingView propose(UUID bookingId, Instant proposedStart, Actor actor) {
         actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
+        booking.requireClientNotErased("propose earlier time");
         var now = clock.instant();
         var slotStartsAt = booking.slotStartsAt();
         if (!salonTimeZone.dayOf(proposedStart).equals(salonTimeZone.dayOf(slotStartsAt))) {

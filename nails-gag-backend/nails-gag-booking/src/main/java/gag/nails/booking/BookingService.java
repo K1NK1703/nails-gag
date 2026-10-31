@@ -108,8 +108,8 @@ public interface BookingService {
      *
      * @throws BookingNotFoundException если записи нет
      * @throws ClientBlockedException если клиент переносит, будучи заблокированным
-     * @throws InvalidTransitionException если запись не активна, либо клиент переносит после начала
-     *     слота или с истёкшим сроком предоплаты
+     * @throws InvalidTransitionException если запись не активна, клиент удалил аккаунт до визита (сообщить о переносе
+     *     некому), либо клиент переносит после начала слота или с истёкшим сроком предоплаты
      * @throws LateRescheduleNotAllowedException если клиент переносит позже окна бесплатной отмены
      * @throws TooLateToBookException если клиент переносит на слот ближе отсечки
      * @throws SlotOccupiedException если новый слот занят
@@ -125,7 +125,7 @@ public interface BookingService {
      * запись, сотрудник с изменением «Записей» — любую.
      *
      * @throws BookingNotFoundException если записи нет
-     * @throws InvalidTransitionException если запись не активна
+     * @throws InvalidTransitionException если запись не активна или клиент удалил аккаунт до визита
      * @throws ValidationException если комментарий длиннее 500 символов
      * @throws AccessDeniedException если актор без изменения «Записей» правит чужую запись
      */

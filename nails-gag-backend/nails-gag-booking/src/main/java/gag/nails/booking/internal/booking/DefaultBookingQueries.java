@@ -80,7 +80,7 @@ class DefaultBookingQueries implements BookingQueries {
     @Override
     public List<BookingView> underReview(Actor actor) {
         actor.requireRead(Section.BOOKINGS);
-        return views(bookings.underReview(BookingStatus.active()), actor);
+        return views(bookings.underReview(BookingStatus.active(), clock.instant()), actor);
     }
 
     @Override

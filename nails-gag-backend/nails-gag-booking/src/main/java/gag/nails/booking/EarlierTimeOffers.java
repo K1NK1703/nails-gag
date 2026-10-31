@@ -25,7 +25,8 @@ public interface EarlierTimeOffers {
      * не примет новое.
      *
      * @throws BookingNotFoundException если записи нет
-     * @throws InvalidTransitionException если запись не подтверждена или предложение уже ждёт ответа
+     * @throws InvalidTransitionException если запись не подтверждена, предложение уже ждёт ответа или клиент удалил
+     *     аккаунт до визита (сообщить некому)
      * @throws ValidationException если время не в день слота или не между «сейчас» и началом слота
      * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      */

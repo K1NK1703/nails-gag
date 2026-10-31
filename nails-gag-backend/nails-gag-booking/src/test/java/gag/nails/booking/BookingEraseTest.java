@@ -96,6 +96,7 @@ class BookingEraseTest extends BookingTestSupport {
         entityManager.clear();
 
         assertThat(queries.get(booking.id(), master).status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(queries.get(booking.id(), master).clientErasedAt()).isNull();
         assertThat(queries.awaitingMark(master)).extracting(BookingView::id).containsExactly(booking.id());
         assertThat(scheduleQueries.freeSlots(MONDAY, MONDAY)).isEmpty();
 
@@ -115,7 +116,7 @@ class BookingEraseTest extends BookingTestSupport {
         bookings.updateMasterNote(completed.id(), "Принесёт свой лак", master);
         timeIsAfterStartOf(past, Duration.ofHours(2));
         marks.complete(completed.id(), master);
-        var cancelled = bookings.createByMaster(
+        var upcoming = bookings.createByMaster(
                 new CreateBooking(anna, future.id(), MANICURE, List.of(), "Хочу френч"), false, master);
 
         clients.erase(anna);
@@ -123,8 +124,8 @@ class BookingEraseTest extends BookingTestSupport {
         entityManager.clear();
 
         assertThat(queries.get(completed.id(), master).comment()).isNull();
-        assertThat(queries.get(cancelled.id(), master).comment()).isNull();
-        assertThat(queries.get(cancelled.id(), master).status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(queries.get(upcoming.id(), master).comment()).isNull();
+        assertThat(queries.get(upcoming.id(), master).status()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(queries.masterNote(completed.id(), master)).contains("Принесёт свой лак");
     }
 
@@ -186,5 +187,6 @@ class BookingEraseTest extends BookingTestSupport {
         entityManager.clear();
 
         assertThat(queries.get(booking.id(), master).status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(queries.get(booking.id(), master).clientErasedAt()).isNull();
     }
 }

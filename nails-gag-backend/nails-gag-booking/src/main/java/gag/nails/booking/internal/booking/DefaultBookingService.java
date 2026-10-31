@@ -150,6 +150,7 @@ class DefaultBookingService implements BookingService {
     public BookingView reschedule(UUID bookingId, UUID newSlotId, Actor actor) {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
         booking.requireActive("reschedule");
+        booking.requireClientNotErased("reschedule");
         var rules = currentRules.get();
         var byClient = !actor.canWrite(Section.BOOKINGS);
         if (byClient) {
@@ -206,6 +207,7 @@ class DefaultBookingService implements BookingService {
             throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
         }
         booking.requireActive("update comment");
+        booking.requireClientNotErased("update comment");
         booking.setComment(comment);
         return booking.toView(actor);
     }

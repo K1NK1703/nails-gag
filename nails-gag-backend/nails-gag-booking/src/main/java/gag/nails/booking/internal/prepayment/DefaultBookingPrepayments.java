@@ -80,8 +80,9 @@ class DefaultBookingPrepayments implements BookingPrepayments {
         var now = currentRules.get().now();
         booking.confirmWithoutPrepayment();
         // Сотрудник решил не требовать предоплату: признак снимается с причиной MASTER_WAIVED. Если его
-        // и не было (предоплату запросили при записи), журнал признака не трогаем.
-        if (owesPrepayment(booking.clientId())) {
+        // и не было (предоплату запросили при записи), журнал признака не трогаем. Обезличенную карточку не меняет
+        // никто: запись подтверждается, признак и журнал карточки остаются как есть.
+        if (owesPrepaymentAndIsLive(booking.clientId())) {
             clients.setPrepaymentRequired(booking.clientId(), false, null, actor);
         }
         events.confirmed(booking, now);
@@ -131,7 +132,11 @@ class DefaultBookingPrepayments implements BookingPrepayments {
         return amount.setScale(AMOUNT_FRACTION_DIGITS, RoundingMode.UNNECESSARY);
     }
 
-    private boolean owesPrepayment(UUID clientId) {
-        return clientQueries.byId(clientId).map(ClientView::prepaymentRequired).orElse(false);
+    private boolean owesPrepaymentAndIsLive(UUID clientId) {
+        return clientQueries
+                .byId(clientId)
+                .filter(client -> !client.erased())
+                .map(ClientView::prepaymentRequired)
+                .orElse(false);
     }
 }

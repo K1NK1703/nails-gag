@@ -261,7 +261,10 @@ class PrepaymentOutcomeTest extends BookingTestSupport {
             case CANCELLED_AFTER_ACCOUNT_DELETION -> {
                 // Обезличивание запись не отменяет; отменяет мастер, и причина — удаление аккаунта.
                 clients.erase(clientId);
-                yield bookings.cancel(booking.id(), master);
+                var cancelled = bookings.cancel(booking.id(), master);
+                // Отметка обезличивания переживает отмену — след решения мастера.
+                assertThat(cancelled.clientErasedAt()).isNotNull();
+                yield cancelled;
             }
             case NO_SHOW -> {
                 timeIsAfterStartOf(slot, Duration.ofMinutes(30));

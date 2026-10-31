@@ -3,10 +3,12 @@ package gag.nails.booking;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.booking.error.InvalidTransitionException;
 import gag.nails.booking.event.BookingCancelled;
 import gag.nails.booking.model.BookingStatus;
 import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.CancelReason;
+import gag.nails.booking.model.EarlierTimeStatus;
 import gag.nails.booking.model.PrepaymentOutcome;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
@@ -111,6 +113,86 @@ class ErasedClientReviewTest extends BookingTestSupport {
         assertThat(queries.underReview(master))
                 .extracting(BookingView::id)
                 .containsExactly(earlier.id(), monday.id(), tuesday.id());
+    }
+
+    /** Граница — как у «визит начался»: визит, начинающийся ровно сейчас, уже ждёт отметки, а не решения. */
+    @Test
+    void underReviewEndsWhenVisitStarts() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var atSlot = bookings.createByMaster(manicure(anna, slot), false, master);
+        var laterSlot = slot(MONDAY, "18:00");
+        var atAgreedStart = bookings.createByMaster(manicure(anna, laterSlot), false, master);
+        offers.propose(atAgreedStart.id(), slot.startsAt(), master);
+        offers.respond(atAgreedStart.id(), true, Actor.client(anna));
+        clients.erase(anna);
+
+        clock.set(slot.startsAt().minusSeconds(1));
+        assertThat(queries.underReview(master))
+                .extracting(BookingView::id)
+                .containsExactlyInAnyOrder(atSlot.id(), atAgreedStart.id());
+
+        // Ровно в начале: и визит по слоту, и визит по согласованному раннему времени (слот ещё впереди) начались.
+        clock.set(slot.startsAt());
+        assertThat(queries.underReview(master)).isEmpty();
+        assertThat(queries.awaitingMark(master)).extracting(BookingView::id).contains(atSlot.id());
+    }
+
+    @Test
+    void eraseWithdrawsPendingEarlierTimeOffer() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        offers.propose(booking.id(), slot.startsAt().minus(Duration.ofMinutes(90)), master);
+
+        clients.erase(anna);
+
+        var stored = reloaded(booking);
+        assertThat(stored.earlierTime()).isNotNull();
+        assertThat(stored.earlierTime().status()).isEqualTo(EarlierTimeStatus.WITHDRAWN);
+        assertThat(stored.agreedStart()).isNull();
+    }
+
+    /** Сообщить клиентке нельзя, её текст заново не пишется: мастеру остаётся оставить запись или отменить. */
+    @Test
+    void masterCannotRescheduleOfferEarlierTimeOrEditCommentOfBookingUnderReview() {
+        var anna = client("Анна");
+        var slot = slot(MONDAY, "12:00");
+        var booking = book(anna, slot);
+        var otherSlot = slot(TUESDAY, "12:00");
+        clients.erase(anna);
+
+        assertThatThrownBy(() -> bookings.reschedule(booking.id(), otherSlot.id(), master))
+                .isInstanceOf(InvalidTransitionException.class);
+        assertThatThrownBy(() -> offers.propose(booking.id(), slot.startsAt().minus(Duration.ofMinutes(90)), master))
+                .isInstanceOf(InvalidTransitionException.class);
+        assertThatThrownBy(() -> bookings.updateComment(booking.id(), "Придёт с подругой", master))
+                .isInstanceOf(InvalidTransitionException.class);
+
+        var stored = reloaded(booking);
+        assertThat(stored.slotId()).isEqualTo(slot.id());
+        assertThat(stored.earlierTime()).isNull();
+        assertThat(stored.comment()).isNull();
+        assertThat(queries.underReview(master)).extracting(BookingView::id).containsExactly(booking.id());
+    }
+
+    @Test
+    void confirmWithoutPrepaymentLeavesErasedCardUntouched() {
+        var anna = clientOwingPrepayment("Анна");
+        var booking = book(anna, slot(MONDAY, "12:00"));
+        assertThat(booking.status()).isEqualTo(BookingStatus.AWAITING_PREPAYMENT);
+        clients.erase(anna);
+        // Признак обезличивание не снимает: прежний код попытался бы снять его с обезличенной карточки и упал бы.
+        assertThat(owesPrepayment(anna)).isTrue();
+        var flagHistory = clientQueries.prepaymentHistory(anna, master).size();
+
+        var confirmed = prepayments.confirmWithoutPrepayment(booking.id(), master);
+
+        assertThat(confirmed.status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(confirmed.prepaymentReceivedAt()).isNull();
+        assertThat(owesPrepayment(anna)).isTrue();
+        assertThat(clientQueries.prepaymentHistory(anna, master)).hasSize(flagHistory);
+        assertThat(queries.underReview(master)).extracting(BookingView::id).containsExactly(booking.id());
     }
 
     @Test

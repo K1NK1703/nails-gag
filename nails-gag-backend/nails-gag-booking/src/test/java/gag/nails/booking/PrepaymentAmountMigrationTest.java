@@ -18,10 +18,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -29,7 +26,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -172,30 +168,8 @@ class PrepaymentAmountMigrationTest extends BookingTestSupport {
                 .hasMessageContaining("booking_prepayment_outcome_override_status_check");
     }
 
-    /**
-     * {@code UPDATE} из набора изменений заполнения в файле миграции: строки набора без комментариев, затем оператор,
-     * начинающийся с {@code UPDATE} (в том же наборе — и добавление ограничений).
-     */
     private static String backfillStatement() throws IOException {
-        var lines = new ClassPathResource(MIGRATION)
-                .getContentAsString(StandardCharsets.UTF_8)
-                .lines()
-                .toList();
-        var changeset = new ArrayList<String>();
-        var inside = false;
-        for (var line : lines) {
-            if (line.startsWith("--changeset ")) {
-                inside = line.equals("--changeset " + BACKFILL_CHANGESET);
-            } else if (inside && !line.strip().startsWith("--")) {
-                changeset.add(line);
-            }
-        }
-        var updates = Arrays.stream(String.join("\n", changeset).split(";"))
-                .map(String::strip)
-                .filter(statement -> statement.startsWith("UPDATE booking.booking"))
-                .toList();
-        assertThat(updates).as("UPDATE in changeset " + BACKFILL_CHANGESET).hasSize(1);
-        return updates.getFirst();
+        return MigrationStatements.bookingUpdate(MIGRATION, BACKFILL_CHANGESET);
     }
 
     /** Сумма заведомо неверная: заполнение должно её пересчитать. */
