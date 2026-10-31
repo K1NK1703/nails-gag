@@ -9,12 +9,10 @@ import gag.nails.booking.model.PrepaymentOutcome;
 import gag.nails.booking.model.VisitFact;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
-import gag.nails.common.error.ValidationException;
+import gag.nails.common.time.ReportPeriod;
 import gag.nails.common.time.SalonTimeZone;
-import java.time.Instant;
+import java.time.Clock;
 import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -34,18 +32,21 @@ class DefaultBookingFinance implements BookingFinance {
 
     private final BookingRepository bookings;
     private final SalonTimeZone salonTimeZone;
+    private final Clock clock;
 
-    DefaultBookingFinance(BookingRepository bookings, SalonTimeZone salonTimeZone) {
+    DefaultBookingFinance(BookingRepository bookings, SalonTimeZone salonTimeZone, Clock clock) {
         this.bookings = bookings;
         this.salonTimeZone = salonTimeZone;
+        this.clock = clock;
     }
 
     @Override
     public List<VisitFact> visits(LocalDate from, LocalDate to, Actor actor) {
         actor.requireRead(Section.FINANCE);
-        requireValidPeriod(from, to);
+        var period = period(from, to);
         return bookings
-                .completedVisitsWithServices(BookingStatus.COMPLETED, startOf(from), startOf(to.plusDays(1)))
+                .completedVisitsWithServices(
+                        BookingStatus.COMPLETED, period.start(salonTimeZone), period.end(salonTimeZone))
                 .stream()
                 .map(booking -> booking.toVisitFact(salonTimeZone.dayOf(booking.visitStart())))
                 .toList();
@@ -54,23 +55,16 @@ class DefaultBookingFinance implements BookingFinance {
     @Override
     public List<KeptPrepaymentFact> keptPrepayments(LocalDate from, LocalDate to, Actor actor) {
         actor.requireRead(Section.FINANCE);
-        requireValidPeriod(from, to);
-        return bookings.settledWithReceivedPrepayment(SETTLED, startOf(from), startOf(to.plusDays(1))).stream()
+        var period = period(from, to);
+        return bookings
+                .settledWithReceivedPrepayment(SETTLED, period.start(salonTimeZone), period.end(salonTimeZone))
+                .stream()
                 .filter(booking -> booking.prepaymentOutcome() == PrepaymentOutcome.KEPT)
-                .map(booking -> booking.toKeptPrepaymentFact(salonTimeZone.dayOf(booking.requirePrepaymentSettled())))
+                .map(booking -> booking.toKeptPrepaymentFact(salonTimeZone.dayOf(booking.settledAt())))
                 .toList();
     }
 
-    private static void requireValidPeriod(LocalDate from, LocalDate to) {
-        if (to.isBefore(from)) {
-            throw new ValidationException("to", "must not be before from");
-        }
-        if (ChronoUnit.DAYS.between(from, to) + 1 > MAX_PERIOD_DAYS) {
-            throw new ValidationException("to", "period must be at most " + MAX_PERIOD_DAYS + " days");
-        }
-    }
-
-    private Instant startOf(LocalDate day) {
-        return salonTimeZone.at(day, LocalTime.MIDNIGHT);
+    private ReportPeriod period(LocalDate from, LocalDate to) {
+        return ReportPeriod.of(from, to, salonTimeZone.dayOf(clock.instant()));
     }
 }

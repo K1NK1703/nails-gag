@@ -81,6 +81,10 @@ class BookedServiceEntity {
         return price;
     }
 
+    int sortOrder() {
+        return sortOrder;
+    }
+
     BookedServiceView toView() {
         return new BookedServiceView(serviceId, kind, title, price);
     }

@@ -122,11 +122,16 @@ class BookingFinanceTest extends BookingTestSupport {
     void periodBoundsAreInclusive() {
         var first = slot(MONDAY, "00:00");
         var last = slot(TUESDAY, "23:30");
-        var atStart = completedLater("Анна", first);
+        // Записи заведены и отмечены в обратном порядке: факты идут по началу визита, а не по записи.
         var atEnd = completedLater("Мария", last);
+        var atStart = completedLater("Анна", first);
         timeIsAfterStartOf(last, Duration.ofHours(1));
-        marks.complete(atStart.id(), master);
         marks.complete(atEnd.id(), master);
+        marks.complete(atStart.id(), master);
+
+        assertThat(finance.visits(MONDAY, TUESDAY, accountant))
+                .extracting(VisitFact::bookingId)
+                .containsSubsequence(atStart.id(), atEnd.id());
 
         assertThat(visitIn(MONDAY, TUESDAY, atStart)).isNotNull();
         assertThat(visitIn(MONDAY, TUESDAY, atEnd)).isNotNull();
@@ -166,29 +171,53 @@ class BookingFinanceTest extends BookingTestSupport {
         assertThat(fact.amountNote()).isEqualTo("скидка");
     }
 
+    /** Порядок услуг — по порядку в составе, даже если строки в базе лежат в обратном порядке. */
+    @Test
+    void servicesFollowSortOrder() {
+        var slot = slot(MONDAY, "12:00");
+        var booking = bookings.createByMaster(
+                new CreateBooking(client("Анна"), slot.id(), MANICURE, List.of(FRENCH), null), false, master);
+        timeIsAfterStartOf(slot, Duration.ofHours(2));
+        marks.complete(booking.id(), master);
+        entityManager.flush();
+        // Строки вставлены «маникюр, френч»; порядок в составе меняем на обратный.
+        jdbc.sql("""
+                        update booking.booking_service set sort_order = 1 - sort_order
+                        where booking_id = :id and phase = 'ACTUAL'""").param("id", booking.id()).update();
+        entityManager.clear();
+
+        var fact = visitIn(MONDAY, MONDAY, booking);
+
+        assertThat(fact).isNotNull();
+        assertThat(fact.services()).extracting(VisitServiceFact::serviceId).containsExactly(FRENCH, MANICURE);
+    }
+
     @Test
     void noShowAndCancelledAreNotVisits() {
         var noShowSlot = slot(MONDAY, "10:00");
         var noShow = bookings.createByMaster(manicure(client("Анна"), noShowSlot), false, master);
         var cancelled = bookings.createByMaster(manicure(client("Мария"), slot(MONDAY, "14:00")), false, master);
         var active = bookings.createByMaster(manicure(client("Ольга"), slot(MONDAY, "18:00")), false, master);
+        var visitSlot = slot(MONDAY, "06:00");
+        var visit = bookings.createByMaster(manicure(client("Ирина"), visitSlot), false, master);
         bookings.cancel(cancelled.id(), master);
         timeIsAfterStartOf(noShowSlot, Duration.ofHours(1));
         marks.markNoShow(noShow.id(), master);
+        marks.complete(visit.id(), master);
 
         var visits = finance.visits(MONDAY, TUESDAY, accountant);
 
+        assertThat(visits).extracting(VisitFact::bookingId).contains(visit.id());
         assertThat(visits).extracting(VisitFact::bookingId).doesNotContain(noShow.id(), cancelled.id(), active.id());
     }
 
     /** День удержанной предоплаты — день отмены или неявки, а не день слота. */
     @Test
     void keptPrepaymentsByCancelOrNoShowDay() {
+        // Неявку заводим раньше: факты идут по моменту отмены или неявки, а не по записи.
+        var noShow = receivedByMaster("Мария", slot(MONDAY, "18:00"));
         var anna = clientOwingPrepayment("Анна");
-        var lateSlot = slot(MONDAY, "12:00");
-        var cancelledLate = received(anna, lateSlot);
-        var noShowSlot = slot(MONDAY, "18:00");
-        var noShow = receivedByMaster("Мария", noShowSlot);
+        var cancelledLate = received(anna, slot(MONDAY, "12:00"));
         // Поздняя отмена клиентом в воскресенье, неявка отмечена во вторник.
         clock.set(salonAt(SUNDAY, 20));
         bookings.cancel(cancelledLate.id(), Actor.client(anna));
@@ -205,6 +234,9 @@ class BookingFinanceTest extends BookingTestSupport {
                 .extracting(KeptPrepaymentFact::day)
                 .isEqualTo(TUESDAY);
         assertThat(keptIn(MONDAY, MONDAY, noShow)).isNull();
+        assertThat(finance.keptPrepayments(SUNDAY, TUESDAY, accountant))
+                .extracting(KeptPrepaymentFact::bookingId)
+                .containsSubsequence(cancelledLate.id(), noShow.id());
     }
 
     @Test
@@ -217,10 +249,16 @@ class BookingFinanceTest extends BookingTestSupport {
         var completedSlot = slot(MONDAY, "18:00");
         var completed = receivedByMaster("Ольга", completedSlot);
         var active = receivedByMaster("Ирина", slot(TUESDAY, "12:00"));
+        var noShowSlot = slot(MONDAY, "06:00");
+        var noShow = receivedByMaster("Елена", noShowSlot);
         timeIsAfterStartOf(completedSlot, Duration.ofHours(1));
         marks.complete(completed.id(), master);
+        marks.markNoShow(noShow.id(), master);
 
-        assertThat(finance.keptPrepayments(TODAY, TUESDAY, accountant))
+        var kept = finance.keptPrepayments(TODAY, TUESDAY, accountant);
+
+        assertThat(kept).extracting(KeptPrepaymentFact::bookingId).contains(noShow.id());
+        assertThat(kept)
                 .extracting(KeptPrepaymentFact::bookingId)
                 .doesNotContain(inTime.id(), byMaster.id(), completed.id(), active.id());
     }
@@ -260,19 +298,40 @@ class BookingFinanceTest extends BookingTestSupport {
     @Test
     void periodLongerThan366DaysIsRejected() {
         var from = LocalDate.of(2026, 1, 1);
-        var leapLength = LocalDate.of(2027, 1, 1);
+        var longestTo = from.plusDays(365);
 
-        assertThat(finance.visits(from, leapLength, accountant)).isNotNull();
-        assertThat(finance.keptPrepayments(from, leapLength, accountant)).isNotNull();
+        assertThat(finance.visits(from, longestTo, accountant)).isNotNull();
+        assertThat(finance.keptPrepayments(from, longestTo, accountant)).isNotNull();
         for (var call : List.<Runnable>of(
-                () -> finance.visits(from, leapLength.plusDays(1), accountant),
-                () -> finance.keptPrepayments(from, leapLength.plusDays(1), accountant),
+                () -> finance.visits(from, longestTo.plusDays(1), accountant),
+                () -> finance.keptPrepayments(from, longestTo.plusDays(1), accountant),
                 () -> finance.visits(TUESDAY, MONDAY, accountant),
                 () -> finance.keptPrepayments(TUESDAY, MONDAY, accountant))) {
             assertThatThrownBy(call::run)
                     .isInstanceOf(ValidationException.class)
                     .satisfies(
                             e -> assertThat(((ValidationException) e).field()).isEqualTo("to"));
+        }
+    }
+
+    /** Крайние даты — ошибка запроса, а не сбой: проверка идёт до вычисления границ периода. */
+    @Test
+    void periodDatesAreBounded() {
+        var lastDay = TODAY.plusDays(366);
+        assertThat(finance.visits(lastDay, lastDay, accountant)).isNotNull();
+        assertThat(finance.visits(LocalDate.of(2000, 1, 1), LocalDate.of(2000, 12, 31), accountant))
+                .isNotNull();
+
+        for (var period : List.of(
+                new LocalDate[] {LocalDate.of(1999, 12, 31), LocalDate.of(2000, 1, 1)},
+                new LocalDate[] {LocalDate.MIN, LocalDate.of(2000, 1, 1)})) {
+            rejected(period[0], period[1], "from");
+        }
+        for (var period : List.of(
+                new LocalDate[] {lastDay, lastDay.plusDays(1)},
+                new LocalDate[] {TODAY, LocalDate.MAX},
+                new LocalDate[] {LocalDate.MAX, LocalDate.MAX})) {
+            rejected(period[0], period[1], "to");
         }
     }
 
@@ -337,6 +396,15 @@ class BookingFinanceTest extends BookingTestSupport {
                 .isEqualTo(oneKept);
     }
 
+    private void rejected(LocalDate from, LocalDate to, String field) {
+        assertThatThrownBy(() -> finance.visits(from, to, accountant))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).field()).isEqualTo(field));
+        assertThatThrownBy(() -> finance.keptPrepayments(from, to, accountant))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).field()).isEqualTo(field));
+    }
+
     private VisitFact visitIn(LocalDate from, LocalDate to, BookingView booking) {
         return finance.visits(from, to, accountant).stream()
                 .filter(fact -> fact.bookingId().equals(booking.id()))
@@ -385,13 +453,14 @@ class BookingFinanceTest extends BookingTestSupport {
         var statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         entityManager.flush();
         entityManager.clear();
+        var wasEnabled = statistics.isStatisticsEnabled();
         statistics.setStatisticsEnabled(true);
         try {
             statistics.clear();
             call.get();
             return statistics.getPrepareStatementCount();
         } finally {
-            statistics.setStatisticsEnabled(false);
+            statistics.setStatisticsEnabled(wasEnabled);
         }
     }
 }

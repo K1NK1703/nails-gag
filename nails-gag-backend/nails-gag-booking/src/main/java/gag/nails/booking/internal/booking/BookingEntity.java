@@ -31,6 +31,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.BatchSize;
@@ -323,15 +324,32 @@ public class BookingEntity {
      *     исход тогда в счёт визита, переопределять нечего
      */
     public Instant requirePrepaymentSettled() {
-        var settledAt = switch (status) {
-            case CANCELLED -> cancelledAt;
-            case NO_SHOW -> noShowAt;
-            case AWAITING_PREPAYMENT, CONFIRMED, COMPLETED -> null;
-        };
+        var settledAt = settledAtOrNull();
         if (prepaymentReceivedAt == null || settledAt == null) {
             throw new InvalidTransitionException(id, status, "set prepayment outcome");
         }
         return settledAt;
+    }
+
+    /**
+     * Момент отмены или неявки — для записи, о которой это уже известно (например, из выборки отменённых и неявок).
+     *
+     * @throws InternalException если запись не отменена и не отмечена неявкой — ошибка вызывающего кода
+     */
+    public Instant settledAt() {
+        var settledAt = settledAtOrNull();
+        if (settledAt == null) {
+            throw new InternalException("booking " + id + " in status " + status + " is neither cancelled nor no-show");
+        }
+        return settledAt;
+    }
+
+    private @Nullable Instant settledAtOrNull() {
+        return switch (status) {
+            case CANCELLED -> cancelledAt;
+            case NO_SHOW -> noShowAt;
+            case AWAITING_PREPAYMENT, CONFIRMED, COMPLETED -> null;
+        };
     }
 
     /**
@@ -357,8 +375,10 @@ public class BookingEntity {
         if (status != BookingStatus.COMPLETED || amount == null) {
             throw new InternalException("visit fact of booking " + id + " in status " + status);
         }
+        // Явно по порядку в составе: не полагаться на @OrderBy при выборке с присоединением.
         var actual = services.stream()
                 .filter(service -> service.phase() == ServicePhase.ACTUAL)
+                .sorted(Comparator.comparingInt(BookedServiceEntity::sortOrder))
                 .map(BookedServiceEntity::toFact)
                 .toList();
         var priceSum = actual.stream().map(VisitServiceFact::price).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -368,7 +388,7 @@ public class BookingEntity {
     /**
      * Удержанная предоплата: исход по правилу с учётом переопределения — {@link PrepaymentOutcome#KEPT}.
      *
-     * @param day день отмены или неявки в поясе салона — его считает вызывающий по {@link #requirePrepaymentSettled}
+     * @param day день отмены или неявки в поясе салона — его считает вызывающий по {@link #settledAt}
      * @throws InternalException если предоплата не удержана
      */
     public KeptPrepaymentFact toKeptPrepaymentFact(LocalDate day) {
