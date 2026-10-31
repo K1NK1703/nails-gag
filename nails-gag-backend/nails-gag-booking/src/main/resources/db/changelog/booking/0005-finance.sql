@@ -11,18 +11,20 @@ ALTER TABLE booking.booking
                                                           CHECK (prepayment_outcome_override IN ('KEPT', 'RETURNED'));
 
 --changeset nails-gag:booking-0005-prepayment-amount
---comment: сумма уже полученных предоплат по правилу модуля (BookingRules.defaultPrepaymentAmount)
--- процент предоплаты из правил записи от прайса выбранного при записи состава (PLANNED), до рубля: round
--- для numeric округляет половину от нуля, то есть вверх; не меньше рубля
+--comment: сумма уже полученных предоплат и ограничения — одним набором: между ними нет окна без проверки
+-- Сумма — по правилу модуля (BookingRules.defaultPrepaymentAmount): процент предоплаты из правил записи от прайса
+-- выбранного при записи состава (PLANNED), до рубля — round для numeric округляет половину от нуля, то есть вверх, —
+-- но не меньше рубля. Процент берётся соединением со строкой правил, а не подзапросом: без неё не обновится ни одна
+-- строка, и ограничение ниже отвергнет миграцию, вместо того чтобы молча записать по рублю.
 UPDATE booking.booking b
 SET prepayment_amount = greatest(1, round(
-        coalesce((SELECT sum(s.price) FROM booking.booking_service s
-                  WHERE s.booking_id = b.id AND s.phase = 'PLANNED'), 0)
-        * (SELECT prepayment_percent FROM booking.settings) / 100, 0))
+        coalesce((SELECT sum(bs.price) FROM booking.booking_service bs
+                  WHERE bs.booking_id = b.id AND bs.phase = 'PLANNED'), 0)
+        * s.prepayment_percent / 100, 0))
+FROM booking.settings s
 WHERE b.prepayment_received_at IS NOT NULL;
 
---changeset nails-gag:booking-0005-constraints
---comment: сумма — у полученной предоплаты, причина суммы — у выполненного визита, переопределение — у отмен и неявок
+-- Сумма — у полученной предоплаты, причина суммы — у выполненного визита, переопределение — у отмен и неявок.
 ALTER TABLE booking.booking
     ADD CONSTRAINT booking_prepayment_amount_received_check
         CHECK ((prepayment_received_at IS NULL) = (prepayment_amount IS NULL)),

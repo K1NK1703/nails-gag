@@ -76,6 +76,23 @@ class PrepaymentAmountTest extends BookingTestSupport {
         assertThat(reloaded(received).prepaymentAmount()).isEqualByComparingTo("1000.50");
     }
 
+    /** Сумма хранится с двумя знаками после запятой: лишние нули и экспонента — не ошибка. */
+    @Test
+    void explicitAmountIsNormalizedToKopecks() {
+        var withZeros = awaitingPrepayment("Анна", "10:00", MANICURE);
+        var withExponent = awaitingPrepayment("Мария", "14:00", MANICURE);
+
+        assertThat(prepayments
+                        .markReceived(withZeros.id(), new BigDecimal("1.500"), master)
+                        .prepaymentAmount())
+                .isEqualTo(new BigDecimal("1.50"));
+        assertThat(prepayments
+                        .markReceived(withExponent.id(), new BigDecimal("1E+3"), master)
+                        .prepaymentAmount())
+                .isEqualTo(new BigDecimal("1000.00"));
+        assertThat(reloaded(withExponent).prepaymentAmount()).isEqualTo(new BigDecimal("1000.00"));
+    }
+
     @Test
     void amountMustBePositive() {
         var booking = awaitingPrepayment("Анна", "10:00", MANICURE);

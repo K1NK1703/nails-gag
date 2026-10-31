@@ -1,6 +1,5 @@
 package gag.nails.booking.internal.booking;
 
-import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.CancelReason;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.command.PrepaymentFlagChange;
@@ -10,9 +9,9 @@ import java.time.Instant;
 import org.springframework.stereotype.Component;
 
 /**
- * Отмена записи целиком: состояние, освобождение слота, последствия для клиента, событие. Поздняя
- * отмена клиентом и отказ из-за опоздания ставят клиенту признак обязательной предоплаты; отмена
- * мастером, отмена в окне, истёкший срок предоплаты и удаление аккаунта — нет.
+ * Отмена записи целиком: состояние, освобождение слота, последствия для клиента, событие. Поздняя отмена клиентом
+ * и отказ из-за опоздания ставят клиенту признак обязательной предоплаты; отмена мастером, отмена в окне, истёкший
+ * срок предоплаты и удаление аккаунта — нет. Представление для ответа строит вызывающий — для своего актора.
  */
 @Component
 public class BookingCancellation {
@@ -27,7 +26,7 @@ public class BookingCancellation {
         this.events = events;
     }
 
-    public BookingView cancel(BookingEntity booking, CancelReason reason, Instant now) {
+    public void cancel(BookingEntity booking, CancelReason reason, Instant now) {
         booking.cancel(reason, now);
         // Порядок блокировок во всём модуле: запись → клиент → слот.
         switch (reason) {
@@ -37,7 +36,6 @@ public class BookingCancellation {
         }
         occupation.release(booking.slotId(), booking.id());
         events.cancelled(booking, now);
-        return booking.toView();
     }
 
     private void requirePrepayment(BookingEntity booking, PrepaymentFlagReason reason) {

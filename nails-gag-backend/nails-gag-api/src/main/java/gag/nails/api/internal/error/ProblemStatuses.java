@@ -24,6 +24,7 @@ import gag.nails.clients.error.DocumentVersionExistsException;
 import gag.nails.clients.error.DocumentVersionNotFoundException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.common.error.ErrorCodes;
 import gag.nails.common.error.UnauthenticatedException;
 import gag.nails.common.error.UserFacingException;
 import gag.nails.common.error.ValidationException;
@@ -72,8 +73,8 @@ final class ProblemStatuses {
     static final String NOT_ACCEPTABLE = "common.not_acceptable";
     static final String UNSUPPORTED_MEDIA_TYPE = "common.unsupported_media_type";
     static final String BAD_REQUEST = "common.bad_request";
-    static final String BUSY = "common.busy";
-    static final String INTERNAL = "common.internal";
+    static final String BUSY = ErrorCodes.BUSY;
+    static final String INTERNAL = ErrorCodes.INTERNAL;
 
     /**
      * {@link AccessDeniedException} здесь — статус для сотрудника; клиенту и анониму обработчик отвечает иначе

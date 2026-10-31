@@ -15,7 +15,6 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.schedule.model.SlotView;
 import gag.nails.testsupport.ModuleTest;
-import gag.nails.testsupport.TestTimeConfiguration;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.Duration;
@@ -72,8 +71,10 @@ class PrepaymentOutcomeTest extends BookingTestSupport {
         var slot = slot(MONDAY, "12:00");
         var booking = received(anna, slot);
 
-        var ended = end(ending, booking, anna, slot);
+        end(ending, booking, anna, slot);
 
+        // Исход видит сотрудник; клиенту он не отдаётся (BookingMoneyVisibilityTest).
+        var ended = queries.get(booking.id(), master);
         assertThat(ended.cancelReason()).isEqualTo(ending.reason);
         assertThat(ended.prepaymentOutcome()).isEqualTo(ending.outcome);
         var stored = reloaded(booking);
@@ -135,7 +136,7 @@ class PrepaymentOutcomeTest extends BookingTestSupport {
         assertThat(storedOverride(booking)).isNull();
     }
 
-    /** Срок считается от неявки или отмены, а не от начала слота; ровно на границе — можно. */
+    /** Срок считается от неявки; ровно на границе — можно. */
     @Test
     void overrideOutsideWindowIsRejected() {
         var noShow = noShowWithPrepayment();
@@ -151,17 +152,27 @@ class PrepaymentOutcomeTest extends BookingTestSupport {
                 .isInstanceOf(CorrectionWindowClosedException.class)
                 .satisfies(e -> assertThat(((CorrectionWindowClosedException) e).params())
                         .containsEntry("windowDays", 7));
+    }
 
-        // Отмена за четыре дня до слота: через семь дней после отмены слот ещё в сроке, а отмена — уже нет.
-        clock.set(TestTimeConfiguration.START);
-        var anna = clientOwingPrepayment("Мария");
-        var booking = received(anna, slot(TUESDAY, "12:00"));
+    /** Отмена за пять дней до слота: через семь дней после отмены слот ещё в сроке, а отмена — уже нет. */
+    @Test
+    void windowCountsFromCancellationNotFromSlot() {
+        var slot = slot(TUESDAY, "12:00");
+        var booking = received(clientOwingPrepayment("Мария"), slot);
         var cancelledAt = bookings.cancel(booking.id(), master).cancelledAt();
         assertThat(cancelledAt).isNotNull();
+
+        clock.set(cancelledAt.plus(Duration.ofDays(7)));
+        assertThat(prepayments
+                        .setOutcome(booking.id(), PrepaymentOutcome.KEPT, master)
+                        .prepaymentOutcome())
+                .isEqualTo(PrepaymentOutcome.KEPT);
+
         clock.set(cancelledAt.plus(Duration.ofDays(7)).plusSeconds(1));
-        assertThatThrownBy(() -> prepayments.setOutcome(booking.id(), PrepaymentOutcome.KEPT, master))
+        assertThat(slot.startsAt().plus(Duration.ofDays(7))).isAfter(clock.instant());
+        assertThatThrownBy(() -> prepayments.setOutcome(booking.id(), PrepaymentOutcome.RETURNED, master))
                 .isInstanceOf(CorrectionWindowClosedException.class);
-        assertThat(reloaded(booking).prepaymentOutcome()).isEqualTo(PrepaymentOutcome.RETURNED);
+        assertThat(reloaded(booking).prepaymentOutcome()).isEqualTo(PrepaymentOutcome.KEPT);
     }
 
     @Test

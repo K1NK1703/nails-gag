@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -62,8 +64,13 @@ class BatchMarkTest extends BookingTestSupport {
         committed = new CommittedData(jdbc, root);
     }
 
+    /** Сначала снимается триггер теста сбоя (если ставился), затем удаляются свои данные. */
     @AfterEach
-    void removeCommittedData() throws IOException {
+    void cleanUp() throws IOException {
+        jdbc.sql("DROP TRIGGER IF EXISTS %1$s ON booking.booking".formatted(FAILURE_TRIGGER))
+                .update();
+        jdbc.sql("DROP FUNCTION IF EXISTS booking.%s()".formatted(FAILURE_TRIGGER))
+                .update();
         committed.removeAll();
     }
 
@@ -160,11 +167,36 @@ class BatchMarkTest extends BookingTestSupport {
                 .isInstanceOf(ValidationException.class)
                 .satisfies(e -> assertThat(((ValidationException) e).field()).isEqualTo("bookingIds"));
 
+        // Предел — на присланный список вместе с повторами.
+        var fiftyWithRepeat = new ArrayList<>(fiftyOne.subList(0, 50));
+        fiftyWithRepeat.add(fiftyOne.getFirst());
+        assertThatThrownBy(() -> marks.completeAsPlanned(fiftyWithRepeat, master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).field()).isEqualTo("bookingIds"));
+
         // Ровно пятьдесят — можно: каждая запись получает свой результат.
         assertThat(marks.completeAsPlanned(fiftyOne.subList(0, 50), master))
                 .hasSize(50)
                 .extracting(MarkResult::errorCode)
                 .containsOnly("booking.booking_not_found");
+    }
+
+    @Test
+    void emptyIdIsRejected() {
+        var slot = slot(MONDAY, "10:00");
+        var booking = book(client("Анна"), slot);
+        timeIsAfterStartOf(slot, Duration.ofHours(2));
+        var withEmpty = Arrays.asList(booking.id(), null);
+
+        assertThatThrownBy(() -> marks.completeAsPlanned(withEmpty, master))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).field()).isEqualTo("bookingIds"));
+        assertThat(committedStatus(booking)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void emptyListGivesNoResults() {
+        assertThat(marks.completeAsPlanned(List.of(), master)).isEmpty();
     }
 
     @Test
@@ -205,28 +237,20 @@ class BatchMarkTest extends BookingTestSupport {
 
     /**
      * Триггер, который отвергает отметку «выполнена» одной записи: сбой при фиксации, после изменения строки. Только
-     * для этой записи и только на время теста ({@link #dropFailureTrigger}).
+     * для этой записи и только на время теста ({@link #cleanUp}).
      */
     private void failCompletionOf(BookingView booking) {
         jdbc.sql("""
-                CREATE FUNCTION booking.%s() RETURNS trigger LANGUAGE plpgsql AS $$
+                CREATE OR REPLACE FUNCTION booking.%s() RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN
                     IF NEW.id = '%s' AND NEW.status = 'COMPLETED' THEN
                         RAISE EXCEPTION 'completion rejected by test';
                     END IF;
                     RETURN NEW;
                 END $$""".formatted(FAILURE_TRIGGER, booking.id())).update();
-        jdbc.sql("CREATE TRIGGER %1$s BEFORE UPDATE ON booking.booking FOR EACH ROW EXECUTE FUNCTION booking.%1$s()"
-                        .formatted(FAILURE_TRIGGER))
-                .update();
-    }
-
-    @AfterEach
-    void dropFailureTrigger() {
-        jdbc.sql("DROP TRIGGER IF EXISTS %1$s ON booking.booking".formatted(FAILURE_TRIGGER))
-                .update();
-        jdbc.sql("DROP FUNCTION IF EXISTS booking.%s()".formatted(FAILURE_TRIGGER))
-                .update();
+        jdbc.sql("""
+                CREATE OR REPLACE TRIGGER %1$s BEFORE UPDATE ON booking.booking
+                FOR EACH ROW EXECUTE FUNCTION booking.%1$s()""".formatted(FAILURE_TRIGGER)).update();
     }
 
     private int committedServiceCount(BookingView booking) {

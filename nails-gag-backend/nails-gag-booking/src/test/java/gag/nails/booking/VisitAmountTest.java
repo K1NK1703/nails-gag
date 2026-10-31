@@ -105,6 +105,25 @@ class VisitAmountTest extends BookingTestSupport {
         assertThat(reloaded(visit).amountNote()).isEqualTo(emoji);
     }
 
+    /** Пробелы по краям не хранятся и в длину не считаются. */
+    @Test
+    void noteIsStrippedBeforeLengthCheck() {
+        var visit = completedVisit("Анна", "12:00");
+
+        var stripped = marks.updateVisit(
+                visit.id(), new UpdateVisit(MANICURE, List.of(), new BigDecimal("2000.00"), "  подарок "), master);
+        assertThat(stripped.amountNote()).isEqualTo("подарок");
+        assertThat(reloaded(visit).amountNote()).isEqualTo("подарок");
+
+        var longest = "я".repeat(200);
+        var padded = marks.updateVisit(
+                visit.id(),
+                new UpdateVisit(MANICURE, List.of(), new BigDecimal("2000.00"), "  " + longest + "\t "),
+                master);
+        assertThat(padded.amountNote()).isEqualTo(longest);
+        assertThat(reloaded(visit).amountNote()).isEqualTo(longest);
+    }
+
     @Test
     void blankNoteMeansNoNote() {
         var visit = completedVisit("Анна", "12:00");

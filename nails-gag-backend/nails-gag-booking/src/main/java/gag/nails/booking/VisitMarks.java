@@ -23,7 +23,7 @@ import java.util.UUID;
  */
 public interface VisitMarks {
 
-    /** Сколько различных записей отмечает один вызов {@link #completeAsPlanned}. */
+    /** Сколько идентификаторов (вместе с повторами) принимает один вызов {@link #completeAsPlanned}. */
     int MAX_BATCH = 50;
 
     /**
@@ -47,15 +47,18 @@ public interface VisitMarks {
      * убираются, результаты — в порядке первого появления. Уровень изменения «Записей» проверяется один раз до
      * отметок. Вызывать вне транзакции.
      *
-     * @param bookingIds не больше {@value #MAX_BATCH} различных записей
+     * @param bookingIds не больше {@value #MAX_BATCH} идентификаторов, считая повторы; пустой список — пустой итог
      * @return по результату на каждую различную запись: пустой код — отмечена, иначе код ошибки, как у
      *     {@link #complete} ({@code booking.booking_not_found}, {@code booking.visit_not_started}, {@code
-     *     booking.invalid_transition}, {@code booking.correction_window_closed}); непредвиденный сбой —
-     *     {@code common.internal}
-     * @throws ValidationException если записей больше {@value #MAX_BATCH} или есть пустой идентификатор
+     *     booking.invalid_transition}, {@code booking.correction_window_closed}); запись занята другой
+     *     операцией и блокировку взять не удалось — {@code common.busy}; непредвиденный сбой — {@code
+     *     common.internal}
+     * @throws ValidationException если идентификаторов больше {@value #MAX_BATCH} или есть пустой
      *     ({@code bookingIds})
      * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      * @throws InternalException если вызван внутри транзакции
+     * @throws org.springframework.dao.DataAccessException если база недоступна или транзакцию не начать: пакет
+     *     прерывается, уже отмеченные записи остаются отмеченными
      */
     List<MarkResult> completeAsPlanned(List<UUID> bookingIds, Actor actor);
 
@@ -94,7 +97,8 @@ public interface VisitMarks {
      * @throws InvalidTransitionException если визит не отмечен выполненным
      * @throws CorrectionWindowClosedException если срок исправления истёк
      * @throws ServiceNotFoundException если какой-то услуги нет
-     * @throws ValidationException если состав неверен, сумма отрицательна или причина длиннее 200 символов
+     * @throws ValidationException если состав неверен, сумма отрицательна или в ней больше десяти цифр до запятой
+     *     и двух после, либо причина длиннее 200 символов
      * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      */
     BookingView updateVisit(UUID bookingId, UpdateVisit command, Actor actor);

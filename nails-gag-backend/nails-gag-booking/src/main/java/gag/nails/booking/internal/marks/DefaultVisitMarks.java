@@ -23,6 +23,7 @@ import gag.nails.clients.model.ClientView;
 import gag.nails.clients.model.PrepaymentFlagReason;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.common.error.ErrorCodes;
 import gag.nails.common.error.InternalException;
 import gag.nails.common.error.UserFacingException;
 import gag.nails.common.error.ValidationException;
@@ -34,7 +35,10 @@ import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -45,9 +49,6 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @Service
 class DefaultVisitMarks implements VisitMarks {
-
-    /** Код результата пакетной отметки при непредвиденном сбое — тот же, что у ответа HTTP 500. */
-    static final String INTERNAL_ERROR = "common.internal";
 
     /** Как {@code CHECK (char_length(amount_note) BETWEEN 1 AND 200)} в базе. */
     private static final int MAX_AMOUNT_NOTE_LENGTH = 200;
@@ -86,7 +87,7 @@ class DefaultVisitMarks implements VisitMarks {
     @Transactional
     public BookingView complete(UUID bookingId, Actor actor) {
         actor.requireWrite(Section.BOOKINGS);
-        return completeLocked(bookingId);
+        return completeInCurrentTransaction(bookingId).toView(actor);
     }
 
     /**
@@ -99,13 +100,14 @@ class DefaultVisitMarks implements VisitMarks {
             throw new InternalException("bookings must be completed as planned outside a transaction");
         }
         actor.requireWrite(Section.BOOKINGS);
+        // Предел — на присланный список, до удаления повторов: размер запроса ограничен сам по себе.
+        if (bookingIds.size() > MAX_BATCH) {
+            throw new ValidationException("bookingIds", "must contain at most " + MAX_BATCH + " ids");
+        }
         if (bookingIds.stream().anyMatch(Objects::isNull)) {
             throw new ValidationException("bookingIds", "must not contain empty ids");
         }
-        var distinct = List.copyOf(new LinkedHashSet<>(bookingIds));
-        if (distinct.size() > MAX_BATCH) {
-            throw new ValidationException("bookingIds", "must contain at most " + MAX_BATCH + " bookings");
-        }
+        var distinct = new LinkedHashSet<>(bookingIds);
         return distinct.stream().map(this::completeInOwnTransaction).toList();
     }
 
@@ -122,7 +124,7 @@ class DefaultVisitMarks implements VisitMarks {
             setPrepaymentFlag(booking, true, PrepaymentFlagReason.NO_SHOW);
         }
         events.noShow(booking, rules.now());
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -133,7 +135,7 @@ class DefaultVisitMarks implements VisitMarks {
         var booking = requireCorrectableVisit(bookingId);
         booking.replaceActualServices(
                 actualServices(command.mainServiceId(), command.addonServiceIds()), command.finalAmount());
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -145,23 +147,37 @@ class DefaultVisitMarks implements VisitMarks {
         var booking = requireCorrectableVisit(bookingId);
         booking.replaceVisit(
                 actualServices(command.mainServiceId(), command.addonServiceIds()), command.finalAmount(), note);
-        return booking.toView();
+        return booking.toView(actor);
     }
 
+    /**
+     * Итог одной записи пакета. Отказ инфраструктуры (транзакцию не начать, база недоступна) прерывает весь пакет:
+     * остальные записи упали бы так же, и вместо пятидесяти одинаковых кодов вызывающий получает одну ошибку.
+     */
     private MarkResult completeInOwnTransaction(UUID bookingId) {
         try {
-            transaction.executeWithoutResult(status -> completeLocked(bookingId));
+            transaction.executeWithoutResult(status -> completeInCurrentTransaction(bookingId));
             return new MarkResult(bookingId, null);
         } catch (UserFacingException e) {
+            // Ожидаемый отказ записи (не начата, уже отмечена…): код уходит в итог, лог — только для отладки.
+            log.debug("booking {} not completed as planned: {}", bookingId, e.code());
             return new MarkResult(bookingId, e.code());
+        } catch (CannotCreateTransactionException | DataAccessResourceFailureException e) {
+            throw e;
+        } catch (PessimisticLockingFailureException e) {
+            log.warn(
+                    "booking {} not completed as planned: lock failure {}",
+                    bookingId,
+                    e.getClass().getSimpleName());
+            return new MarkResult(bookingId, ErrorCodes.BUSY);
         } catch (RuntimeException e) {
             log.error("completing booking {} as planned failed", bookingId, e);
-            return new MarkResult(bookingId, INTERNAL_ERROR);
+            return new MarkResult(bookingId, ErrorCodes.INTERNAL);
         }
     }
 
-    /** Отметка «выполнен» в транзакции вызывающего; уровень доступа он уже проверил. */
-    private BookingView completeLocked(UUID bookingId) {
+    /** Отметка «выполнен» в транзакции вызывающего, под блокировкой строки; уровень доступа он уже проверил. */
+    private BookingEntity completeInCurrentTransaction(UUID bookingId) {
         var booking = finder.requireForUpdate(bookingId);
         var rules = currentRules.get();
         requireMarkAllowed(booking, rules);
@@ -173,7 +189,7 @@ class DefaultVisitMarks implements VisitMarks {
             setPrepaymentFlag(booking, false, PrepaymentFlagReason.VISIT_WITH_PREPAYMENT_COMPLETED);
         }
         events.completed(booking, rules.now());
-        return booking.toView();
+        return booking;
     }
 
     /**

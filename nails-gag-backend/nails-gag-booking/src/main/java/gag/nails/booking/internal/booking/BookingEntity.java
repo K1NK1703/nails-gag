@@ -10,6 +10,8 @@ import gag.nails.booking.model.EarlierTimeStatus;
 import gag.nails.booking.model.EarlierTimeView;
 import gag.nails.booking.model.PrepaymentOutcome;
 import gag.nails.catalog.model.ServiceView;
+import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.InternalException;
 import gag.nails.schedule.model.SlotView;
 import jakarta.persistence.CascadeType;
@@ -22,6 +24,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -80,7 +83,7 @@ public class BookingEntity {
     private @Nullable BigDecimal prepaymentAmount;
 
     @Enumerated(EnumType.STRING)
-    private @Nullable PrepaymentOutcome prepaymentOutcomeOverride;
+    private @Nullable PrepaymentOverride prepaymentOutcomeOverride;
 
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder")
@@ -139,21 +142,31 @@ public class BookingEntity {
         withdrawPendingOffer();
     }
 
-    /**
-     * Запись, ждавшая предоплату, становится подтверждённой — с предоплатой или без неё.
-     *
-     * @param prepaymentAmount сумма полученной предоплаты, больше нуля; пусто — подтверждена без предоплаты
-     */
-    public void confirm(Instant now, @Nullable BigDecimal prepaymentAmount) {
+    /** Подтвердить (с предоплатой или без) можно только запись, ждущую предоплату. */
+    public void requireAwaitingPrepayment() {
         if (status != BookingStatus.AWAITING_PREPAYMENT) {
             throw new InvalidTransitionException(id, status, "confirm");
         }
-        status = BookingStatus.CONFIRMED;
-        prepaymentDeadline = null;
-        if (prepaymentAmount != null) {
-            prepaymentReceivedAt = now;
-            this.prepaymentAmount = prepaymentAmount;
+    }
+
+    /**
+     * Предоплата получена: запись, ждавшая её, подтверждена.
+     *
+     * @param amount сумма предоплаты, больше нуля
+     * @throws InternalException если сумма не больше нуля — её проверяет вызывающий код
+     */
+    public void confirmWithPrepayment(Instant now, BigDecimal amount) {
+        if (amount.signum() <= 0) {
+            throw new InternalException("prepayment amount must be positive: " + amount);
         }
+        confirm();
+        prepaymentReceivedAt = now;
+        prepaymentAmount = amount;
+    }
+
+    /** Запись, ждавшая предоплату, подтверждена без неё. */
+    public void confirmWithoutPrepayment() {
+        confirm();
     }
 
     /**
@@ -273,32 +286,37 @@ public class BookingEntity {
         amountNote = null;
     }
 
-    /** Фактический состав и итог выполненного визита. {@code actual} — основная услуга первой. */
+    /**
+     * Фактический состав и итог выполненного визита. {@code actual} — основная услуга первой; итог — не больше двух
+     * знаков после запятой (проверено командой), хранится с двумя.
+     */
     public void replaceActualServices(List<ServiceView> actual, BigDecimal finalAmount) {
         if (status != BookingStatus.COMPLETED) {
             throw new InvalidTransitionException(id, status, "update actual services");
         }
         services.removeIf(service -> service.phase() == ServicePhase.ACTUAL);
         addServices(actual, ServicePhase.ACTUAL);
-        this.finalAmount = finalAmount;
+        this.finalAmount = finalAmount.setScale(2, RoundingMode.UNNECESSARY);
     }
 
     /**
-     * Фактический состав, итог и причина суммы выполненного визита. {@code actual} — основная услуга первой;
-     * пустая причина стирается.
+     * Фактический состав, итог и причина суммы выполненного визита. {@code actual} — основная услуга первой.
+     *
+     * @param amountNote причина суммы, уже без пробелов по краям и проверенная по длине; пусто — причины нет
      */
     public void replaceVisit(List<ServiceView> actual, BigDecimal finalAmount, @Nullable String amountNote) {
         replaceActualServices(actual, finalAmount);
-        this.amountNote = blankToNull(amountNote);
+        this.amountNote = amountNote;
     }
 
     /**
-     * Момент, от которого считается срок переопределения исхода предоплаты: отмена или неявка.
+     * Исход предоплаты можно переопределить: она получена, а запись отменена или отмечена неявкой.
      *
+     * @return момент отмены или неявки — от него считается срок переопределения
      * @throws InvalidTransitionException если предоплата не получена или запись не отменена и не отмечена неявкой —
      *     исход тогда в счёт визита, переопределять нечего
      */
-    public Instant prepaymentSettledAt() {
+    public Instant requirePrepaymentSettled() {
         var settledAt = switch (status) {
             case CANCELLED -> cancelledAt;
             case NO_SHOW -> noShowAt;
@@ -311,18 +329,15 @@ public class BookingEntity {
     }
 
     /**
-     * Переопределяет исход полученной предоплаты отменённой записи или неявки: {@link PrepaymentOutcome#KEPT} или
-     * {@link PrepaymentOutcome#RETURNED}. Значение, совпадающее с правилом, снимает переопределение.
+     * Переопределяет исход полученной предоплаты отменённой записи или неявки; значение, совпадающее с правилом,
+     * снимает переопределение. Срок проверяет вызывающий код по {@link #requirePrepaymentSettled}.
      *
-     * @throws InvalidTransitionException если переопределять нечего ({@link #prepaymentSettledAt})
-     * @throws InternalException если передан {@link PrepaymentOutcome#APPLIED} — его отвергает вызывающий код
+     * @throws InvalidTransitionException если переопределять нечего ({@link #requirePrepaymentSettled})
      */
-    public void overridePrepaymentOutcome(PrepaymentOutcome outcome) {
-        prepaymentSettledAt();
-        if (outcome == PrepaymentOutcome.APPLIED) {
-            throw new InternalException("prepayment outcome of a settled booking cannot be APPLIED");
-        }
-        prepaymentOutcomeOverride = outcome == PrepaymentOutcomes.byRule(status, cancelReason) ? null : outcome;
+    public void overridePrepaymentOutcome(PrepaymentOverride override) {
+        requirePrepaymentSettled();
+        var byRule = PrepaymentOutcomes.byRule(status, cancelReason);
+        prepaymentOutcomeOverride = override.outcome() == byRule ? null : override;
     }
 
     /** Прайс выбранного при записи состава. */
@@ -342,9 +357,13 @@ public class BookingEntity {
         this.comment = blankToNull(comment);
     }
 
-    /** Обезличивание клиента: его комментарий стирается у записи в любом состоянии. */
-    public void wipeComment() {
+    /**
+     * Обезличивание клиента: свободные тексты записи, где может оказаться имя, — комментарий клиента и причина
+     * итоговой суммы — стираются в любом состоянии. Суммы остаются: это не персональные данные.
+     */
+    public void wipeFreeTexts() {
         this.comment = null;
+        this.amountNote = null;
     }
 
     void setMasterNote(@Nullable String masterNote) {
@@ -415,7 +434,13 @@ public class BookingEntity {
         return masterNote;
     }
 
-    public BookingView toView() {
+    /**
+     * Представление для {@code viewer}. Деньги — итог визита, его причина, сумма и исход предоплаты — видит только
+     * сотрудник с чтением раздела «Записи»; клиенту, в том числе в его собственной записи, они не отдаются: на сайте
+     * клиент видит только прайс.
+     */
+    public BookingView toView(Actor viewer) {
+        var staff = viewer.canRead(Section.BOOKINGS);
         return new BookingView(
                 id,
                 clientId,
@@ -436,10 +461,10 @@ public class BookingEntity {
                 noShowAt,
                 servicesOf(ServicePhase.PLANNED),
                 servicesOf(ServicePhase.ACTUAL),
-                finalAmount,
-                prepaymentAmount,
-                prepaymentOutcome(),
-                amountNote);
+                staff ? finalAmount : null,
+                staff ? prepaymentAmount : null,
+                staff ? prepaymentOutcome() : null,
+                staff ? amountNote : null);
     }
 
     private @Nullable EarlierTimeView earlierTime() {
@@ -460,6 +485,12 @@ public class BookingEntity {
         for (var order = 0; order < views.size(); order++) {
             services.add(new BookedServiceEntity(this, views.get(order), phase, order));
         }
+    }
+
+    private void confirm() {
+        requireAwaitingPrepayment();
+        status = BookingStatus.CONFIRMED;
+        prepaymentDeadline = null;
     }
 
     private void requirePendingOffer(String action) {

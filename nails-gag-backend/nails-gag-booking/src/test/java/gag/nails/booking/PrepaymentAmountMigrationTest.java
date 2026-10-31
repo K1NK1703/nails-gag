@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.booking.command.CreateBooking;
+import gag.nails.booking.command.UpdateBookingSettings;
 import gag.nails.booking.command.UpdateVisit;
+import gag.nails.booking.internal.booking.BookingRules;
 import gag.nails.booking.model.BookingView;
 import gag.nails.catalog.CatalogService;
 import gag.nails.catalog.command.CreateService;
@@ -19,22 +21,27 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * Заполнение суммы уже полученных предоплат миграцией {@code booking/0005-finance.sql} (спецификация финансов §3.1).
+ * Миграция {@code booking/0005-finance.sql} (спецификация финансов §3.1): заполнение суммы уже полученных предоплат
+ * и ограничения новых колонок.
  *
  * <p>Строку «как до миграции» в общей базе тестов не завести: миграция уже применена, а ограничения не дают
- * полученной предоплате остаться без суммы. Поэтому тест выполняет тот самый оператор заполнения — текст набора
- * изменений {@value #BACKFILL_CHANGESET}, прочитанный из файла миграции, — на записях, у которых сумма заменена
- * заведомо неверной, и сверяет результат с правилом модуля. Всё — в транзакции теста с откатом.
+ * полученной предоплате остаться без суммы. Поэтому тест выполняет тот самый оператор заполнения — {@code UPDATE} из
+ * набора изменений {@value #BACKFILL_CHANGESET}, прочитанный из файла миграции, — на записях, у которых сумма
+ * заменена заведомо неверной, и сверяет результат с правилом модуля ({@link BookingRules#defaultPrepaymentAmount}).
+ * Всё — в транзакции теста с откатом.
  */
 @ModuleTest
 class PrepaymentAmountMigrationTest extends BookingTestSupport {
@@ -45,6 +52,9 @@ class PrepaymentAmountMigrationTest extends BookingTestSupport {
 
     @Autowired
     BookingPrepayments prepayments;
+
+    @Autowired
+    BookingSettingsService settings;
 
     @Autowired
     VisitMarks marks;
@@ -58,74 +68,142 @@ class PrepaymentAmountMigrationTest extends BookingTestSupport {
     @PersistenceContext
     EntityManager entityManager;
 
+    /** Цена выбранного при записи состава, процент предоплаты и ожидаемая сумма. */
+    @ParameterizedTest(name = "{1} % от {0} = {2}")
+    @CsvSource({
+        "2500.00, 50, 1250.00",
+        "2501.00, 50, 1251.00",
+        // половина — вверх: при «банковском» округлении было бы 2 и 24
+        "250.00, 1, 3.00",
+        "2450.00, 1, 25.00",
+        "150.00, 1, 2.00",
+        "333.33, 30, 100.00",
+        "199.99, 100, 200.00",
+        // мелкие суммы — не меньше рубля
+        "49.99, 1, 1.00",
+        "0.80, 50, 1.00",
+        "0.00, 100, 1.00"
+    })
+    void backfillMatchesModuleRule(String price, int percent, String expected) throws IOException {
+        settings.update(new UpdateBookingSettings(1, 120, 24, 24, percent, 15, 7), master);
+        var booking = receivedByDefault("Анна", slot(MONDAY, "10:00"), service(ServiceKind.MAIN, price));
+        var rule =
+                new BookingRules(settings.settings(), clock.instant()).defaultPrepaymentAmount(new BigDecimal(price));
+        assertThat(rule).isEqualByComparingTo(expected);
+        entityManager.flush();
+        assertThat(storedAmount(booking)).isEqualByComparingTo(expected);
+
+        spoil(booking);
+        jdbc.sql(backfillStatement()).update();
+
+        assertThat(storedAmount(booking)).isEqualByComparingTo(expected);
+    }
+
+    /** Сумма — от выбранного при записи состава, а не от фактического и не от итога визита. */
     @Test
-    void backfillTakesPercentOfPlannedPriceRoundedHalfUpToRuble() throws IOException {
-        // 50 % от 2501,00 = 1250,50 → 1251; 50 % от 0,80 = 0,40 → 0 → не меньше рубля.
-        var halfUp = receivedByDefault("Анна", "10:00", MANICURE, service(ServiceKind.ADDON, "1.00"));
-        var atLeastRuble = receivedByDefault("Мария", "12:00", service(ServiceKind.MAIN, "0.80"));
-        // Выполненный визит с другим составом и итогом: сумма — от выбранного при записи состава.
-        var completedSlot = slot(MONDAY, "14:00");
-        var completed = receivedByDefault("Ольга", completedSlot, MANICURE, FRENCH);
+    void backfillUsesPlannedServices() throws IOException {
+        var slot = slot(MONDAY, "14:00");
+        var completed = receivedByDefault("Ольга", slot, MANICURE, FRENCH);
         var withoutPrepayment = book(client("Ирина"), slot(MONDAY, "16:00"));
-        timeIsAfterStartOf(completedSlot, Duration.ofHours(2));
+        timeIsAfterStartOf(slot, Duration.ofHours(2));
         marks.complete(completed.id(), master);
         marks.updateVisit(completed.id(), new UpdateVisit(MANICURE, List.of(), new BigDecimal("500.00"), null), master);
-        var received = List.of(halfUp, atLeastRuble, completed);
         entityManager.flush();
-        entityManager.clear();
-        // Правило модуля дало ту же сумму, что ожидается от миграции.
-        assertThat(storedAmount(halfUp)).isEqualByComparingTo("1251.00");
-        assertThat(storedAmount(atLeastRuble)).isEqualByComparingTo("1.00");
-        assertThat(storedAmount(completed)).isEqualByComparingTo("1400.00");
-        for (var booking : received) {
-            jdbc.sql("update booking.booking set prepayment_amount = :wrong where id = :id")
-                    .param("wrong", WRONG)
-                    .param("id", booking.id())
-                    .update();
-        }
+        spoil(completed);
 
         jdbc.sql(backfillStatement()).update();
 
-        assertThat(storedAmount(halfUp)).isEqualByComparingTo("1251.00");
-        assertThat(storedAmount(atLeastRuble)).isEqualByComparingTo("1.00");
         assertThat(storedAmount(completed)).isEqualByComparingTo("1400.00");
         assertThat(storedAmount(withoutPrepayment)).isNull();
     }
 
-    /** Ограничение миграции: полученная предоплата всегда с суммой, неполученная — без неё. */
+    /** Записи без выбранного состава быть не должно; если она есть, прайс — ноль, и сумма — рубль, как у модуля. */
+    @Test
+    void backfillOfBookingWithoutPlannedServicesIsOneRuble() throws IOException {
+        var booking = receivedByDefault("Анна", slot(MONDAY, "10:00"), MANICURE);
+        entityManager.flush();
+        jdbc.sql("delete from booking.booking_service where booking_id = :id")
+                .param("id", booking.id())
+                .update();
+        spoil(booking);
+
+        jdbc.sql(backfillStatement()).update();
+
+        assertThat(storedAmount(booking)).isEqualByComparingTo("1.00");
+        assertThat(new BookingRules(settings.settings(), clock.instant()).defaultPrepaymentAmount(BigDecimal.ZERO))
+                .isEqualByComparingTo("1.00");
+    }
+
+    /** Полученная предоплата всегда с суммой, неполученная — без неё. */
     @Test
     void receivedPrepaymentAlwaysHasAmount() {
-        var booking = receivedByDefault("Анна", "10:00", MANICURE);
+        var booking = receivedByDefault("Анна", slot(MONDAY, "10:00"), MANICURE);
         entityManager.flush();
 
         assertThatThrownBy(() -> jdbc.sql("update booking.booking set prepayment_amount = null where id = :id")
                         .param("id", booking.id())
                         .update())
-                .isInstanceOf(DataIntegrityViolationException.class);
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("booking_prepayment_amount_received_check");
     }
 
-    /** Текст набора изменений заполнения из файла миграции: строки до следующего набора, без комментариев. */
+    @Test
+    void amountNoteOnlyOnCompletedVisit() {
+        var booking = book(client("Анна"), slot(MONDAY, "10:00"));
+        entityManager.flush();
+
+        assertThatThrownBy(() -> jdbc.sql("update booking.booking set amount_note = 'подарок' where id = :id")
+                        .param("id", booking.id())
+                        .update())
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("booking_amount_note_completed_check");
+    }
+
+    @Test
+    void outcomeOverrideOnlyOnCancelledOrNoShow() {
+        var booking = receivedByDefault("Анна", slot(MONDAY, "10:00"), MANICURE);
+        entityManager.flush();
+
+        assertThatThrownBy(
+                        () -> jdbc.sql("update booking.booking set prepayment_outcome_override = 'KEPT' where id = :id")
+                                .param("id", booking.id())
+                                .update())
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("booking_prepayment_outcome_override_status_check");
+    }
+
+    /**
+     * {@code UPDATE} из набора изменений заполнения в файле миграции: строки набора без комментариев, затем оператор,
+     * начинающийся с {@code UPDATE} (в том же наборе — и добавление ограничений).
+     */
     private static String backfillStatement() throws IOException {
         var lines = new ClassPathResource(MIGRATION)
                 .getContentAsString(StandardCharsets.UTF_8)
                 .lines()
                 .toList();
-        var statement = new ArrayList<String>();
+        var changeset = new ArrayList<String>();
         var inside = false;
         for (var line : lines) {
             if (line.startsWith("--changeset ")) {
                 inside = line.equals("--changeset " + BACKFILL_CHANGESET);
-            } else if (inside && !line.startsWith("--")) {
-                statement.add(line);
+            } else if (inside && !line.strip().startsWith("--")) {
+                changeset.add(line);
             }
         }
-        var sql = String.join("\n", statement).strip();
-        assertThat(sql).as("changeset " + BACKFILL_CHANGESET).startsWith("UPDATE booking.booking");
-        return sql.endsWith(";") ? sql.substring(0, sql.length() - 1) : sql;
+        var updates = Arrays.stream(String.join("\n", changeset).split(";"))
+                .map(String::strip)
+                .filter(statement -> statement.startsWith("UPDATE booking.booking"))
+                .toList();
+        assertThat(updates).as("UPDATE in changeset " + BACKFILL_CHANGESET).hasSize(1);
+        return updates.getFirst();
     }
 
-    private BookingView receivedByDefault(String clientName, String time, UUID main, UUID... addons) {
-        return receivedByDefault(clientName, slot(MONDAY, time), main, addons);
+    /** Сумма заведомо неверная: заполнение должно её пересчитать. */
+    private void spoil(BookingView booking) {
+        jdbc.sql("update booking.booking set prepayment_amount = :wrong where id = :id")
+                .param("wrong", WRONG)
+                .param("id", booking.id())
+                .update();
     }
 
     private BookingView receivedByDefault(String clientName, SlotView slot, UUID main, UUID... addons) {

@@ -64,7 +64,7 @@ class ClientEraseListener {
             if (booking.status().isActive() && !rules.visitStarted(booking.visitStart())) {
                 cancellation.cancel(booking, CancelReason.ACCOUNT_DELETED, rules.now());
             }
-            booking.wipeComment();
+            booking.wipeFreeTexts();
         }
         references.removeAll(locked.stream().map(BookingEntity::id).toList());
     }

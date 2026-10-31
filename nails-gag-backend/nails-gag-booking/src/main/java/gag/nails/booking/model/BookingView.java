@@ -8,7 +8,10 @@ import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Запись без заметки мастера (её отдаёт {@link BookingQueries#masterNote}).
+ * Запись без заметки мастера (её отдаёт {@link BookingQueries#masterNote}). Деньги — {@code finalAmount},
+ * {@code amountNote}, {@code prepaymentAmount}, {@code prepaymentOutcome} — заполнены только для сотрудника с чтением
+ * раздела «Записи»; клиенту, в том числе в его собственной записи, они всегда пусты: на сайте клиент видит только
+ * прайс.
  *
  * @param slotStartsAt начало слота — копия на момент записи или переноса
  * @param comment комментарий клиента, до 500 символов; может отсутствовать
@@ -23,10 +26,11 @@ import org.jspecify.annotations.Nullable;
  * @param cancelReason причина отмены; есть только у отменённой записи
  * @param plannedServices состав, выбранный при записи: основная услуга первой, затем дополнения
  * @param actualServices фактический состав; пуст, пока визит не отмечен выполненным
- * @param finalAmount итоговая сумма визита; пусто, пока визит не отмечен выполненным
- * @param prepaymentAmount сумма полученной предоплаты; пусто, если её не было
- * @param prepaymentOutcome исход полученной предоплаты с учётом переопределения мастером; пусто, если её не было
- * @param amountNote причина итоговой суммы; есть только у выполненного визита
+ * @param finalAmount итоговая сумма визита; пусто, пока визит не отмечен выполненным, и для клиента
+ * @param prepaymentAmount сумма полученной предоплаты; пусто, если её не было, и для клиента
+ * @param prepaymentOutcome исход полученной предоплаты с учётом переопределения мастером; пусто, если её не было, и
+ *     для клиента
+ * @param amountNote причина итоговой суммы; есть только у выполненного визита и только для сотрудника
  */
 public record BookingView(
         UUID id,

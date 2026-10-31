@@ -3,6 +3,7 @@ package gag.nails.booking.internal.booking;
 import gag.nails.booking.model.BookingStatus;
 import gag.nails.booking.model.CancelReason;
 import gag.nails.booking.model.PrepaymentOutcome;
+import gag.nails.common.error.InternalException;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,19 +18,19 @@ public final class PrepaymentOutcomes {
      * Исход с учётом переопределения мастером.
      *
      * @param prepaymentReceived получена ли предоплата по записи
-     * @param override переопределение: {@link PrepaymentOutcome#KEPT} или {@link PrepaymentOutcome#RETURNED}, только
-     *     у отменённой записи и неявки
+     * @param override переопределение; бывает только у отменённой записи и неявки
      * @return пусто, если предоплаты не было
+     * @throws InternalException если запись отменена без причины — нарушено ограничение базы
      */
     public static @Nullable PrepaymentOutcome of(
             BookingStatus status,
             @Nullable CancelReason cancelReason,
             boolean prepaymentReceived,
-            @Nullable PrepaymentOutcome override) {
+            @Nullable PrepaymentOverride override) {
         if (!prepaymentReceived) {
             return null;
         }
-        return override != null ? override : byRule(status, cancelReason);
+        return override != null ? override.outcome() : byRule(status, cancelReason);
     }
 
     /**
@@ -37,17 +38,21 @@ public final class PrepaymentOutcomes {
      * поздняя отмена клиентом и отказ из-за опоздания (то, что ставит клиенту признак обязательной предоплаты) —
      * удержана; отмена в окне, мастером и удалением аккаунта — возвращена. Отмена по сроку предоплаты с полученной
      * предоплатой невозможна; если бы она случилась, удерживать было бы нечего — возвращена.
+     *
+     * @throws InternalException если запись отменена без причины — нарушено ограничение базы
      */
     public static PrepaymentOutcome byRule(BookingStatus status, @Nullable CancelReason cancelReason) {
         return switch (status) {
             case AWAITING_PREPAYMENT, CONFIRMED, COMPLETED -> PrepaymentOutcome.APPLIED;
             case NO_SHOW -> PrepaymentOutcome.KEPT;
-            // У отменённой записи причина есть всегда (CHECK в базе); без неё удерживать не за что.
-            case CANCELLED -> cancelReason == null ? PrepaymentOutcome.RETURNED : byCancelReason(cancelReason);
+            case CANCELLED -> byCancelReason(cancelReason);
         };
     }
 
-    private static PrepaymentOutcome byCancelReason(CancelReason reason) {
+    private static PrepaymentOutcome byCancelReason(@Nullable CancelReason reason) {
+        if (reason == null) {
+            throw new InternalException("cancelled booking without a cancel reason");
+        }
         return switch (reason) {
             case CLIENT_LATE, LATE_ARRIVAL -> PrepaymentOutcome.KEPT;
             case CLIENT, MASTER, PREPAYMENT_TIMEOUT, ACCOUNT_DELETED -> PrepaymentOutcome.RETURNED;

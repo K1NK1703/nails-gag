@@ -44,7 +44,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
         }
         booking.proposeEarlierTime(proposedStart, now);
         events.earlierTimeProposed(booking, now);
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -52,7 +52,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
         actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         booking.withdrawEarlierTime();
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -65,6 +65,6 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
         } else {
             events.earlierTimeDeclined(booking, now);
         }
-        return booking.toView();
+        return booking.toView(actor);
     }
 }
