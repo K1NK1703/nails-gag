@@ -24,6 +24,9 @@ import org.jspecify.annotations.Nullable;
  * @param plannedServices состав, выбранный при записи: основная услуга первой, затем дополнения
  * @param actualServices фактический состав; пуст, пока визит не отмечен выполненным
  * @param finalAmount итоговая сумма визита; пусто, пока визит не отмечен выполненным
+ * @param prepaymentAmount сумма полученной предоплаты; пусто, если её не было
+ * @param prepaymentOutcome исход полученной предоплаты с учётом переопределения мастером; пусто, если её не было
+ * @param amountNote причина итоговой суммы; есть только у выполненного визита
  */
 public record BookingView(
         UUID id,
@@ -45,7 +48,10 @@ public record BookingView(
         @Nullable Instant noShowAt,
         List<BookedServiceView> plannedServices,
         List<BookedServiceView> actualServices,
-        @Nullable BigDecimal finalAmount) {
+        @Nullable BigDecimal finalAmount,
+        @Nullable BigDecimal prepaymentAmount,
+        @Nullable PrepaymentOutcome prepaymentOutcome,
+        @Nullable String amountNote) {
 
     /** Время, к которому клиент приходит: согласованное более раннее или начало слота. */
     public Instant visitStart() {

@@ -8,6 +8,7 @@ import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.CancelReason;
 import gag.nails.booking.model.EarlierTimeStatus;
 import gag.nails.booking.model.EarlierTimeView;
+import gag.nails.booking.model.PrepaymentOutcome;
 import gag.nails.catalog.model.ServiceView;
 import gag.nails.common.error.InternalException;
 import gag.nails.schedule.model.SlotView;
@@ -73,6 +74,14 @@ public class BookingEntity {
     @Column(precision = 12, scale = 2)
     private @Nullable BigDecimal finalAmount;
 
+    private @Nullable String amountNote;
+
+    @Column(precision = 12, scale = 2)
+    private @Nullable BigDecimal prepaymentAmount;
+
+    @Enumerated(EnumType.STRING)
+    private @Nullable PrepaymentOutcome prepaymentOutcomeOverride;
+
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder")
     @BatchSize(size = 50)
@@ -130,15 +139,20 @@ public class BookingEntity {
         withdrawPendingOffer();
     }
 
-    /** Запись, ждавшая предоплату, становится подтверждённой — с предоплатой или без неё. */
-    public void confirm(Instant now, boolean prepaymentReceived) {
+    /**
+     * Запись, ждавшая предоплату, становится подтверждённой — с предоплатой или без неё.
+     *
+     * @param prepaymentAmount сумма полученной предоплаты, больше нуля; пусто — подтверждена без предоплаты
+     */
+    public void confirm(Instant now, @Nullable BigDecimal prepaymentAmount) {
         if (status != BookingStatus.AWAITING_PREPAYMENT) {
             throw new InvalidTransitionException(id, status, "confirm");
         }
         status = BookingStatus.CONFIRMED;
         prepaymentDeadline = null;
-        if (prepaymentReceived) {
+        if (prepaymentAmount != null) {
             prepaymentReceivedAt = now;
+            this.prepaymentAmount = prepaymentAmount;
         }
     }
 
@@ -218,7 +232,8 @@ public class BookingEntity {
      * Визит выполнен: из активной записи либо исправлением отметки «не пришла». Фактический состав
      * копируется из выбранного при записи, итог — сумма его цен; дальше мастер правит их отдельно.
      * Отметка разрешена и записи, ждавшей предоплату (мастер решает на месте): срок предоплаты при
-     * этом снимается.
+     * этом снимается. Исход предоплаты выполненного визита — в счёт визита, поэтому переопределение,
+     * поставленное неявке, снимается.
      */
     public void complete(Instant now) {
         if (status == BookingStatus.COMPLETED || status == BookingStatus.CANCELLED) {
@@ -228,6 +243,8 @@ public class BookingEntity {
         completedAt = now;
         noShowAt = null;
         prepaymentDeadline = null;
+        prepaymentOutcomeOverride = null;
+        amountNote = null;
         expirePendingOffer();
         var actual = services.stream()
                 .filter(service -> service.phase() == ServicePhase.PLANNED)
@@ -240,6 +257,7 @@ public class BookingEntity {
     /**
      * Клиент не пришёл: из активной записи либо исправлением отметки «выполнена». Отметка разрешена
      * и записи, ждавшей предоплату (мастер решает на месте): срок предоплаты при этом снимается.
+     * Фактический состав, итог и причина суммы стираются.
      */
     public void markNoShow(Instant now) {
         if (status == BookingStatus.NO_SHOW || status == BookingStatus.CANCELLED) {
@@ -252,6 +270,7 @@ public class BookingEntity {
         expirePendingOffer();
         services.removeIf(service -> service.phase() == ServicePhase.ACTUAL);
         finalAmount = null;
+        amountNote = null;
     }
 
     /** Фактический состав и итог выполненного визита. {@code actual} — основная услуга первой. */
@@ -262,6 +281,61 @@ public class BookingEntity {
         services.removeIf(service -> service.phase() == ServicePhase.ACTUAL);
         addServices(actual, ServicePhase.ACTUAL);
         this.finalAmount = finalAmount;
+    }
+
+    /**
+     * Фактический состав, итог и причина суммы выполненного визита. {@code actual} — основная услуга первой;
+     * пустая причина стирается.
+     */
+    public void replaceVisit(List<ServiceView> actual, BigDecimal finalAmount, @Nullable String amountNote) {
+        replaceActualServices(actual, finalAmount);
+        this.amountNote = blankToNull(amountNote);
+    }
+
+    /**
+     * Момент, от которого считается срок переопределения исхода предоплаты: отмена или неявка.
+     *
+     * @throws InvalidTransitionException если предоплата не получена или запись не отменена и не отмечена неявкой —
+     *     исход тогда в счёт визита, переопределять нечего
+     */
+    public Instant prepaymentSettledAt() {
+        var settledAt = switch (status) {
+            case CANCELLED -> cancelledAt;
+            case NO_SHOW -> noShowAt;
+            case AWAITING_PREPAYMENT, CONFIRMED, COMPLETED -> null;
+        };
+        if (prepaymentReceivedAt == null || settledAt == null) {
+            throw new InvalidTransitionException(id, status, "set prepayment outcome");
+        }
+        return settledAt;
+    }
+
+    /**
+     * Переопределяет исход полученной предоплаты отменённой записи или неявки: {@link PrepaymentOutcome#KEPT} или
+     * {@link PrepaymentOutcome#RETURNED}. Значение, совпадающее с правилом, снимает переопределение.
+     *
+     * @throws InvalidTransitionException если переопределять нечего ({@link #prepaymentSettledAt})
+     * @throws InternalException если передан {@link PrepaymentOutcome#APPLIED} — его отвергает вызывающий код
+     */
+    public void overridePrepaymentOutcome(PrepaymentOutcome outcome) {
+        prepaymentSettledAt();
+        if (outcome == PrepaymentOutcome.APPLIED) {
+            throw new InternalException("prepayment outcome of a settled booking cannot be APPLIED");
+        }
+        prepaymentOutcomeOverride = outcome == PrepaymentOutcomes.byRule(status, cancelReason) ? null : outcome;
+    }
+
+    /** Прайс выбранного при записи состава. */
+    public BigDecimal plannedPrice() {
+        return services.stream()
+                .filter(service -> service.phase() == ServicePhase.PLANNED)
+                .map(BookedServiceEntity::price)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** Исход полученной предоплаты с учётом переопределения ({@link PrepaymentOutcomes#of}); пусто — её не было. */
+    public @Nullable PrepaymentOutcome prepaymentOutcome() {
+        return PrepaymentOutcomes.of(status, cancelReason, prepaymentReceivedAt != null, prepaymentOutcomeOverride);
     }
 
     void setComment(@Nullable String comment) {
@@ -362,7 +436,10 @@ public class BookingEntity {
                 noShowAt,
                 servicesOf(ServicePhase.PLANNED),
                 servicesOf(ServicePhase.ACTUAL),
-                finalAmount);
+                finalAmount,
+                prepaymentAmount,
+                prepaymentOutcome(),
+                amountNote);
     }
 
     private @Nullable EarlierTimeView earlierTime() {
