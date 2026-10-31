@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Objects;
 
 /**
  * Период отчёта или выборки денежных фактов: дни в поясе салона, обе границы включительно. Общий для модулей, которые
@@ -25,7 +26,10 @@ public final class ReportPeriod {
     /** Наибольшая длина периода в днях, считая обе границы: високосный год целиком. */
     public static final int MAX_DAYS = 366;
 
-    /** На сколько дней вперёд от «сегодня» может заходить период. */
+    /**
+     * На сколько дней вперёд от «сегодня» может заходить период: отчёт может смотреть на год вперёд — будущие
+     * повторяющиеся записи и запланированные визиты.
+     */
     public static final int MAX_DAYS_AHEAD = 366;
 
     private final LocalDate from;
@@ -39,6 +43,8 @@ public final class ReportPeriod {
     /**
      * Проверенный период.
      *
+     * @param from первый день периода, включительно; это же имя — поле {@link ValidationException}
+     * @param to последний день периода, включительно; это же имя — поле {@link ValidationException}
      * @param today сегодняшний день в поясе салона
      * @throws ValidationException если период вне правил класса ({@code from} или {@code to})
      */
@@ -67,12 +73,28 @@ public final class ReportPeriod {
     }
 
     /** Начало первого дня периода. */
-    public Instant start(SalonTimeZone zone) {
+    public Instant startIn(SalonTimeZone zone) {
         return zone.at(from, LocalTime.MIDNIGHT);
     }
 
-    /** Начало дня после последнего: период — полуинтервал {@code [start, end)}. */
-    public Instant end(SalonTimeZone zone) {
+    /** Начало дня после последнего: период — полуинтервал {@code [startIn, endIn)}. */
+    public Instant endIn(SalonTimeZone zone) {
         return zone.at(to.plusDays(1), LocalTime.MIDNIGHT);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof ReportPeriod period && from.equals(period.from) && to.equals(period.to);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(from, to);
+    }
+
+    /** Например, {@code 2026-01-01..2026-12-31}. */
+    @Override
+    public String toString() {
+        return from + ".." + to;
     }
 }

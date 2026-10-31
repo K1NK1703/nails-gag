@@ -49,8 +49,19 @@ class ReportPeriodTest {
         var zone = new SalonTimeZone(ZoneId.of("Europe/Moscow"));
         var period = ReportPeriod.of(TODAY, TODAY, TODAY);
 
-        assertThat(period.start(zone)).isEqualTo(Instant.parse("2026-09-30T21:00:00Z"));
-        assertThat(period.end(zone)).isEqualTo(Instant.parse("2026-10-01T21:00:00Z"));
+        assertThat(period.startIn(zone)).isEqualTo(Instant.parse("2026-09-30T21:00:00Z"));
+        assertThat(period.endIn(zone)).isEqualTo(Instant.parse("2026-10-01T21:00:00Z"));
+    }
+
+    @Test
+    void equalByDaysAndPrintedAsRange() {
+        var year = ReportPeriod.of(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), TODAY);
+
+        assertThat(year).isEqualTo(ReportPeriod.of(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), TODAY));
+        assertThat(year)
+                .hasSameHashCodeAs(ReportPeriod.of(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), TODAY));
+        assertThat(year).isNotEqualTo(ReportPeriod.of(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 30), TODAY));
+        assertThat(year).hasToString("2026-01-01..2026-12-31");
     }
 
     private static void rejected(LocalDate from, LocalDate to, String field) {

@@ -46,7 +46,7 @@ class DefaultBookingFinance implements BookingFinance {
         var period = period(from, to);
         return bookings
                 .completedVisitsWithServices(
-                        BookingStatus.COMPLETED, period.start(salonTimeZone), period.end(salonTimeZone))
+                        BookingStatus.COMPLETED, period.startIn(salonTimeZone), period.endIn(salonTimeZone))
                 .stream()
                 .map(booking -> booking.toVisitFact(salonTimeZone.dayOf(booking.visitStart())))
                 .toList();
@@ -57,7 +57,7 @@ class DefaultBookingFinance implements BookingFinance {
         actor.requireRead(Section.FINANCE);
         var period = period(from, to);
         return bookings
-                .settledWithReceivedPrepayment(SETTLED, period.start(salonTimeZone), period.end(salonTimeZone))
+                .settledWithReceivedPrepayment(SETTLED, period.startIn(salonTimeZone), period.endIn(salonTimeZone))
                 .stream()
                 .filter(booking -> booking.prepaymentOutcome() == PrepaymentOutcome.KEPT)
                 .map(booking -> booking.toKeptPrepaymentFact(salonTimeZone.dayOf(booking.settledAt())))
@@ -65,6 +65,6 @@ class DefaultBookingFinance implements BookingFinance {
     }
 
     private ReportPeriod period(LocalDate from, LocalDate to) {
-        return ReportPeriod.of(from, to, salonTimeZone.dayOf(clock.instant()));
+        return ReportPeriod.of(from, to, salonTimeZone.today(clock));
     }
 }
