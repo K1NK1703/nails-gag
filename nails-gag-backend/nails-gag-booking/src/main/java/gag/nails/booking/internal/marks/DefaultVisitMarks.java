@@ -37,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -151,8 +152,9 @@ class DefaultVisitMarks implements VisitMarks {
     }
 
     /**
-     * Итог одной записи пакета. Отказ инфраструктуры (транзакцию не начать, база недоступна) прерывает весь пакет:
-     * остальные записи упали бы так же, и вместо пятидесяти одинаковых кодов вызывающий получает одну ошибку.
+     * Итог одной записи пакета. Отказ инфраструктуры (транзакцию не начать, база недоступна или временно отказывает)
+     * прерывает весь пакет: остальные записи упали бы так же, и вместо пятидесяти одинаковых кодов вызывающий
+     * получает одну ошибку.
      */
     private MarkResult completeInOwnTransaction(UUID bookingId) {
         try {
@@ -162,7 +164,9 @@ class DefaultVisitMarks implements VisitMarks {
             // Ожидаемый отказ записи (не начата, уже отмечена…): код уходит в итог, лог — только для отладки.
             log.debug("booking {} not completed as planned: {}", bookingId, e.code());
             return new MarkResult(bookingId, e.code());
-        } catch (CannotCreateTransactionException | DataAccessResourceFailureException e) {
+        } catch (CannotCreateTransactionException
+                | DataAccessResourceFailureException
+                | TransientDataAccessResourceException e) {
             throw e;
         } catch (PessimisticLockingFailureException e) {
             log.warn(

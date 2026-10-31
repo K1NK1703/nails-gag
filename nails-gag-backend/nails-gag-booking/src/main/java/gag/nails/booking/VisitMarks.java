@@ -57,8 +57,10 @@ public interface VisitMarks {
      *     ({@code bookingIds})
      * @throws AccessDeniedException если у актора нет изменения раздела «Записи»
      * @throws InternalException если вызван внутри транзакции
-     * @throws org.springframework.dao.DataAccessException если база недоступна или транзакцию не начать: пакет
+     * @throws org.springframework.dao.DataAccessException если база недоступна или временно отказывает: пакет
      *     прерывается, уже отмеченные записи остаются отмеченными
+     * @throws org.springframework.transaction.CannotCreateTransactionException если транзакцию записи не начать:
+     *     пакет прерывается так же
      */
     List<MarkResult> completeAsPlanned(List<UUID> bookingIds, Actor actor);
 
