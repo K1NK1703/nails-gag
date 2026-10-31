@@ -31,6 +31,9 @@ import org.jspecify.annotations.Nullable;
  * @param prepaymentOutcome исход полученной предоплаты с учётом переопределения мастером; пусто, если её не было, и
  *     для клиента
  * @param amountNote причина итоговой суммы; есть только у выполненного визита и только для сотрудника
+ * @param clientErasedAt когда клиент удалил аккаунт, если визит по активной записи тогда ещё не начался: запись не
+ *     отменилась и ждала решения мастера (на рассмотрении, пока активна). Деньгами не является и не скрывается —
+ *     клиент такую запись и так не увидит: аккаунта у него нет
  */
 public record BookingView(
         UUID id,
@@ -55,7 +58,8 @@ public record BookingView(
         @Nullable BigDecimal finalAmount,
         @Nullable BigDecimal prepaymentAmount,
         @Nullable PrepaymentOutcome prepaymentOutcome,
-        @Nullable String amountNote) {
+        @Nullable String amountNote,
+        @Nullable Instant clientErasedAt) {
 
     /** Время, к которому клиент приходит: согласованное более раннее или начало слота. */
     public Instant visitStart() {

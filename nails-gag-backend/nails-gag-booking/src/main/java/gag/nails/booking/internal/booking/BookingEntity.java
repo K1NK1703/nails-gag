@@ -85,6 +85,8 @@ public class BookingEntity {
     @Enumerated(EnumType.STRING)
     private @Nullable PrepaymentOverride prepaymentOutcomeOverride;
 
+    private @Nullable Instant clientErasedAt;
+
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder")
     @BatchSize(size = 50)
@@ -370,6 +372,17 @@ public class BookingEntity {
         this.masterNote = blankToNull(masterNote);
     }
 
+    /**
+     * Клиент удалил аккаунт, а визит по активной записи ещё не начался: запись не отменяется — клиентка может прийти, —
+     * а ждёт решения мастера. Отметка остаётся и после отмены или отметки визита; повторное обезличивание её не
+     * сдвигает.
+     */
+    public void markClientErased(Instant now) {
+        if (clientErasedAt == null) {
+            clientErasedAt = now;
+        }
+    }
+
     /** Объединение клиентов: запись переходит к тому, кто остался. */
     public void reassignTo(UUID clientId) {
         this.clientId = clientId;
@@ -424,6 +437,12 @@ public class BookingEntity {
         return agreedStart;
     }
 
+    /** Момент обезличивания клиента, если запись ждала решения мастера ({@link #markClientErased}). */
+    @Nullable
+    public Instant clientErasedAt() {
+        return clientErasedAt;
+    }
+
     @Nullable
     CancelReason cancelReason() {
         return cancelReason;
@@ -464,7 +483,8 @@ public class BookingEntity {
                 staff ? finalAmount : null,
                 staff ? prepaymentAmount : null,
                 staff ? prepaymentOutcome() : null,
-                staff ? amountNote : null);
+                staff ? amountNote : null,
+                clientErasedAt);
     }
 
     private @Nullable EarlierTimeView earlierTime() {

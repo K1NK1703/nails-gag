@@ -78,6 +78,12 @@ class DefaultBookingQueries implements BookingQueries {
     }
 
     @Override
+    public List<BookingView> underReview(Actor actor) {
+        actor.requireRead(Section.BOOKINGS);
+        return views(bookings.underReview(BookingStatus.active()), actor);
+    }
+
+    @Override
     public List<BookingView> awaitingPrepayment(Actor actor) {
         actor.requireRead(Section.BOOKINGS);
         return views(

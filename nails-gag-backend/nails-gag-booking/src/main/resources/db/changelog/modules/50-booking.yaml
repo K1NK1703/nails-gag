@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/booking/0004-references.sql
   - include:
       file: db/changelog/booking/0005-finance.sql
+  - include:
+      file: db/changelog/booking/0006-erased-client-review.sql

@@ -62,6 +62,15 @@ public interface BookingQueries {
     List<BookingView> awaitingMark(Actor actor);
 
     /**
+     * Записи на рассмотрении: активные записи клиентов, удаливших аккаунт до начала визита ({@link
+     * BookingView#clientErasedAt()}), по началу визита. Мастер решает — оставить запись (после начала визита она ждёт
+     * отметки, как обычно) или отменить. Нужен уровень чтения раздела «Записи».
+     *
+     * @throws AccessDeniedException если у актора нет чтения раздела «Записи»
+     */
+    List<BookingView> underReview(Actor actor);
+
+    /**
      * Записи, ждущие предоплату, по сроку. Нужен уровень чтения раздела «Записи».
      *
      * @throws AccessDeniedException если у актора нет чтения раздела «Записи»

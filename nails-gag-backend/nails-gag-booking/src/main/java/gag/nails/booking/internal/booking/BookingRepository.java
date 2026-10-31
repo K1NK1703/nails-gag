@@ -50,6 +50,11 @@ public interface BookingRepository extends JpaRepository<BookingEntity, UUID> {
             + " order by b.slotStartsAt, b.id")
     List<BookingEntity> startedBy(Collection<BookingStatus> statuses, Instant now);
 
+    /** Активные записи с отметкой обезличивания клиента, по началу визита ({@link BookingEntity#visitStart}). */
+    @Query("select b from BookingEntity b where b.status in :statuses and b.clientErasedAt is not null"
+            + " order by coalesce(b.agreedStart, b.slotStartsAt), b.id")
+    List<BookingEntity> underReview(Collection<BookingStatus> statuses);
+
     List<BookingEntity> findAllByStatusOrderByPrepaymentDeadlineAscIdAsc(BookingStatus status);
 
     @Query("select b.id from BookingEntity b where b.status = :status and b.prepaymentDeadline < :now")

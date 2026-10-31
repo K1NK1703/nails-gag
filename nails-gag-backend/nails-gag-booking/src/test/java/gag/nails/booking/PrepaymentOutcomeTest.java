@@ -43,16 +43,16 @@ class PrepaymentOutcomeTest extends BookingTestSupport {
     EntityManager entityManager;
 
     /**
-     * Чем закончилась запись с полученной предоплатой и какой исход у предоплаты по умолчанию. Отмена удалением
-     * аккаунта в таблице спецификации не названа: она без последствий для клиента, как отмена в окне, поэтому
-     * предоплата возвращается. Отмена по сроку предоплаты с полученной предоплатой невозможна.
+     * Чем закончилась запись с полученной предоплатой и какой исход у предоплаты по умолчанию (таблица спецификации
+     * §3.3). Запись клиента, удалившего аккаунт, отменяет мастер — с причиной удаления аккаунта, предоплата
+     * удерживается. Отмена по сроку предоплаты с полученной предоплатой невозможна.
      */
     enum Ending {
         CANCELLED_BY_CLIENT_IN_TIME(CancelReason.CLIENT, PrepaymentOutcome.RETURNED),
         CANCELLED_BY_CLIENT_LATE(CancelReason.CLIENT_LATE, PrepaymentOutcome.KEPT),
         CANCELLED_BY_MASTER(CancelReason.MASTER, PrepaymentOutcome.RETURNED),
         REFUSED_FOR_LATE_ARRIVAL(CancelReason.LATE_ARRIVAL, PrepaymentOutcome.KEPT),
-        CANCELLED_BY_ACCOUNT_DELETION(CancelReason.ACCOUNT_DELETED, PrepaymentOutcome.RETURNED),
+        CANCELLED_AFTER_ACCOUNT_DELETION(CancelReason.ACCOUNT_DELETED, PrepaymentOutcome.KEPT),
         NO_SHOW(null, PrepaymentOutcome.KEPT);
 
         final @Nullable CancelReason reason;
@@ -258,11 +258,10 @@ class PrepaymentOutcomeTest extends BookingTestSupport {
                 timeIsAfterStartOf(slot, Duration.ofMinutes(30));
                 yield bookings.refuseLateArrival(booking.id(), master);
             }
-            case CANCELLED_BY_ACCOUNT_DELETION -> {
+            case CANCELLED_AFTER_ACCOUNT_DELETION -> {
+                // Обезличивание запись не отменяет; отменяет мастер, и причина — удаление аккаунта.
                 clients.erase(clientId);
-                entityManager.flush();
-                entityManager.clear();
-                yield queries.get(booking.id(), master);
+                yield bookings.cancel(booking.id(), master);
             }
             case NO_SHOW -> {
                 timeIsAfterStartOf(slot, Duration.ofMinutes(30));

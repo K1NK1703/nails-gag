@@ -8,7 +8,6 @@ import gag.nails.booking.event.BookingCancelled;
 import gag.nails.booking.model.BookedServiceView;
 import gag.nails.booking.model.BookingStatus;
 import gag.nails.booking.model.BookingView;
-import gag.nails.booking.model.CancelReason;
 import gag.nails.clients.error.ClientErasedException;
 import gag.nails.common.actor.Actor;
 import gag.nails.schedule.model.SlotView;
@@ -35,7 +34,7 @@ class BookingEraseTest extends BookingTestSupport {
     EarlierTimeOffers offers;
 
     @Test
-    void futureBookingsAreCancelledAndSlotsFreed(PublishedEvents events) {
+    void futureBookingsStayActiveAndSlotsOccupied(PublishedEvents events) {
         var anna = client("Анна");
         var monday = slot(MONDAY, "12:00");
         var tuesday = slot(TUESDAY, "12:00");
@@ -47,27 +46,25 @@ class BookingEraseTest extends BookingTestSupport {
         entityManager.clear();
 
         for (var id : List.of(first.id(), second.id())) {
-            var cancelled = queries.get(id, master);
-            assertThat(cancelled.status()).isEqualTo(BookingStatus.CANCELLED);
-            assertThat(cancelled.cancelReason()).isEqualTo(CancelReason.ACCOUNT_DELETED);
-            assertThat(cancelled.cancelledAt()).isEqualTo(TestTimeConfiguration.START);
+            var kept = queries.get(id, master);
+            assertThat(kept.status()).isEqualTo(BookingStatus.CONFIRMED);
+            assertThat(kept.cancelReason()).isNull();
+            assertThat(kept.clientErasedAt()).isEqualTo(TestTimeConfiguration.START);
         }
-        assertThat(scheduleQueries.freeSlots(MONDAY, TUESDAY))
-                .extracting(SlotView::id)
-                .containsExactlyInAnyOrder(monday.id(), tuesday.id());
-        assertThat(queries.activeOfClient(anna, master)).isEmpty();
-        assertThat(queries.historyOfClient(anna, master))
+        assertThat(scheduleQueries.freeSlots(MONDAY, TUESDAY)).isEmpty();
+        assertThat(queries.activeOfClient(anna, master))
                 .extracting(BookingView::id)
                 .containsExactlyInAnyOrder(first.id(), second.id());
+        assertThat(queries.historyOfClient(anna, master)).isEmpty();
         assertThat(events.ofType(BookingCancelled.class)
-                        .matching(e -> e.clientId().equals(anna) && e.reason() == CancelReason.ACCOUNT_DELETED))
-                .hasSize(2);
+                        .matching(e -> e.clientId().equals(anna)))
+                .isEmpty();
         assertThat(owesPrepayment(anna)).isFalse();
         assertThat(clientQueries.prepaymentHistory(anna, master)).isEmpty();
     }
 
     @Test
-    void bookingAwaitingPrepaymentIsCancelledToo() {
+    void bookingAwaitingPrepaymentStaysAwaiting() {
         var anna = client("Анна");
         var slot = slot(MONDAY, "12:00");
         var booking = bookings.createByMaster(manicure(anna, slot), true, master);
@@ -77,14 +74,14 @@ class BookingEraseTest extends BookingTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        var cancelled = queries.get(booking.id(), master);
-        assertThat(cancelled.status()).isEqualTo(BookingStatus.CANCELLED);
-        assertThat(cancelled.cancelReason()).isEqualTo(CancelReason.ACCOUNT_DELETED);
-        assertThat(cancelled.prepaymentDeadline()).isNull();
-        assertThat(queries.awaitingPrepayment(master)).isEmpty();
-        assertThat(scheduleQueries.freeSlots(MONDAY, MONDAY))
-                .extracting(SlotView::id)
-                .containsExactly(slot.id());
+        var kept = queries.get(booking.id(), master);
+        assertThat(kept.status()).isEqualTo(BookingStatus.AWAITING_PREPAYMENT);
+        assertThat(kept.cancelReason()).isNull();
+        assertThat(kept.prepaymentDeadline()).isEqualTo(booking.prepaymentDeadline());
+        assertThat(queries.awaitingPrepayment(master))
+                .extracting(BookingView::id)
+                .containsExactly(booking.id());
+        assertThat(scheduleQueries.freeSlots(MONDAY, MONDAY)).isEmpty();
     }
 
     @Test
@@ -127,7 +124,7 @@ class BookingEraseTest extends BookingTestSupport {
 
         assertThat(queries.get(completed.id(), master).comment()).isNull();
         assertThat(queries.get(cancelled.id(), master).comment()).isNull();
-        assertThat(queries.get(cancelled.id(), master).status()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(queries.get(cancelled.id(), master).status()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(queries.masterNote(completed.id(), master)).contains("Принесёт свой лак");
     }
 

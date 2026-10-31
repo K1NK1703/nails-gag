@@ -35,9 +35,9 @@ public final class PrepaymentOutcomes {
 
     /**
      * Исход по умолчанию для записи с полученной предоплатой: активная или выполненная — в счёт визита; неявка,
-     * поздняя отмена клиентом и отказ из-за опоздания (то, что ставит клиенту признак обязательной предоплаты) —
-     * удержана; отмена в окне, мастером и удалением аккаунта — возвращена. Отмена по сроку предоплаты с полученной
-     * предоплатой невозможна; если бы она случилась, удерживать было бы нечего — возвращена.
+     * поздняя отмена клиентом, отказ из-за опоздания и отмена мастером записи клиента, удалившего аккаунт, —
+     * удержана; отмена в окне и мастером — возвращена. Отмена по сроку предоплаты с полученной предоплатой
+     * невозможна; если бы она случилась, удерживать было бы нечего — возвращена.
      *
      * @throws InternalException если запись отменена без причины — нарушено ограничение базы
      */
@@ -54,8 +54,8 @@ public final class PrepaymentOutcomes {
             throw new InternalException("cancelled booking without a cancel reason");
         }
         return switch (reason) {
-            case CLIENT_LATE, LATE_ARRIVAL -> PrepaymentOutcome.KEPT;
-            case CLIENT, MASTER, PREPAYMENT_TIMEOUT, ACCOUNT_DELETED -> PrepaymentOutcome.RETURNED;
+            case CLIENT_LATE, LATE_ARRIVAL, ACCOUNT_DELETED -> PrepaymentOutcome.KEPT;
+            case CLIENT, MASTER, PREPAYMENT_TIMEOUT -> PrepaymentOutcome.RETURNED;
         };
     }
 }

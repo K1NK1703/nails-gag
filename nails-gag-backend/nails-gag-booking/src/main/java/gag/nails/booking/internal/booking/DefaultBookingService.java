@@ -279,7 +279,9 @@ class DefaultBookingService implements BookingService {
     /** Мастер отменяет без последствий; клиент — бесплатно в окне, позже это поздняя отмена. */
     private static CancelReason cancelReason(Actor actor, BookingRules rules, BookingEntity booking) {
         if (actor.canWrite(Section.BOOKINGS)) {
-            return CancelReason.MASTER;
+            // Запись клиента, удалившего аккаунт, мастер отменяет по этой причине: признак не ставится, предоплата
+            // удерживается (спецификация финансов §3.3а).
+            return booking.clientErasedAt() != null ? CancelReason.ACCOUNT_DELETED : CancelReason.MASTER;
         }
         return rules.freeCancellationOpen(booking.slotStartsAt()) ? CancelReason.CLIENT : CancelReason.CLIENT_LATE;
     }
