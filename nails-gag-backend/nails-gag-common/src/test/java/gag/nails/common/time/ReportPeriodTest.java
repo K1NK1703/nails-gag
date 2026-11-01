@@ -64,6 +64,25 @@ class ReportPeriodTest {
         assertThat(year).hasToString("2026-01-01..2026-12-31");
     }
 
+    @Test
+    void singleDayHasTheSameBoundsAsPeriod() {
+        var lastAllowed = TODAY.plusDays(ReportPeriod.MAX_DAYS_AHEAD);
+
+        assertThat(ReportPeriod.requireDay("occurredOn", ReportPeriod.EARLIEST, TODAY))
+                .isEqualTo(ReportPeriod.EARLIEST);
+        assertThat(ReportPeriod.requireDay("occurredOn", lastAllowed, TODAY)).isEqualTo(lastAllowed);
+        dayRejected(ReportPeriod.EARLIEST.minusDays(1));
+        dayRejected(LocalDate.MIN);
+        dayRejected(lastAllowed.plusDays(1));
+        dayRejected(LocalDate.MAX);
+    }
+
+    private static void dayRejected(LocalDate day) {
+        assertThatThrownBy(() -> ReportPeriod.requireDay("occurredOn", day, TODAY))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).field()).isEqualTo("occurredOn"));
+    }
+
     private static void rejected(LocalDate from, LocalDate to, String field) {
         assertThatThrownBy(() -> ReportPeriod.of(from, to, TODAY))
                 .isInstanceOf(ValidationException.class)

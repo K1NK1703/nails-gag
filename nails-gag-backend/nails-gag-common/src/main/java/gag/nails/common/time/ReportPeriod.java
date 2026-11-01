@@ -64,6 +64,26 @@ public final class ReportPeriod {
         return new ReportPeriod(from, to);
     }
 
+    /**
+     * Отдельный день данных за период (например, день денежной операции) в тех же пределах, что и границы периода:
+     * не раньше {@link #EARLIEST}, не позже «сегодня» плюс {@value #MAX_DAYS_AHEAD} дней. Такой день всегда может
+     * попасть в допустимый период.
+     *
+     * @param field имя поля для {@link ValidationException}
+     * @param today сегодняшний день в поясе салона
+     * @return тот же день
+     * @throws ValidationException (поле {@code field}) если день вне пределов
+     */
+    public static LocalDate requireDay(String field, LocalDate day, LocalDate today) {
+        if (day.isBefore(EARLIEST)) {
+            throw new ValidationException(field, "must not be before " + EARLIEST);
+        }
+        if (day.isAfter(today.plusDays(MAX_DAYS_AHEAD))) {
+            throw new ValidationException(field, "must be at most " + MAX_DAYS_AHEAD + " days after today");
+        }
+        return day;
+    }
+
     public LocalDate from() {
         return from;
     }

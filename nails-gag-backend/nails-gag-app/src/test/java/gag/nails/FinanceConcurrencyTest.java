@@ -1,0 +1,160 @@
+package gag.nails;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import gag.nails.common.actor.Actor;
+import gag.nails.common.error.ValidationException;
+import gag.nails.common.time.SalonTimeZone;
+import gag.nails.finance.FinanceCategories;
+import gag.nails.finance.FinanceEntries;
+import gag.nails.finance.command.AddEntry;
+import gag.nails.finance.command.CreateCategory;
+import gag.nails.finance.command.UpdateEntry;
+import gag.nails.finance.error.CategoryNameTakenException;
+import gag.nails.finance.error.EntryNotFoundException;
+import gag.nails.finance.model.CategoryView;
+import gag.nails.finance.model.EntryAction;
+import gag.nails.finance.model.EntryChangeView;
+import gag.nails.finance.model.EntryKind;
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * Добавления и переименования категорий встречаются на блокировке списка вида, изменения записей — на блокировке
+ * строки записи и разделяемой блокировке строки категории. Порядок задаётся не гонкой, а ожиданием блокировки
+ * ({@link ConcurrencySupport#whileRowIsHeld}): второй гарантированно ждёт первого. База общая для тестов с тем же
+ * контекстом, поэтому названия категорий — со случайным хвостом.
+ */
+@SpringBootTest(webEnvironment = WebEnvironment.NONE, properties = "nails-gag.booking.jobs.enabled=false")
+@Import(PostgresTestcontainers.class)
+class FinanceConcurrencyTest {
+
+    @Autowired
+    FinanceCategories categories;
+
+    @Autowired
+    FinanceEntries entries;
+
+    @Autowired
+    Clock clock;
+
+    @Autowired
+    SalonTimeZone salonTimeZone;
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    @Autowired
+    JdbcClient jdbc;
+
+    private final Actor master = Actor.of(UUID.randomUUID(), null, Actor.masterAccess());
+
+    private ConcurrencySupport locks;
+
+    @BeforeEach
+    void financeLocks() {
+        locks = new ConcurrencySupport(transaction, jdbc, "%finance.%");
+    }
+
+    @Test
+    void createWaitingForCreateOfTheSameNameIsRejected() throws Exception {
+        var name = unique("Курсы");
+
+        var created = locks.whileRowIsHeld(
+                () -> create(EntryKind.EXPENSE, name), () -> create(EntryKind.EXPENSE, name.toUpperCase()));
+
+        assertThat(created.failure()).isInstanceOf(CategoryNameTakenException.class);
+        assertThat(categories.list(EntryKind.EXPENSE, master))
+                .extracting(CategoryView::name)
+                .containsOnlyOnce(name)
+                .doesNotContain(name.toUpperCase());
+    }
+
+    @Test
+    void concurrentCreatesGetDistinctPositions() throws Exception {
+        var first = new AtomicReference<CategoryView>();
+        var second = new AtomicReference<CategoryView>();
+
+        var created = locks.whileRowIsHeld(
+                () -> first.set(create(EntryKind.INCOME, unique("Подарки"))),
+                () -> second.set(create(EntryKind.INCOME, unique("Мастер-классы"))));
+
+        assertThat(created.failure()).isNull();
+        assertThat(second.get().position()).isGreaterThan(first.get().position());
+    }
+
+    @Test
+    void nameTakenByWriterBypassingTheLockIsTheSameError() throws Exception {
+        var name = unique("Расходники");
+
+        // Писатель в обход блокировки списка: проверка названия его незафиксированную строку не видит, вставка
+        // встаёт на уникальный индекс и после его фиксации получает нарушение.
+        var created = locks.whileRowIsHeld(
+                () -> jdbc.sql("""
+                                insert into finance.category (id, kind, name, hidden, position, created_at)
+                                values (:id, 'EXPENSE', :name, false,
+                                        (select coalesce(max(position), 0) + 1000 from finance.category), now())""")
+                        .param("id", UUID.randomUUID())
+                        .param("name", name)
+                        .update(),
+                () -> create(EntryKind.EXPENSE, name.toLowerCase()));
+
+        assertThat(created.failure())
+                .isInstanceOfSatisfying(
+                        CategoryNameTakenException.class,
+                        e -> assertThat(e.params()).containsEntry("name", name.toLowerCase()));
+    }
+
+    @Test
+    void addWaitingForHideIsRejected() throws Exception {
+        var category = create(EntryKind.EXPENSE, unique("Аренда"));
+
+        var added = locks.whileRowIsHeld(
+                () -> categories.hide(category.id(), master),
+                () -> entries.add(new AddEntry(category.id(), BigDecimal.TEN, today(), null), master));
+
+        assertThat(added.failure())
+                .isInstanceOfSatisfying(
+                        ValidationException.class, e -> assertThat(e.field()).isEqualTo("categoryId"));
+    }
+
+    @Test
+    void updateWaitingForDeleteFindsNothing() throws Exception {
+        var category = create(EntryKind.EXPENSE, unique("Материалы"));
+        var entry = entries.add(new AddEntry(category.id(), BigDecimal.TEN, today(), null), master);
+
+        var updated = locks.whileRowIsHeld(
+                () -> entries.delete(entry.id(), master),
+                () -> entries.update(
+                        entry.id(), new UpdateEntry(category.id(), BigDecimal.ONE, today(), null), master));
+
+        assertThat(updated.failure()).isInstanceOf(EntryNotFoundException.class);
+        assertThat(entries.history(entry.id(), master))
+                .extracting(EntryChangeView::action)
+                .containsExactly(EntryAction.CREATE, EntryAction.DELETE);
+    }
+
+    private CategoryView create(EntryKind kind, String name) {
+        return categories.create(new CreateCategory(kind, name), master);
+    }
+
+    private LocalDate today() {
+        return salonTimeZone.dayOf(Instant.now(clock));
+    }
+
+    private static String unique(String name) {
+        return name + " " + UUID.randomUUID().toString().substring(0, 8);
+    }
+}
