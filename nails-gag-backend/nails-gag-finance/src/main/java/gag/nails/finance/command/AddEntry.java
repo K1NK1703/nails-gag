@@ -12,7 +12,8 @@ import org.jspecify.annotations.Nullable;
  * @param categoryId категория, не скрытая
  * @param amount сумма в рублях: больше нуля, не больше {@code 9 999 999 999.99}, не больше двух знаков после запятой
  * @param occurredOn день операции: не раньше {@code 2000-01-01}, не позже сегодняшнего плюс 366 дней
- * @param comment комментарий до 500 символов; пустой — комментария нет
+ * @param comment комментарий; пробелы по краям отбрасываются, остальное — до 500 символов; пустой —
+ *     комментария нет
  */
 public record AddEntry(
         @NotNull UUID categoryId,

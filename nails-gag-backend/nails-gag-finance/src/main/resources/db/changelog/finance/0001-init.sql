@@ -46,9 +46,13 @@ CREATE TABLE finance.recurring (
     amount       numeric(12, 2) NOT NULL CONSTRAINT recurring_amount_check CHECK (amount > 0),
     comment      text           CONSTRAINT recurring_comment_check CHECK (char_length(comment) BETWEEN 1 AND 500),
     day_of_month integer        NOT NULL CONSTRAINT recurring_day_of_month_check CHECK (day_of_month BETWEEN 1 AND 31),
-    starts_on    date           NOT NULL,
+    starts_on    date           NOT NULL CONSTRAINT recurring_starts_on_check CHECK (starts_on >= DATE '2000-01-01'),
     ends_on      date,
     paused       boolean        NOT NULL,
+    -- Прогресс ночной задачи: по какой день включительно записи шаблона уже созданы; NULL — ещё ни одной. Задача
+    -- создаёт записи только за дни после него и сдвигает его в той же транзакции: перенесённая или удалённая запись
+    -- шаблона за свой исходный день заново не создаётся.
+    generated_through date,
     created_at   timestamptz    NOT NULL,
     updated_at   timestamptz    NOT NULL,
     CONSTRAINT recurring_ends_on_check CHECK (ends_on >= starts_on),
@@ -62,7 +66,7 @@ CREATE TABLE finance.entry (
     kind         varchar(8)     NOT NULL CONSTRAINT entry_kind_check CHECK (kind IN ('INCOME', 'EXPENSE')),
     category_id  uuid           NOT NULL,
     amount       numeric(12, 2) NOT NULL CONSTRAINT entry_amount_check CHECK (amount > 0),
-    occurred_on  date           NOT NULL,
+    occurred_on  date           NOT NULL CONSTRAINT entry_occurred_on_check CHECK (occurred_on >= DATE '2000-01-01'),
     comment      text           CONSTRAINT entry_comment_check CHECK (char_length(comment) BETWEEN 1 AND 500),
     -- Шаблон, которым создана запись (finance.recurring). Без внешнего ключа: шаблон удаляется, а созданные им
     -- записи остаются и по-прежнему считаются созданными шаблоном (быстрый ввод их не предлагает).
@@ -70,7 +74,8 @@ CREATE TABLE finance.entry (
     created_at   timestamptz    NOT NULL,
     updated_at   timestamptz    NOT NULL,
     CONSTRAINT entry_category_fkey FOREIGN KEY (category_id, kind) REFERENCES finance.category (id, kind),
-    -- Защита от двойного создания записи шаблоном за один день; у ручных записей recurring_id пуст.
+    -- Защита от двойного создания записи шаблоном за один день; у ручных записей recurring_id пуст. Перенос записи
+    -- шаблона на занятый день модуль переводит в ValidationException по полю occurredOn.
     CONSTRAINT entry_recurring_id_occurred_on_key UNIQUE (recurring_id, occurred_on)
 );
 

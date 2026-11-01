@@ -2,9 +2,11 @@ package gag.nails.finance.internal.entry;
 
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.common.error.InternalException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.common.paging.Paged;
 import gag.nails.common.paging.Paging;
+import gag.nails.common.persistence.ConstraintViolations;
 import gag.nails.common.time.ReportPeriod;
 import gag.nails.common.time.SalonTimeZone;
 import gag.nails.common.validation.CommandValidator;
@@ -28,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -51,6 +54,9 @@ class DefaultFinanceEntries implements FinanceEntries {
 
     /** Предел длины комментария — как в {@code CHECK} колонки {@code comment}. */
     private static final int MAX_COMMENT_LENGTH = 500;
+
+    /** Один день — не больше одной записи шаблона. */
+    private static final String RECURRING_DAY_KEY = "entry_recurring_id_occurred_on_key";
 
     /** Сколько пар предлагает быстрый ввод. */
     private static final int RECENT_COMBOS = 5;
@@ -113,6 +119,7 @@ class DefaultFinanceEntries implements FinanceEntries {
         }
         var now = now();
         entry.apply(fields, now);
+        flushMoved(entry);
         journal.updated(entryId, before, after, actor.accountId(), now);
         return entry.toView(category.name());
     }
@@ -158,6 +165,10 @@ class DefaultFinanceEntries implements FinanceEntries {
     @Transactional(readOnly = true)
     public List<QuickCombo> recentCombos(EntryKind kind, Actor actor) {
         actor.requireRead(Section.FINANCE);
+        // Вызывающий код на Java может передать null мимо проверок HTTP-слоя: ошибка запроса, а не пустой список.
+        if (kind == null) {
+            throw new ValidationException("kind", "must not be null");
+        }
         return entries.findRecentCombos(kind, PageRequest.of(0, RECENT_COMBOS));
     }
 
@@ -211,17 +222,42 @@ class DefaultFinanceEntries implements FinanceEntries {
     }
 
     /**
-     * Пустой комментарий — его отсутствие. Длина — в символах (кодовых точках), как {@code char_length} в
-     * {@code CHECK} базы: эмодзи — один символ, хотя в Java это две единицы UTF-16.
+     * Комментарий без пробелов по краям (как название категории); пустой — его отсутствие. Длина — в символах
+     * (кодовых точках), как {@code char_length} в {@code CHECK} базы: эмодзи — один символ, хотя в Java это две
+     * единицы UTF-16.
      */
     private static @Nullable String normalizeComment(@Nullable String comment) {
-        if (comment == null || comment.isBlank()) {
+        if (comment == null) {
             return null;
         }
-        if (comment.codePointCount(0, comment.length()) > MAX_COMMENT_LENGTH) {
+        var stripped = comment.strip();
+        if (stripped.isEmpty()) {
+            return null;
+        }
+        if (stripped.codePointCount(0, stripped.length()) > MAX_COMMENT_LENGTH) {
             throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
         }
-        return comment;
+        return stripped;
+    }
+
+    /**
+     * Сбрасывает правку в базу до записи журнала: перенос записи шаблона на день, где уже есть запись того же
+     * шаблона, нарушает {@code entry_recurring_id_occurred_on_key} — это ошибка запроса по полю {@code occurredOn}.
+     * Остальные нарушения — ошибка в коде или схеме. После нарушения транзакция PostgreSQL прервана: исключению дают
+     * всплыть.
+     */
+    private void flushMoved(EntryEntity entry) {
+        try {
+            entries.flush();
+        } catch (DataIntegrityViolationException e) {
+            var constraint = ConstraintViolations.constraintName(e);
+            if (constraint.filter(RECURRING_DAY_KEY::equals).isPresent()) {
+                throw new ValidationException(
+                        "occurredOn", "an entry of the same recurring template already exists on that day");
+            }
+            throw new InternalException(
+                    "entry " + entry.id() + " write violated constraint " + constraint.orElse("<unknown>"), e);
+        }
     }
 
     private LocalDate today() {

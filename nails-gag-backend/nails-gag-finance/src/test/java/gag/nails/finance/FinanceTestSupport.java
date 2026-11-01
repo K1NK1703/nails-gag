@@ -14,6 +14,7 @@ import gag.nails.testsupport.MutableClock;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.jspecify.annotations.Nullable;
@@ -42,7 +43,19 @@ abstract class FinanceTestSupport {
     // Стартовые категории из миграции.
     static final UUID MATERIALS = UUID.fromString("019a2f00-0000-7000-8000-000000000001");
     static final UUID RENT = UUID.fromString("019a2f00-0000-7000-8000-000000000002");
+    static final UUID LEARNING = UUID.fromString("019a2f00-0000-7000-8000-000000000003");
+    static final UUID TOOLS = UUID.fromString("019a2f00-0000-7000-8000-000000000004");
+    static final UUID ADS = UUID.fromString("019a2f00-0000-7000-8000-000000000005");
+    static final UUID OTHER_EXPENSES = UUID.fromString("019a2f00-0000-7000-8000-000000000006");
     static final UUID TIPS = UUID.fromString("019a2f00-0000-7000-8000-000000000101");
+    static final UUID SALES = UUID.fromString("019a2f00-0000-7000-8000-000000000102");
+    static final UUID OTHER_INCOME = UUID.fromString("019a2f00-0000-7000-8000-000000000103");
+
+    /** Стартовые расходы в порядке миграции. */
+    static final List<UUID> DEFAULT_EXPENSES = List.of(MATERIALS, RENT, LEARNING, TOOLS, ADS, OTHER_EXPENSES);
+
+    /** Стартовые доходы в порядке миграции. */
+    static final List<UUID> DEFAULT_INCOMES = List.of(TIPS, SALES, OTHER_INCOME);
 
     @Autowired
     FinanceCategories categories;

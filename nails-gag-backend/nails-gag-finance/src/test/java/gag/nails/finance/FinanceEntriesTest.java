@@ -134,6 +134,9 @@ class FinanceEntriesTest extends FinanceTestSupport {
         assertInvalid(() -> add(MATERIALS, "100", TODAY, "x".repeat(501)), "comment");
         var blank = add(MATERIALS, "100", TODAY, "   ");
         assertThat(blank.comment()).isNull();
+        // Пробелы по краям отбрасываются и в длину не входят.
+        assertThat(add(MATERIALS, "100", TODAY, "  Гель-лаки \n").comment()).isEqualTo("Гель-лаки");
+        assertThat(add(MATERIALS, "100", TODAY, " " + longest + " ").comment()).isEqualTo(longest);
         assertInvalid(
                 () -> entries.update(
                         blank.id(), new UpdateEntry(MATERIALS, BigDecimal.TEN, TODAY, "x".repeat(501)), MASTER),
@@ -205,37 +208,35 @@ class FinanceEntriesTest extends FinanceTestSupport {
     @Test
     void recentCombosAreFiveDistinctVisibleManual() {
         var gifts = category(EntryKind.EXPENSE, "Подарки");
-        var tools = UUID.fromString("019a2f00-0000-7000-8000-000000000004");
-        var learning = UUID.fromString("019a2f00-0000-7000-8000-000000000003");
-        var ads = UUID.fromString("019a2f00-0000-7000-8000-000000000005");
         add(MATERIALS, "100");
         tick();
         add(RENT, "200");
         tick();
         add(MATERIALS, "100.00");
         tick();
-        add(learning, "300");
+        add(LEARNING, "300");
         tick();
-        add(tools, "400");
+        add(TOOLS, "400");
         tick();
-        add(ads, "500");
+        add(ADS, "500");
         tick();
         add(MATERIALS, "600");
         tick();
         add(gifts.id(), "700");
         categories.hide(gifts.id(), MASTER);
         tick();
-        generatedByTemplate(RENT, "800");
+        generatedByTemplate(RENT, "800", UUID.randomUUID(), TODAY);
         tick();
         add(TIPS, "900");
 
         assertThat(entries.recentCombos(EntryKind.EXPENSE, MASTER))
                 .containsExactly(
                         new QuickCombo(MATERIALS, "Материалы", new BigDecimal("600.00")),
-                        new QuickCombo(ads, "Реклама", new BigDecimal("500.00")),
-                        new QuickCombo(tools, "Инструменты", new BigDecimal("400.00")),
-                        new QuickCombo(learning, "Обучение", new BigDecimal("300.00")),
+                        new QuickCombo(ADS, "Реклама", new BigDecimal("500.00")),
+                        new QuickCombo(TOOLS, "Инструменты", new BigDecimal("400.00")),
+                        new QuickCombo(LEARNING, "Обучение", new BigDecimal("300.00")),
                         new QuickCombo(MATERIALS, "Материалы", new BigDecimal("100.00")));
+        assertInvalid(() -> entries.recentCombos(null, MASTER), "kind");
         assertThat(entries.recentCombos(EntryKind.INCOME, DEVELOPER))
                 .containsExactly(new QuickCombo(TIPS, "Чаевые", new BigDecimal("900.00")));
     }
@@ -260,19 +261,38 @@ class FinanceEntriesTest extends FinanceTestSupport {
         return new UpdateEntry(categoryId, new BigDecimal(amount), TODAY, null);
     }
 
-    /** Запись, созданная повторяющимся шаблоном: шаблонов в этой задаче ещё нет — строка вставляется напрямую. */
-    private void generatedByTemplate(UUID categoryId, String amount) {
+    /**
+     * Запись, созданная повторяющимся шаблоном: шаблонов в этой задаче ещё нет — строка вставляется напрямую, без
+     * журнала.
+     */
+    @Test
+    void templateEntryCannotMoveOntoAnotherEntryOfTheSameTemplate() {
+        var template = UUID.randomUUID();
+        var first = generatedByTemplate(RENT, "30000", template, TODAY.minusMonths(1));
+        generatedByTemplate(RENT, "30000", template, TODAY);
+        var other = generatedByTemplate(RENT, "30000", UUID.randomUUID(), TODAY.minusDays(1));
+
+        // Запись другого шаблона на тот же день — не помеха.
+        assertThat(entries.update(other, change(RENT, "30000"), MASTER).occurredOn())
+                .isEqualTo(TODAY);
+        // После нарушения транзакция PostgreSQL прервана: дальше в этом тесте к базе не обращаться.
+        assertInvalid(() -> entries.update(first, change(RENT, "30000"), MASTER), "occurredOn");
+    }
+
+    private UUID generatedByTemplate(UUID categoryId, String amount, UUID recurringId, LocalDate day) {
+        var id = UUID.randomUUID();
         jdbc.sql("""
                         insert into finance.entry (id, kind, category_id, amount, occurred_on, recurring_id,
                                                    created_at, updated_at)
                         values (:id, 'EXPENSE', :categoryId, :amount, :day, :recurringId, :now, :now)""")
-                .param("id", UUID.randomUUID())
+                .param("id", id)
                 .param("categoryId", categoryId)
                 .param("amount", new BigDecimal(amount))
-                .param("day", TODAY)
-                .param("recurringId", UUID.randomUUID())
+                .param("day", day)
+                .param("recurringId", recurringId)
                 .param("now", Timestamp.from(clock.instant()))
                 .update();
+        return id;
     }
 
     private static void assertDenied(ThrowingCallable call) {

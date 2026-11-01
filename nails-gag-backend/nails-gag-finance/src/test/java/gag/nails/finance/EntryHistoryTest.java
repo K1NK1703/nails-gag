@@ -42,6 +42,9 @@ class EntryHistoryTest extends FinanceTestSupport {
                 EntryKind.EXPENSE, MATERIALS, "Материалы", new BigDecimal("1500.00"), YESTERDAY, "Гель-лаки", null);
         var changed =
                 new EntrySnapshot(EntryKind.EXPENSE, RENT, "Аренда", new BigDecimal("30000.50"), TODAY, null, null);
+        // Снимки читаются из jsonb, а не из кэша сессии.
+        entityManager.flush();
+        entityManager.clear();
         var history = entries.history(entry.id(), MASTER);
         assertThat(history)
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id")
@@ -110,12 +113,13 @@ class EntryHistoryTest extends FinanceTestSupport {
         // Журнал читается в обход JPA: несброшенная вставка в той же транзакции иначе не видна.
         entityManager.flush();
 
-        var stored = jdbc.sql("""
+        var query = """
                         select jsonb_typeof(after) as type, after ->> 'kind' as kind,
                                after ->> 'categoryId' as category_id, after ->> 'categoryName' as category_name,
                                after ->> 'amount' as amount, after ->> 'occurredOn' as occurred_on,
                                after ->> 'comment' as comment, after -> 'recurringId' as recurring_id
-                        from finance.entry_change where entry_id = :entryId""").param("entryId", entry.id()).query().singleRow();
+                        from finance.entry_change where entry_id = :entryId""";
+        var stored = jdbc.sql(query).param("entryId", entry.id()).query().singleRow();
 
         assertThat(stored)
                 .containsEntry("type", "object")

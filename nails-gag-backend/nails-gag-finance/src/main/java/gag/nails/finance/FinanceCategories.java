@@ -31,7 +31,9 @@ public interface FinanceCategories {
      * Новая видимая категория в конце списка своего вида.
      *
      * @throws ValidationException (поле {@code name}) пустое название или длиннее 60 символов
-     * @throws CategoryNameTakenException если в этом виде уже есть категория с таким названием без учёта регистра
+     * @throws CategoryNameTakenException если в этом виде уже есть категория с таким названием без учёта регистра;
+     *     вызывающий в своей транзакции после этой ошибки откатывает её: при гонке ошибка приходит из нарушения
+     *     уникального индекса, а оно прерывает транзакцию PostgreSQL
      */
     CategoryView create(CreateCategory command, Actor actor);
 
@@ -40,7 +42,8 @@ public interface FinanceCategories {
      *
      * @throws CategoryNotFoundException если категории нет
      * @throws ValidationException (поле {@code name}) как у {@link #create}
-     * @throws CategoryNameTakenException если название занято другой категорией этого вида
+     * @throws CategoryNameTakenException если название занято другой категорией этого вида; транзакцию вызывающего
+     *     после этой ошибки — откатить, как у {@link #create}
      */
     CategoryView rename(UUID categoryId, RenameCategory command, Actor actor);
 

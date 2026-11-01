@@ -16,12 +16,16 @@ import gag.nails.finance.model.CategoryView;
 import gag.nails.finance.model.EntryAction;
 import gag.nails.finance.model.EntryChangeView;
 import gag.nails.finance.model.EntryKind;
+import gag.nails.finance.model.EntryView;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +39,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Добавления и переименования категорий встречаются на блокировке списка вида, изменения записей — на блокировке
  * строки записи и разделяемой блокировке строки категории. Порядок задаётся не гонкой, а ожиданием блокировки
  * ({@link ConcurrencySupport#whileRowIsHeld}): второй гарантированно ждёт первого. База общая для тестов с тем же
- * контекстом, поэтому названия категорий — со случайным хвостом.
+ * контекстом: названия категорий — со случайным хвостом, а свои категории, записи и их журнал тест удаляет после
+ * себя.
  */
 @SpringBootTest(webEnvironment = WebEnvironment.NONE, properties = "nails-gag.booking.jobs.enabled=false")
 @Import(PostgresTestcontainers.class)
@@ -61,11 +66,35 @@ class FinanceConcurrencyTest {
 
     private final Actor master = Actor.of(UUID.randomUUID(), null, Actor.masterAccess());
 
+    /** Названия категорий этого теста: по ним находятся и свои категории, вставленные в обход модуля. */
+    private final List<String> names = new CopyOnWriteArrayList<>();
+
+    /** Записи этого теста, в том числе уже удалённые: их журнал тоже убирается. */
+    private final List<UUID> entryIds = new CopyOnWriteArrayList<>();
+
     private ConcurrencySupport locks;
 
     @BeforeEach
     void financeLocks() {
         locks = new ConcurrencySupport(transaction, jdbc, "%finance.%");
+    }
+
+    /** Убирает за собой: журнал записей, записи и категории теста (в обход модуля — категории модуль не удаляет). */
+    @AfterEach
+    void removeOwnRows() {
+        if (!entryIds.isEmpty()) {
+            jdbc.sql("delete from finance.entry_change where entry_id in (:ids)")
+                    .param("ids", entryIds)
+                    .update();
+            jdbc.sql("delete from finance.entry where id in (:ids)")
+                    .param("ids", entryIds)
+                    .update();
+        }
+        if (!names.isEmpty()) {
+            jdbc.sql("delete from finance.category where name in (:names)")
+                    .param("names", names)
+                    .update();
+        }
     }
 
     @Test
@@ -121,9 +150,7 @@ class FinanceConcurrencyTest {
     void addWaitingForHideIsRejected() throws Exception {
         var category = create(EntryKind.EXPENSE, unique("Аренда"));
 
-        var added = locks.whileRowIsHeld(
-                () -> categories.hide(category.id(), master),
-                () -> entries.add(new AddEntry(category.id(), BigDecimal.TEN, today(), null), master));
+        var added = locks.whileRowIsHeld(() -> categories.hide(category.id(), master), () -> add(category.id()));
 
         assertThat(added.failure())
                 .isInstanceOfSatisfying(
@@ -133,7 +160,7 @@ class FinanceConcurrencyTest {
     @Test
     void updateWaitingForDeleteFindsNothing() throws Exception {
         var category = create(EntryKind.EXPENSE, unique("Материалы"));
-        var entry = entries.add(new AddEntry(category.id(), BigDecimal.TEN, today(), null), master);
+        var entry = add(category.id());
 
         var updated = locks.whileRowIsHeld(
                 () -> entries.delete(entry.id(), master),
@@ -146,6 +173,12 @@ class FinanceConcurrencyTest {
                 .containsExactly(EntryAction.CREATE, EntryAction.DELETE);
     }
 
+    private EntryView add(UUID categoryId) {
+        var entry = entries.add(new AddEntry(categoryId, BigDecimal.TEN, today(), null), master);
+        entryIds.add(entry.id());
+        return entry;
+    }
+
     private CategoryView create(EntryKind kind, String name) {
         return categories.create(new CreateCategory(kind, name), master);
     }
@@ -154,7 +187,9 @@ class FinanceConcurrencyTest {
         return salonTimeZone.dayOf(Instant.now(clock));
     }
 
-    private static String unique(String name) {
-        return name + " " + UUID.randomUUID().toString().substring(0, 8);
+    private String unique(String name) {
+        var unique = name + " " + UUID.randomUUID().toString().substring(0, 8);
+        names.add(unique);
+        return unique;
     }
 }

@@ -13,6 +13,8 @@ import gag.nails.finance.model.EntryKind;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 
@@ -24,29 +26,36 @@ class FinanceCategoriesTest extends FinanceTestSupport {
         var expenses = categories.list(EntryKind.EXPENSE, MASTER);
         var incomes = categories.list(EntryKind.INCOME, MASTER);
 
-        assertThat(expenses)
+        // Сверяется стартовый набор по известным id, а не весь список: в базе могут быть и другие категории.
+        assertThat(expenses).extracting(CategoryView::id).containsSubsequence(DEFAULT_EXPENSES);
+        assertThat(incomes).extracting(CategoryView::id).containsSubsequence(DEFAULT_INCOMES);
+        assertThat(defaults(expenses, DEFAULT_EXPENSES))
                 .extracting(CategoryView::name)
                 .containsExactly("Материалы", "Аренда", "Обучение", "Инструменты", "Реклама", "Прочее");
-        assertThat(incomes).extracting(CategoryView::name).containsExactly("Чаевые", "Продажа товаров", "Прочее");
-        assertThat(expenses).allSatisfy(category -> {
+        assertThat(defaults(incomes, DEFAULT_INCOMES))
+                .extracting(CategoryView::name)
+                .containsExactly("Чаевые", "Продажа товаров", "Прочее");
+        assertThat(defaults(expenses, DEFAULT_EXPENSES)).allSatisfy(category -> {
             assertThat(category.kind()).isEqualTo(EntryKind.EXPENSE);
             assertThat(category.hidden()).isFalse();
         });
-        assertThat(incomes).allSatisfy(category -> {
+        assertThat(defaults(incomes, DEFAULT_INCOMES)).allSatisfy(category -> {
             assertThat(category.kind()).isEqualTo(EntryKind.INCOME);
             assertThat(category.hidden()).isFalse();
         });
-        assertThat(expenses).extracting(CategoryView::position).containsExactly(0, 1, 2, 3, 4, 5);
-        assertThat(expenses.getFirst().id()).isEqualTo(MATERIALS);
-        assertThat(incomes.getFirst().id()).isEqualTo(TIPS);
     }
 
     @Test
     void createAppendsToTheEndOfItsKind() {
         var created = category(EntryKind.EXPENSE, "  Курсы  ");
 
-        assertThat(created).isEqualTo(new CategoryView(created.id(), EntryKind.EXPENSE, "Курсы", false, 6));
-        assertThat(categories.list(EntryKind.EXPENSE, MASTER)).last().isEqualTo(created);
+        assertThat(created)
+                .isEqualTo(new CategoryView(created.id(), EntryKind.EXPENSE, "Курсы", false, created.position()));
+        var expenses = categories.list(EntryKind.EXPENSE, MASTER);
+        assertThat(expenses).last().isEqualTo(created);
+        assertThat(expenses.subList(0, expenses.size() - 1))
+                .extracting(CategoryView::position)
+                .allMatch(position -> position < created.position());
         assertThat(categories.list(EntryKind.INCOME, MASTER))
                 .extracting(CategoryView::id)
                 .doesNotContain(created.id());
@@ -83,20 +92,25 @@ class FinanceCategoriesTest extends FinanceTestSupport {
 
     @Test
     void renameAndReorder() {
+        var rentPosition = category(RENT).position();
         var renamed = categories.rename(RENT, new RenameCategory("Аренда кабинета"), MASTER);
 
-        assertThat(renamed).isEqualTo(new CategoryView(RENT, EntryKind.EXPENSE, "Аренда кабинета", false, 1));
-        var before = ids(EntryKind.EXPENSE);
-        var reversed = before.reversed();
+        assertThat(renamed)
+                .isEqualTo(new CategoryView(RENT, EntryKind.EXPENSE, "Аренда кабинета", false, rentPosition));
+        var courses = category(EntryKind.EXPENSE, "Курсы");
+        var gifts = category(EntryKind.EXPENSE, "Подарки");
+        var reversed = ids(EntryKind.EXPENSE).reversed();
 
         categories.reorder(EntryKind.EXPENSE, reversed, MASTER);
 
         var after = categories.list(EntryKind.EXPENSE, MASTER);
         assertThat(after).extracting(CategoryView::id).containsExactlyElementsOf(reversed);
-        assertThat(after).extracting(CategoryView::position).containsExactly(0, 1, 2, 3, 4, 5);
-        assertThat(after).filteredOn(c -> c.id().equals(RENT)).singleElement().satisfies(rent -> {
-            assertThat(rent.name()).isEqualTo("Аренда кабинета");
-        });
+        assertThat(after).extracting(CategoryView::id).containsSubsequence(gifts.id(), courses.id(), RENT, MATERIALS);
+        assertThat(after)
+                .extracting(CategoryView::position)
+                .containsExactlyElementsOf(
+                        IntStream.range(0, after.size()).boxed().toList());
+        assertThat(category(RENT).name()).isEqualTo("Аренда кабинета");
     }
 
     @Test
@@ -125,18 +139,17 @@ class FinanceCategoriesTest extends FinanceTestSupport {
 
     @Test
     void hiddenCategoryIsListedButMarked() {
+        var rent = category(RENT);
         categories.hide(RENT, MASTER);
         categories.hide(RENT, MASTER);
 
-        assertThat(categories.list(EntryKind.EXPENSE, MASTER))
-                .filteredOn(CategoryView::hidden)
-                .singleElement()
-                .isEqualTo(new CategoryView(RENT, EntryKind.EXPENSE, "Аренда", true, 1));
+        assertThat(category(RENT))
+                .isEqualTo(new CategoryView(RENT, EntryKind.EXPENSE, "Аренда", true, rent.position()));
 
         categories.show(RENT, MASTER);
         categories.show(RENT, MASTER);
 
-        assertThat(categories.list(EntryKind.EXPENSE, MASTER)).noneMatch(CategoryView::hidden);
+        assertThat(category(RENT)).isEqualTo(rent);
     }
 
     @Test
@@ -170,7 +183,8 @@ class FinanceCategoriesTest extends FinanceTestSupport {
 
     @Test
     void readAndWriteRights() {
-        assertThat(categories.list(EntryKind.EXPENSE, DEVELOPER)).hasSize(6);
+        var before = categories.list(EntryKind.EXPENSE, MASTER);
+        assertThat(categories.list(EntryKind.EXPENSE, DEVELOPER)).isEqualTo(before);
 
         assertDenied(() -> categories.create(new CreateCategory(EntryKind.EXPENSE, "Курсы"), DEVELOPER));
         assertDenied(() -> categories.rename(RENT, new RenameCategory("Курсы"), DEVELOPER));
@@ -179,9 +193,23 @@ class FinanceCategoriesTest extends FinanceTestSupport {
         assertDenied(() -> categories.reorder(EntryKind.EXPENSE, ids(EntryKind.EXPENSE), DEVELOPER));
         assertDenied(() -> categories.list(EntryKind.EXPENSE, CLIENT));
         assertDenied(() -> categories.create(new CreateCategory(EntryKind.EXPENSE, "Курсы"), CLIENT));
-        assertThat(categories.list(EntryKind.EXPENSE, MASTER))
-                .extracting(CategoryView::name)
-                .containsExactly("Материалы", "Аренда", "Обучение", "Инструменты", "Реклама", "Прочее");
+        assertThat(categories.list(EntryKind.EXPENSE, MASTER)).isEqualTo(before);
+    }
+
+    /** Категория из списка её вида — так видна её позиция и пометка скрытой. */
+    private CategoryView category(UUID categoryId) {
+        return Stream.of(EntryKind.values())
+                .flatMap(kind -> categories.list(kind, MASTER).stream())
+                .filter(category -> category.id().equals(categoryId))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    /** Стартовые категории из списка в его порядке. */
+    private static List<CategoryView> defaults(List<CategoryView> list, List<UUID> defaultIds) {
+        return list.stream()
+                .filter(category -> defaultIds.contains(category.id()))
+                .toList();
     }
 
     private List<UUID> ids(EntryKind kind) {

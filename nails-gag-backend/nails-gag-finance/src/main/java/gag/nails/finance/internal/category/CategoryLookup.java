@@ -38,6 +38,7 @@ public class CategoryLookup {
      * Текущее название категории без блокировки — для журнала, когда запись уходит из этой категории. Категории не
      * удаляются, поэтому категория записи всегда есть.
      */
+    @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
     public String name(UUID categoryId) {
         return categories
                 .findById(categoryId)

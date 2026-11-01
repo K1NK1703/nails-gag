@@ -30,8 +30,8 @@ spring-boot-starter-restclient = { module = "org.springframework.boot:spring-boo
 spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
-# JsonMapper (Jackson 3) для модулей без веб-слоя: финансы пишут снимки журнала в jsonb
-spring-boot-starter-jackson = { module = "org.springframework.boot:spring-boot-starter-jackson" }
+# Jackson 3 без автонастройки Spring Boot: финансы пишут снимки журнала в jsonb своим JsonMapper (версия из BOM)
+jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 spring-boot-starter-liquibase = { module = "org.springframework.boot:spring-boot-starter-liquibase" }
 # Иерархия исключений доступа к данным (PessimisticLockingFailureException) для HTTP-слоя без JPA
 spring-tx = { module = "org.springframework:spring-tx" }

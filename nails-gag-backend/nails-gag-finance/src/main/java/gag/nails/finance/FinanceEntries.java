@@ -24,8 +24,9 @@ import java.util.UUID;
  * пишет. Чтение — уровень чтения раздела «Финансы», изменения — уровень изменения ({@link AccessDeniedException}).
  *
  * <p>Пределы полей: сумма больше нуля, не больше {@code 9 999 999 999.99}, не больше двух знаков после запятой
- * ({@code amount}); день операции — в пределах {@link ReportPeriod#requireDay} ({@code occurredOn}); комментарий до
- * 500 символов, пустой — комментария нет ({@code comment}). Нарушение — {@link ValidationException} с этим полем.
+ * ({@code amount}); день операции — в пределах {@link ReportPeriod#requireDay} ({@code occurredOn}); комментарий без
+ * пробелов по краям — до 500 символов, пустой — комментария нет ({@code comment}). Нарушение —
+ * {@link ValidationException} с этим полем.
  */
 public interface FinanceEntries {
 
@@ -45,7 +46,8 @@ public interface FinanceEntries {
      * @throws EntryNotFoundException если записи нет
      * @throws CategoryNotFoundException если новой категории нет
      * @throws ValidationException (поле {@code categoryId}) выбрана другая скрытая категория или категория другого
-     *     вида; остальные поля — как у {@link #add}
+     *     вида; ({@code occurredOn}) запись повторяющегося шаблона переносится на день, где уже есть запись того же
+     *     шаблона; остальные поля — как у {@link #add}
      */
     EntryView update(UUID entryId, UpdateEntry command, Actor actor);
 
@@ -70,6 +72,8 @@ public interface FinanceEntries {
     /**
      * До пяти последних различных пар «категория + сумма» ручных записей вида — по моменту внесения записи. Пары со
      * скрытыми категориями и записи, созданные повторяющимся шаблоном, не предлагаются.
+     *
+     * @throws ValidationException (поле {@code kind}) вид не задан
      */
     List<QuickCombo> recentCombos(EntryKind kind, Actor actor);
 

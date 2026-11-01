@@ -18,13 +18,14 @@ import org.springframework.test.context.TestExecutionListeners.MergeMode;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Как {@link ModuleTest}, но со всеми зависимостями модуля, а не только прямыми: отчёты финансов читают модуль
- * записей, а он сам не работает без расписания, каталога и клиентов.
+ * Тест модуля финансов — пока то же, что {@link ModuleTest}: у модуля нет зависимостей, кроме {@code common}. Задача
+ * отчётов вернёт зависимость на модуль записей и переключит здесь режим на {@code ALL_DEPENDENCIES}: модуль записей
+ * сам не работает без расписания, каталога и клиентов. Тесты модуля от этого не меняются.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@ApplicationModuleTest(mode = BootstrapMode.ALL_DEPENDENCIES)
+@ApplicationModuleTest(mode = BootstrapMode.DIRECT_DEPENDENCIES)
 @ActiveProfiles("test")
 @Import({PostgresTestcontainers.class, TestTimeConfiguration.class})
 @TestExecutionListeners(listeners = ResetClockListener.class, mergeMode = MergeMode.MERGE_WITH_DEFAULTS)
