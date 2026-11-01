@@ -47,6 +47,9 @@ interface EntryRepository extends JpaRepository<EntryEntity, UUID> {
             + " order by max(e.createdAt) desc, c.id, e.amount")
     List<QuickCombo> findRecentCombos(EntryKind kind, Pageable pageable);
 
+    /** Есть ли у шаблона другая запись в этот день ({@code entry_recurring_id_occurred_on_key}). */
+    boolean existsByRecurringIdAndOccurredOnAndIdNot(UUID recurringId, LocalDate occurredOn, UUID id);
+
     /**
      * Запись под блокировкой строки ({@code SELECT … FOR UPDATE}): параллельная правка или удаление той же записи
      * дождётся конца транзакции и увидит её новое состояние, а журнал — изменения строго по очереди.

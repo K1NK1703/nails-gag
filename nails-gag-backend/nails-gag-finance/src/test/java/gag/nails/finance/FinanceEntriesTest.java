@@ -261,10 +261,7 @@ class FinanceEntriesTest extends FinanceTestSupport {
         return new UpdateEntry(categoryId, new BigDecimal(amount), TODAY, null);
     }
 
-    /**
-     * Запись, созданная повторяющимся шаблоном: шаблонов в этой задаче ещё нет — строка вставляется напрямую, без
-     * журнала.
-     */
+    /** Записи шаблонов вставляются напрямую ({@link #generatedByTemplate}). */
     @Test
     void templateEntryCannotMoveOntoAnotherEntryOfTheSameTemplate() {
         var template = UUID.randomUUID();
@@ -275,10 +272,15 @@ class FinanceEntriesTest extends FinanceTestSupport {
         // Запись другого шаблона на тот же день — не помеха.
         assertThat(entries.update(other, change(RENT, "30000"), MASTER).occurredOn())
                 .isEqualTo(TODAY);
-        // После нарушения транзакция PostgreSQL прервана: дальше в этом тесте к базе не обращаться.
         assertInvalid(() -> entries.update(first, change(RENT, "30000"), MASTER), "occurredOn");
+        // Проверка — до изменения: транзакция цела, запись осталась на своём дне.
+        assertThat(entries.get(first, MASTER).occurredOn()).isEqualTo(TODAY.minusMonths(1));
     }
 
+    /**
+     * Запись, созданная повторяющимся шаблоном: шаблонов в этой задаче ещё нет — строка вставляется напрямую, без
+     * журнала.
+     */
     private UUID generatedByTemplate(UUID categoryId, String amount, UUID recurringId, LocalDate day) {
         var id = UUID.randomUUID();
         jdbc.sql("""

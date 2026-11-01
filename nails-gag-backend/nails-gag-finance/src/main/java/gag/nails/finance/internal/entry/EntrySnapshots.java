@@ -22,7 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 class EntrySnapshots {
 
-    private final JsonMapper json = JsonMapper.builder()
+    private static final JsonMapper JSON = JsonMapper.builder()
             .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
             .enable(StreamWriteFeature.WRITE_BIGDECIMAL_AS_PLAIN)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -35,7 +35,7 @@ class EntrySnapshots {
             return null;
         }
         try {
-            return json.writeValueAsString(snapshot);
+            return JSON.writeValueAsString(snapshot);
         } catch (JacksonException e) {
             throw new InternalException("entry snapshot is not writable as JSON", e);
         }
@@ -47,7 +47,7 @@ class EntrySnapshots {
             return null;
         }
         try {
-            return json.readValue(snapshot, EntrySnapshot.class);
+            return JSON.readValue(snapshot, EntrySnapshot.class);
         } catch (JacksonException e) {
             throw new InternalException("entry snapshot in the journal is not readable", e);
         }

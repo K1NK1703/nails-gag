@@ -58,6 +58,9 @@ class DefaultFinanceEntries implements FinanceEntries {
     /** Один день — не больше одной записи шаблона. */
     private static final String RECURRING_DAY_KEY = "entry_recurring_id_occurred_on_key";
 
+    private static final String TEMPLATE_DAY_TAKEN =
+            "an entry of the same recurring template already exists on that day";
+
     /** Сколько пар предлагает быстрый ввод. */
     private static final int RECENT_COMBOS = 5;
 
@@ -117,6 +120,7 @@ class DefaultFinanceEntries implements FinanceEntries {
         if (after.equals(before)) {
             return entry.toView(category.name());
         }
+        requireTemplateDayFree(entryId, before.recurringId(), fields.occurredOn());
         var now = now();
         entry.apply(fields, now);
         flushMoved(entry);
@@ -241,10 +245,20 @@ class DefaultFinanceEntries implements FinanceEntries {
     }
 
     /**
-     * Сбрасывает правку в базу до записи журнала: перенос записи шаблона на день, где уже есть запись того же
-     * шаблона, нарушает {@code entry_recurring_id_occurred_on_key} — это ошибка запроса по полю {@code occurredOn}.
-     * Остальные нарушения — ошибка в коде или схеме. После нарушения транзакция PostgreSQL прервана: исключению дают
-     * всплыть.
+     * Запись шаблона переносится на день, где уже есть запись того же шаблона, — ошибка запроса до изменения, без
+     * прерывания транзакции. Гонку двух переносов ловит уникальный индекс ({@link #flushMoved}).
+     */
+    private void requireTemplateDayFree(UUID entryId, @Nullable UUID recurringId, LocalDate day) {
+        if (recurringId != null && entries.existsByRecurringIdAndOccurredOnAndIdNot(recurringId, day, entryId)) {
+            throw new ValidationException("occurredOn", TEMPLATE_DAY_TAKEN);
+        }
+    }
+
+    /**
+     * Сбрасывает правку в базу до записи журнала — последняя защита от гонки двух переносов: перенос записи шаблона
+     * на день, где уже есть запись того же шаблона, нарушает {@code entry_recurring_id_occurred_on_key} — это ошибка
+     * запроса по полю {@code occurredOn}. Остальные нарушения — ошибка в коде или схеме. После нарушения транзакция
+     * PostgreSQL прервана: исключению дают всплыть.
      */
     private void flushMoved(EntryEntity entry) {
         try {
@@ -252,8 +266,7 @@ class DefaultFinanceEntries implements FinanceEntries {
         } catch (DataIntegrityViolationException e) {
             var constraint = ConstraintViolations.constraintName(e);
             if (constraint.filter(RECURRING_DAY_KEY::equals).isPresent()) {
-                throw new ValidationException(
-                        "occurredOn", "an entry of the same recurring template already exists on that day");
+                throw new ValidationException("occurredOn", TEMPLATE_DAY_TAKEN);
             }
             throw new InternalException(
                     "entry " + entry.id() + " write violated constraint " + constraint.orElse("<unknown>"), e);

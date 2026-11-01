@@ -47,7 +47,8 @@ public interface FinanceEntries {
      * @throws CategoryNotFoundException если новой категории нет
      * @throws ValidationException (поле {@code categoryId}) выбрана другая скрытая категория или категория другого
      *     вида; ({@code occurredOn}) запись повторяющегося шаблона переносится на день, где уже есть запись того же
-     *     шаблона; остальные поля — как у {@link #add}
+     *     шаблона — при гонке двух переносов эта ошибка приходит из нарушения уникального индекса, и вызывающий в
+     *     своей транзакции после неё откатывает её; остальные поля — как у {@link #add}
      */
     EntryView update(UUID entryId, UpdateEntry command, Actor actor);
 
