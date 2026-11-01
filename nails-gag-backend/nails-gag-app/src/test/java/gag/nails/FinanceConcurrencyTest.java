@@ -158,6 +158,27 @@ class FinanceConcurrencyTest {
     }
 
     @Test
+    void templateEntryMovedOntoDayTakenAfterTheCheckIsRejected() throws Exception {
+        var category = create(EntryKind.EXPENSE, unique("Аренда"));
+        var template = UUID.randomUUID();
+        var day = today();
+        var moved = templateEntry(category.id(), template, day.minusMonths(1));
+
+        // Писатель в обход модуля: предварительная проверка дня его незафиксированную строку не видит, перенос
+        // встаёт на уникальный индекс и после его фиксации получает нарушение.
+        var updated = locks.whileRowIsHeld(
+                () -> templateEntry(category.id(), template, day),
+                () -> entries.update(moved, new UpdateEntry(category.id(), BigDecimal.TEN, day, null), master));
+
+        assertThat(updated.failure())
+                .isInstanceOfSatisfying(
+                        ValidationException.class, e -> assertThat(e.field()).isEqualTo("occurredOn"));
+        assertThat(entries.get(moved, master).occurredOn()).isEqualTo(day.minusMonths(1));
+        // Строка вставлена в обход модуля и журнала не имеет; отказавший перенос журнал тоже не написал.
+        assertThat(entries.history(moved, master)).isEmpty();
+    }
+
+    @Test
     void updateWaitingForDeleteFindsNothing() throws Exception {
         var category = create(EntryKind.EXPENSE, unique("Материалы"));
         var entry = add(category.id());
@@ -171,6 +192,22 @@ class FinanceConcurrencyTest {
         assertThat(entries.history(entry.id(), master))
                 .extracting(EntryChangeView::action)
                 .containsExactly(EntryAction.CREATE, EntryAction.DELETE);
+    }
+
+    /** Запись повторяющегося шаблона — в обход модуля: шаблонов ещё нет. */
+    private UUID templateEntry(UUID categoryId, UUID recurringId, LocalDate day) {
+        var id = UUID.randomUUID();
+        entryIds.add(id);
+        jdbc.sql("""
+                        insert into finance.entry (id, kind, category_id, amount, occurred_on, recurring_id,
+                                                   created_at, updated_at)
+                        values (:id, 'EXPENSE', :categoryId, 10, :day, :recurringId, now(), now())""")
+                .param("id", id)
+                .param("categoryId", categoryId)
+                .param("day", day)
+                .param("recurringId", recurringId)
+                .update();
+        return id;
     }
 
     private EntryView add(UUID categoryId) {
