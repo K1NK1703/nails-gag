@@ -13,6 +13,7 @@ import gag.nails.finance.command.AddEntry;
 import gag.nails.finance.command.CreateCategory;
 import gag.nails.finance.command.CreateRecurring;
 import gag.nails.finance.command.UpdateEntry;
+import gag.nails.finance.command.UpdateRecurring;
 import gag.nails.finance.error.CategoryNameTakenException;
 import gag.nails.finance.error.EntryNotFoundException;
 import gag.nails.finance.model.CategoryView;
@@ -212,6 +213,8 @@ class FinanceConcurrencyTest {
         var template = recurring.create(
                 new CreateRecurring(category.id(), BigDecimal.TEN, null, today.getDayOfMonth(), today, null), master);
         templateIds.add(template.id());
+        // Создание уже сделало сегодняшнюю запись; задаче нужен несозданный день.
+        forgetToday(template.id(), today);
         var held = new CountDownLatch(1);
         var release = new CountDownLatch(1);
 
@@ -239,6 +242,40 @@ class FinanceConcurrencyTest {
 
         maintenance.createDueRecurringEntries();
         assertThat(templateDays(template.id())).containsExactly(today);
+    }
+
+    @Test
+    void templateEditWithNewCategoryWaitsForReorder() throws Exception {
+        var previous = create(EntryKind.EXPENSE, unique("Аренда"));
+        var next = create(EntryKind.EXPENSE, unique("Кабинет"));
+        var today = today();
+        var day = today.getDayOfMonth();
+        var template =
+                recurring.create(new CreateRecurring(previous.id(), BigDecimal.TEN, null, day, today, null), master);
+        templateIds.add(template.id());
+        // Сегодняшний день снова не создан: правка создаст его запись по прежней категории, держа и её, и новую.
+        forgetToday(template.id(), today);
+        var order = categories.list(EntryKind.EXPENSE, master).stream()
+                .map(CategoryView::id)
+                .toList();
+
+        // Перестановка держит список вида и все его категории; правка ждёт её целиком, а не встаёт накрест.
+        var updated = locks.whileRowIsHeld(
+                () -> categories.reorder(EntryKind.EXPENSE, order, master),
+                () -> recurring.update(
+                        template.id(), new UpdateRecurring(next.id(), BigDecimal.ONE, null, day, today, null), master));
+
+        assertThat(updated.failure()).isNull();
+        assertThat(jdbc.sql("select category_id from finance.entry where recurring_id = :id and occurred_on = :day")
+                        .param("id", template.id())
+                        .param("day", today)
+                        .query(UUID.class)
+                        .list())
+                .containsExactly(previous.id());
+        assertThat(recurring.list(master))
+                .filteredOn(view -> view.id().equals(template.id()))
+                .singleElement()
+                .satisfies(view -> assertThat(view.categoryId()).isEqualTo(next.id()));
     }
 
     @Test
@@ -271,6 +308,20 @@ class FinanceConcurrencyTest {
                 .param("recurringId", recurringId)
                 .update();
         return id;
+    }
+
+    /** Как будто сегодняшний день шаблона ещё не создан: его запись и журнал удаляются, прогресс — на вчера. */
+    private void forgetToday(UUID templateId, LocalDate today) {
+        var journal = "delete from finance.entry_change"
+                + " where entry_id in (select id from finance.entry where recurring_id = :id)";
+        jdbc.sql(journal).param("id", templateId).update();
+        jdbc.sql("delete from finance.entry where recurring_id = :id")
+                .param("id", templateId)
+                .update();
+        jdbc.sql("update finance.recurring set generated_through = :day where id = :id")
+                .param("day", today.minusDays(1))
+                .param("id", templateId)
+                .update();
     }
 
     private List<LocalDate> templateDays(UUID templateId) {

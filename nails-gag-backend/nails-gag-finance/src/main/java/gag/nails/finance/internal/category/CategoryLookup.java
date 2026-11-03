@@ -2,6 +2,7 @@ package gag.nails.finance.internal.category;
 
 import gag.nails.common.error.InternalException;
 import gag.nails.finance.error.CategoryNotFoundException;
+import gag.nails.finance.model.EntryKind;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -16,9 +17,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class CategoryLookup {
 
     private final CategoryRepository categories;
+    private final CategoryLocks locks;
 
-    CategoryLookup(CategoryRepository categories) {
+    CategoryLookup(CategoryRepository categories, CategoryLocks locks) {
         this.categories = categories;
+        this.locks = locks;
+    }
+
+    /**
+     * Блокировка списка категорий вида ({@link CategoryLocks#categories}) — первая в порядке блокировок модуля. Её
+     * берёт правка шаблона, которая может держать две категории вида: так она не встаёт накрест с перестановкой.
+     */
+    public void lockCategoriesOf(EntryKind kind) {
+        locks.categories(kind);
     }
 
     /**

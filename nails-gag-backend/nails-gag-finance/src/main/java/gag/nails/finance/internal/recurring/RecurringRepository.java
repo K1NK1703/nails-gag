@@ -1,5 +1,6 @@
 package gag.nails.finance.internal.recurring;
 
+import gag.nails.finance.model.EntryKind;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,6 +17,10 @@ interface RecurringRepository extends JpaRepository<RecurringEntity, UUID> {
 
     @Query(ROW + " order by r.dayOfMonth, r.createdAt, r.id")
     List<RecurringRow> findAllRows();
+
+    /** Вид шаблона; пусто, если его нет. Вид не меняется, поэтому читается без блокировки. */
+    @Query("select r.kind from RecurringEntity r where r.id = :id")
+    Optional<EntryKind> findKindById(UUID id);
 
     @Query(ROW + " where r.id = :id")
     Optional<RecurringRow> findRowById(UUID id);

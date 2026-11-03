@@ -157,6 +157,124 @@ class RecurringEntriesTest extends RecurringTestSupport {
     }
 
     @Test
+    void newTemplateCreatesDueEntriesAtOnce() {
+        today(OCT_5);
+
+        var dueToday = template(RENT, "30000", 5, OCT_1, null);
+        var startedEarlier = template(MATERIALS, "100", 10, LocalDate.of(2026, 8, 1), null);
+
+        // Без запуска задачи.
+        assertThat(days(dueToday)).containsExactly(OCT_5);
+        assertThat(days(startedEarlier)).containsExactly(LocalDate.of(2026, 8, 10), LocalDate.of(2026, 9, 10));
+    }
+
+    @Test
+    void changingDayToPassedDayWithoutThisMonthsEntryCreatesItAtOnce() {
+        var rent = template(RENT, "30000", 25, OCT_1, null);
+        today(LocalDate.of(2026, 10, 10));
+
+        recurring.update(rent.id(), change(rent, "30000", 5, OCT_1), MASTER);
+
+        // Без запуска задачи.
+        assertThat(days(rent)).containsExactly(OCT_5);
+    }
+
+    @Test
+    void changingDayTogetherWithStartsOnDoesNotSkipMonth() {
+        var rent = template(RENT, "30000", 5, NOV_5.withDayOfMonth(1), null);
+        today(LocalDate.of(2026, 10, 10));
+        run();
+
+        // По прежнему startsOn октябрьский день не входил в срок: записи месяца нет, и месяц не пропускается.
+        recurring.update(rent.id(), change(rent, "30000", 20, OCT_1), MASTER);
+        assertThat(days(rent)).isEmpty();
+        today(LocalDate.of(2026, 10, 20));
+        run();
+
+        assertThat(days(rent)).containsExactly(LocalDate.of(2026, 10, 20));
+    }
+
+    @Test
+    void changingDayInFebruary() {
+        var thirtyFirst = template(RENT, "30000", 31, LocalDate.of(2027, 1, 1), null);
+        var twentyNinth = template(MATERIALS, "100", 29, LocalDate.of(2027, 1, 1), null);
+        var february28 = LocalDate.of(2027, 2, 28);
+        today(february28);
+        run();
+        assertThat(days(thirtyFirst)).containsExactly(LocalDate.of(2027, 1, 31), february28);
+        assertThat(days(twentyNinth)).containsExactly(LocalDate.of(2027, 1, 29), february28);
+
+        // Прогресс на 28-м, запись февраля уже есть: следующая — в новое число марта, второй в феврале нет.
+        recurring.update(thirtyFirst.id(), change(thirtyFirst, "30000", 30, thirtyFirst.startsOn()), MASTER);
+        recurring.update(twentyNinth.id(), change(twentyNinth, "100", 31, twentyNinth.startsOn()), MASTER);
+        today(LocalDate.of(2027, 3, 31));
+        run();
+
+        assertThat(days(thirtyFirst)).containsExactly(LocalDate.of(2027, 1, 31), february28, LocalDate.of(2027, 3, 30));
+        assertThat(days(twentyNinth)).containsExactly(LocalDate.of(2027, 1, 29), february28, LocalDate.of(2027, 3, 31));
+    }
+
+    @Test
+    void changingDayInLeapFebruaryBeforeItsEntry() {
+        var february28 = LocalDate.of(2028, 2, 28);
+        today(february28);
+        var rent = template(RENT, "30000", 31, LocalDate.of(2028, 1, 1), null);
+        assertThat(days(rent)).containsExactly(LocalDate.of(2028, 1, 31));
+
+        // Запись февраля (29-е) ещё впереди: новое число 30 в феврале — тоже 29-е.
+        recurring.update(rent.id(), change(rent, "30000", 30, rent.startsOn()), MASTER);
+        today(february28.plusDays(1));
+        run();
+
+        assertThat(days(rent)).containsExactly(LocalDate.of(2028, 1, 31), LocalDate.of(2028, 2, 29));
+    }
+
+    @Test
+    void resumeBeforeTheJobPassesTheDayKeepsTheDay() {
+        var rent = template(RENT, "30000", 5, OCT_1, null);
+        recurring.pause(rent.id(), MASTER);
+
+        // 5-е: задача ещё не проходила этот день на паузе.
+        today(OCT_5);
+        recurring.resume(rent.id(), MASTER);
+        run();
+
+        assertThat(days(rent)).containsExactly(OCT_5);
+    }
+
+    @Test
+    void resumeAfterTheJobPassedTheDaySkipsIt() {
+        var rent = template(RENT, "30000", 5, OCT_1, null);
+        recurring.pause(rent.id(), MASTER);
+
+        // 5-е: задача уже прошла этот день на паузе.
+        today(OCT_5);
+        run();
+        recurring.resume(rent.id(), MASTER);
+        run();
+        assertThat(days(rent)).isEmpty();
+
+        today(NOV_5);
+        run();
+        assertThat(days(rent)).containsExactly(NOV_5);
+    }
+
+    @Test
+    void extendingEndsOnCatchesNothingUp() {
+        var rent = template(RENT, "30000", 5, OCT_1, LocalDate.of(2026, 10, 3));
+        today(LocalDate.of(2026, 11, 10));
+        run();
+
+        recurring.update(rent.id(), new UpdateRecurring(RENT, new BigDecimal("30000"), null, 5, OCT_1, null), MASTER);
+        run();
+        assertThat(days(rent)).isEmpty();
+
+        today(LocalDate.of(2026, 12, 5));
+        run();
+        assertThat(days(rent)).containsExactly(LocalDate.of(2026, 12, 5));
+    }
+
+    @Test
     void pausedAndEndedCreateNothing() {
         var paused = template(RENT, "30000", 5, OCT_1, null);
         var ended = template(MATERIALS, "100", 5, OCT_1, LocalDate.of(2026, 10, 31));
@@ -421,8 +539,8 @@ class RecurringEntriesTest extends RecurringTestSupport {
 
         assertThat(days(failing)).isEmpty();
         assertThat(days(working)).containsExactly(OCT_5);
-        // Прогресс сбойного шаблона не сдвинулся: следующий запуск его догонит.
-        assertThat(generatedThrough(failing)).isNull();
+        // Прогресс сбойного шаблона остался на дне создания: следующий запуск его догонит.
+        assertThat(generatedThrough(failing)).isEqualTo(OCT_1);
         jdbc.sql("DROP TRIGGER %1$s ON finance.entry".formatted(FAILURE_TRIGGER))
                 .update();
         today(OCT_5.plusDays(1));
@@ -479,7 +597,7 @@ class RecurringEntriesTest extends RecurringTestSupport {
     /** Ставит триггер, который отказывает во вставке записи с этой суммой: сбой одного шаблона. */
     private void failInsertsOf(String amount) {
         jdbc.sql("""
-                        CREATE FUNCTION finance.%1$s() RETURNS trigger LANGUAGE plpgsql AS $$
+                        CREATE OR REPLACE FUNCTION finance.%1$s() RETURNS trigger LANGUAGE plpgsql AS $$
                         BEGIN
                             IF NEW.amount = %2$s THEN
                                 RAISE EXCEPTION 'test failure for amount %%', NEW.amount;
@@ -487,7 +605,7 @@ class RecurringEntriesTest extends RecurringTestSupport {
                             RETURN NEW;
                         END $$""".formatted(FAILURE_TRIGGER, amount)).update();
         jdbc.sql("""
-                        CREATE TRIGGER %1$s BEFORE INSERT ON finance.entry
+                        CREATE OR REPLACE TRIGGER %1$s BEFORE INSERT ON finance.entry
                         FOR EACH ROW EXECUTE FUNCTION finance.%1$s()""".formatted(FAILURE_TRIGGER)).update();
     }
 }

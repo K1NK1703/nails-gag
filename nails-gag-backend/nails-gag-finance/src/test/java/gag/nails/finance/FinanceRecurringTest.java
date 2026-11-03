@@ -51,10 +51,10 @@ class FinanceRecurringTest extends RecurringTestSupport {
 
         recurring.delete(created.id(), MASTER);
         assertThat(recurring.list(MASTER)).extracting(RecurringView::id).doesNotContain(created.id());
-        assertNotFound(() -> recurring.delete(created.id(), MASTER));
-        assertNotFound(() -> recurring.pause(created.id(), MASTER));
-        assertNotFound(() -> recurring.resume(created.id(), MASTER));
-        assertNotFound(() -> recurring.update(created.id(), change(created, "1", 5, NEXT_MONTH), MASTER));
+        assertNotFound(() -> recurring.delete(created.id(), MASTER), created.id());
+        assertNotFound(() -> recurring.pause(created.id(), MASTER), created.id());
+        assertNotFound(() -> recurring.resume(created.id(), MASTER), created.id());
+        assertNotFound(() -> recurring.update(created.id(), change(created, "1", 5, NEXT_MONTH), MASTER), created.id());
     }
 
     @Test
@@ -199,8 +199,11 @@ class FinanceRecurringTest extends RecurringTestSupport {
                 template.endsOn());
     }
 
-    private static void assertNotFound(ThrowingCallable call) {
-        assertThatThrownBy(call).isInstanceOf(RecurringNotFoundException.class);
+    private static void assertNotFound(ThrowingCallable call, UUID recurringId) {
+        assertThatThrownBy(call)
+                .isInstanceOfSatisfying(
+                        RecurringNotFoundException.class,
+                        e -> assertThat(e.params()).containsEntry("recurringId", recurringId));
     }
 
     private static void assertDenied(ThrowingCallable call) {

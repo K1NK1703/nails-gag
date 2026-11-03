@@ -28,8 +28,12 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Изменения шаблона берут его строку под блокировку ({@link RecurringRepository#findLockedById}) — так же, как ночная
  * задача, — затем разделяемо строку новой категории ({@link CategoryLookup#forEntry}); записи шаблона вставляются
- * после. Порядок «шаблон → запись → категория» не пересекается с изменениями категорий: те строк шаблонов и записей
- * не блокируют.
+ * после. Правка сначала берёт блокировку списка категорий вида ({@link CategoryLookup#lockCategoriesOf}): она может
+ * держать две категории (прежнюю и новую), и без этого встала бы накрест с перестановкой категорий. Порядок «список
+ * вида → шаблон → запись → категория» — общий порядок модуля (см. {@code CategoryLocks}).
+ *
+ * <p>Создание и правка сразу создают записи за наступившие дни ({@link RecurringSchedule#createDue}), не дожидаясь
+ * ночной задачи.
  */
 @Service
 @Transactional
@@ -78,6 +82,7 @@ class DefaultFinanceRecurring implements FinanceRecurring {
         var category = categories.forEntry(command.categoryId());
         requireVisible(category);
         var created = recurring.save(new RecurringEntity(category.kind(), fields, now()));
+        schedule.createDue(created, today());
         return created.toView(category.name());
     }
 
@@ -92,6 +97,10 @@ class DefaultFinanceRecurring implements FinanceRecurring {
                 command.dayOfMonth(),
                 command.startsOn(),
                 command.endsOn());
+        // Вид шаблона не меняется: по нему блокировка списка берётся до строки шаблона, в порядке модуля. Берётся
+        // всегда, а не только при смене категории: категорию шаблона могли сменить, пока правка ждала его строку.
+        var kind = recurring.findKindById(recurringId).orElseThrow(() -> new RecurringNotFoundException(recurringId));
+        categories.lockCategoriesOf(kind);
         var template = requireLocked(recurringId);
         var today = today();
         // Наступившие дни — по прежним полям: изменение действует только на будущие записи.
@@ -110,6 +119,8 @@ class DefaultFinanceRecurring implements FinanceRecurring {
         if (dayChanged) {
             schedule.afterDayChange(template, thisMonthDone, today);
         }
+        // Наступившие дни по новым полям — сразу: например, новое число месяца уже прошло, а записи месяца нет.
+        schedule.createDue(template, today);
         return template.toView(category.name());
     }
 

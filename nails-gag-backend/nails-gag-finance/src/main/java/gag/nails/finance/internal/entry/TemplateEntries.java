@@ -1,5 +1,6 @@
 package gag.nails.finance.internal.entry;
 
+import gag.nails.common.id.UuidV7;
 import gag.nails.finance.model.EntryKind;
 import gag.nails.finance.model.EntrySnapshot;
 import jakarta.persistence.EntityManager;
@@ -7,8 +8,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
-import org.hibernate.engine.spi.SharedSessionContractImplementor;
-import org.hibernate.id.uuid.UuidVersion7Strategy;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -58,8 +57,7 @@ public class TemplateEntries {
             LocalDate day,
             Instant now) {
         // Идентификатор — UUIDv7, как у записей, которые сохраняет Hibernate: вставка идёт мимо него ради ON CONFLICT.
-        var id = UuidVersion7Strategy.INSTANCE.generateUuid(
-                entityManager.unwrap(SharedSessionContractImplementor.class));
+        var id = UuidV7.next();
         var inserted = entityManager
                 .createNativeQuery(INSERT)
                 .setParameter("id", id)
