@@ -25,13 +25,16 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,6 +80,18 @@ class FinanceConcurrencyTest {
 
     @Autowired
     JdbcClient jdbc;
+
+    @Autowired
+    DataSource dataSource;
+
+    /** Чужие запросы к схеме finance, ждущие блокировку. */
+    private static final String FINANCE_LOCK_WAITS = """
+            select count(*) from pg_stat_activity
+            where datname = current_database() and pid <> pg_backend_pid()
+              and wait_event_type = 'Lock' and query like '%finance.%'""";
+
+    /** Триггер теста встречной блокировки: останавливает правку шаблона сразу после вставки записи. */
+    private static final String GATE_TRIGGER = "finance_concurrency_test_gate";
 
     private final Actor master = Actor.of(UUID.randomUUID(), null, Actor.masterAccess());
 
@@ -278,6 +293,69 @@ class FinanceConcurrencyTest {
                 .satisfies(view -> assertThat(view.categoryId()).isEqualTo(next.id()));
     }
 
+    /**
+     * Регрессия встречной блокировки. Правка шаблона со сменой категории держит прежнюю категорию (внешний ключ записи
+     * за наступивший день) и затем берёт новую; перестановка блокирует все категории вида по id. Новая категория — с
+     * меньшим id: перестановка успевает взять её и ждёт прежнюю, а правка ждала бы новую — накрест. Правка
+     * останавливается сразу после вставки записи (триггер ждёт «ворота» — advisory-блокировку теста), перестановка
+     * стартует в этот момент. С блокировкой списка вида перестановка ждёт её до начала, и обе завершаются.
+     */
+    @Test
+    void templateEditChangingCategoryAndReorderDoNotDeadlock() throws Exception {
+        var first = create(EntryKind.EXPENSE, unique("Кабинет"));
+        var second = create(EntryKind.EXPENSE, unique("Аренда"));
+        var next = first.id().compareTo(second.id()) < 0 ? first : second;
+        var previous = next == first ? second : first;
+        var today = today();
+        var day = today.getDayOfMonth();
+        var template =
+                recurring.create(new CreateRecurring(previous.id(), BigDecimal.TEN, null, day, today, null), master);
+        templateIds.add(template.id());
+        forgetToday(template.id(), today);
+        // Прежняя категория — первой: её позиция меняется, и перестановка обновляет её строку.
+        var order = new ArrayList<UUID>();
+        order.add(previous.id());
+        categories.list(EntryKind.EXPENSE, master).stream()
+                .map(CategoryView::id)
+                .filter(id -> !id.equals(previous.id()))
+                .forEach(order::add);
+        var gate = new Random().nextLong();
+        jdbc.sql("""
+                        CREATE OR REPLACE FUNCTION finance.%1$s() RETURNS trigger LANGUAGE plpgsql AS $$
+                        BEGIN
+                            IF NEW.recurring_id = '%2$s' THEN
+                                PERFORM pg_advisory_xact_lock(%3$d);
+                            END IF;
+                            RETURN NEW;
+                        END $$""".formatted(GATE_TRIGGER, template.id(), gate)).update();
+        jdbc.sql("""
+                        CREATE OR REPLACE TRIGGER %1$s AFTER INSERT ON finance.entry
+                        FOR EACH ROW EXECUTE FUNCTION finance.%1$s()""".formatted(GATE_TRIGGER)).update();
+
+        try (var gateHolder = dataSource.getConnection();
+                var executor = Executors.newFixedThreadPool(2)) {
+            gateHolder.createStatement().execute("select pg_advisory_lock(" + gate + ")");
+            var edit = executor.submit(() -> ConcurrencySupport.outcome(() -> recurring.update(
+                    template.id(), new UpdateRecurring(next.id(), BigDecimal.ONE, null, day, today, null), master)));
+            awaitFinanceLockWaits(1);
+            var reorder = executor.submit(
+                    () -> ConcurrencySupport.outcome(() -> categories.reorder(EntryKind.EXPENSE, order, master)));
+            awaitFinanceLockWaits(2);
+            gateHolder.createStatement().execute("select pg_advisory_unlock(" + gate + ")");
+
+            assertThat(edit.get(ConcurrencySupport.WAIT_SECONDS, TimeUnit.SECONDS)
+                            .failure())
+                    .isNull();
+            assertThat(reorder.get(ConcurrencySupport.WAIT_SECONDS, TimeUnit.SECONDS)
+                            .failure())
+                    .isNull();
+        } finally {
+            dropGateTrigger();
+        }
+        assertThat(templateDays(template.id())).containsExactly(today);
+        assertThat(categories.list(EntryKind.EXPENSE, master).getFirst().id()).isEqualTo(previous.id());
+    }
+
     @Test
     void updateWaitingForDeleteFindsNothing() throws Exception {
         var category = create(EntryKind.EXPENSE, unique("Материалы"));
@@ -308,6 +386,25 @@ class FinanceConcurrencyTest {
                 .param("recurringId", recurringId)
                 .update();
         return id;
+    }
+
+    /** Ждёт, пока столько чужих запросов к схеме finance встанут на блокировку. */
+    private void awaitFinanceLockWaits(int count) throws InterruptedException {
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(ConcurrencySupport.WAIT_SECONDS);
+        while (System.nanoTime() < deadline) {
+            var waiting = jdbc.sql(FINANCE_LOCK_WAITS).query(Integer.class).single();
+            if (waiting >= count) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("fewer than " + count + " finance queries are waiting for a lock");
+    }
+
+    private void dropGateTrigger() {
+        jdbc.sql("DROP TRIGGER IF EXISTS %1$s ON finance.entry".formatted(GATE_TRIGGER))
+                .update();
+        jdbc.sql("DROP FUNCTION IF EXISTS finance.%s()".formatted(GATE_TRIGGER)).update();
     }
 
     /** Как будто сегодняшний день шаблона ещё не создан: его запись и журнал удаляются, прогресс — на вчера. */
