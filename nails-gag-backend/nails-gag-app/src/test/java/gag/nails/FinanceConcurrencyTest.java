@@ -7,8 +7,11 @@ import gag.nails.common.error.ValidationException;
 import gag.nails.common.time.SalonTimeZone;
 import gag.nails.finance.FinanceCategories;
 import gag.nails.finance.FinanceEntries;
+import gag.nails.finance.FinanceMaintenance;
+import gag.nails.finance.FinanceRecurring;
 import gag.nails.finance.command.AddEntry;
 import gag.nails.finance.command.CreateCategory;
+import gag.nails.finance.command.CreateRecurring;
 import gag.nails.finance.command.UpdateEntry;
 import gag.nails.finance.error.CategoryNameTakenException;
 import gag.nails.finance.error.EntryNotFoundException;
@@ -24,6 +27,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +46,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * строки записи и разделяемой блокировке строки категории. Порядок задаётся не гонкой, а ожиданием блокировки
  * ({@link ConcurrencySupport#whileRowIsHeld}): второй гарантированно ждёт первого. База общая для тестов с тем же
  * контекстом: названия категорий — со случайным хвостом, а свои категории, записи и их журнал тест удаляет после
- * себя.
+ * себя. Ночная задача в этих тестах обрабатывает все шаблоны базы, но других шаблонов тесты приложения не
+ * заводят.
  */
 @SpringBootTest(webEnvironment = WebEnvironment.NONE, properties = "nails-gag.booking.jobs.enabled=false")
 @Import(PostgresTestcontainers.class)
@@ -51,6 +58,12 @@ class FinanceConcurrencyTest {
 
     @Autowired
     FinanceEntries entries;
+
+    @Autowired
+    FinanceRecurring recurring;
+
+    @Autowired
+    FinanceMaintenance maintenance;
 
     @Autowired
     Clock clock;
@@ -69,6 +82,9 @@ class FinanceConcurrencyTest {
     /** Названия категорий этого теста: по ним находятся и свои категории, вставленные в обход модуля. */
     private final List<String> names = new CopyOnWriteArrayList<>();
 
+    /** Шаблоны этого теста: их записи и журнал этих записей тоже убираются. */
+    private final List<UUID> templateIds = new CopyOnWriteArrayList<>();
+
     /** Записи этого теста, в том числе уже удалённые: их журнал тоже убирается. */
     private final List<UUID> entryIds = new CopyOnWriteArrayList<>();
 
@@ -82,6 +98,17 @@ class FinanceConcurrencyTest {
     /** Убирает за собой: журнал записей, записи и категории теста (в обход модуля — категории модуль не удаляет). */
     @AfterEach
     void removeOwnRows() {
+        if (!templateIds.isEmpty()) {
+            jdbc.sql("delete from finance.entry_change where coalesce(after, before) ->> 'recurringId' in (:ids)")
+                    .param("ids", templateIds.stream().map(UUID::toString).toList())
+                    .update();
+            jdbc.sql("delete from finance.entry where recurring_id in (:ids)")
+                    .param("ids", templateIds)
+                    .update();
+            jdbc.sql("delete from finance.recurring where id in (:ids)")
+                    .param("ids", templateIds)
+                    .update();
+        }
         if (!entryIds.isEmpty()) {
             jdbc.sql("delete from finance.entry_change where entry_id in (:ids)")
                     .param("ids", entryIds)
@@ -179,6 +206,42 @@ class FinanceConcurrencyTest {
     }
 
     @Test
+    void nightlyJobSkipsTemplateHeldByAnEdit() throws Exception {
+        var category = create(EntryKind.EXPENSE, unique("Подписка"));
+        var today = today();
+        var template = recurring.create(
+                new CreateRecurring(category.id(), BigDecimal.TEN, null, today.getDayOfMonth(), today, null), master);
+        templateIds.add(template.id());
+        var held = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            // Правка держит строку шаблона, как держат её пауза, правка и удаление.
+            var holding = executor.submit(() -> transaction.executeWithoutResult(status -> {
+                jdbc.sql("select id from finance.recurring where id = :id for update")
+                        .param("id", template.id())
+                        .query(UUID.class)
+                        .single();
+                held.countDown();
+                await(release);
+            }));
+            try {
+                assertThat(held.await(ConcurrencySupport.WAIT_SECONDS, TimeUnit.SECONDS))
+                        .isTrue();
+                // Задача не ждёт чужую блокировку: шаблон пропускается до следующего запуска.
+                maintenance.createDueRecurringEntries();
+                assertThat(templateDays(template.id())).isEmpty();
+            } finally {
+                release.countDown();
+            }
+            holding.get(ConcurrencySupport.WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+
+        maintenance.createDueRecurringEntries();
+        assertThat(templateDays(template.id())).containsExactly(today);
+    }
+
+    @Test
     void updateWaitingForDeleteFindsNothing() throws Exception {
         var category = create(EntryKind.EXPENSE, unique("Материалы"));
         var entry = add(category.id());
@@ -208,6 +271,23 @@ class FinanceConcurrencyTest {
                 .param("recurringId", recurringId)
                 .update();
         return id;
+    }
+
+    private List<LocalDate> templateDays(UUID templateId) {
+        return jdbc.sql("select occurred_on from finance.entry where recurring_id = :id order by occurred_on")
+                .param("id", templateId)
+                .query(LocalDate.class)
+                .list();
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertThat(latch.await(ConcurrencySupport.WAIT_SECONDS, TimeUnit.SECONDS))
+                    .isTrue();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
     }
 
     private EntryView add(UUID categoryId) {

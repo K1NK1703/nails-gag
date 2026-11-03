@@ -22,7 +22,6 @@ import gag.nails.finance.model.EntryKind;
 import gag.nails.finance.model.EntryView;
 import gag.nails.finance.model.QuickCombo;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -45,15 +44,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 class DefaultFinanceEntries implements FinanceEntries {
-
-    /** Наибольшая сумма — предел {@code numeric(12,2)}. */
-    private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999.99");
-
-    /** Знаков после запятой у суммы — как в {@code numeric(12,2)}. */
-    private static final int AMOUNT_SCALE = 2;
-
-    /** Предел длины комментария — как в {@code CHECK} колонки {@code comment}. */
-    private static final int MAX_COMMENT_LENGTH = 500;
 
     /** Один день — не больше одной записи шаблона. */
     private static final String RECURRING_DAY_KEY = "entry_recurring_id_occurred_on_key";
@@ -203,45 +193,9 @@ class DefaultFinanceEntries implements FinanceEntries {
     private EntryFields fields(UUID categoryId, BigDecimal amount, LocalDate occurredOn, @Nullable String comment) {
         return new EntryFields(
                 categoryId,
-                requireAmount(amount),
+                EntryRules.amount(amount),
                 ReportPeriod.requireDay("occurredOn", occurredOn, today()),
-                normalizeComment(comment));
-    }
-
-    /**
-     * Сумма больше нуля, не больше {@link #MAX_AMOUNT}, не больше двух значащих знаков после запятой — с ровно двумя
-     * знаками, как её вернёт база: иначе {@code 1500} и {@code 1500.00} были бы разными суммами для журнала.
-     */
-    private static BigDecimal requireAmount(BigDecimal amount) {
-        if (amount.signum() <= 0) {
-            throw new ValidationException("amount", "must be greater than 0");
-        }
-        if (amount.compareTo(MAX_AMOUNT) > 0) {
-            throw new ValidationException("amount", "must be at most " + MAX_AMOUNT);
-        }
-        if (amount.stripTrailingZeros().scale() > AMOUNT_SCALE) {
-            throw new ValidationException("amount", "must have at most " + AMOUNT_SCALE + " decimal places");
-        }
-        return amount.setScale(AMOUNT_SCALE, RoundingMode.UNNECESSARY);
-    }
-
-    /**
-     * Комментарий без пробелов по краям (как название категории); пустой — его отсутствие. Длина — в символах
-     * (кодовых точках), как {@code char_length} в {@code CHECK} базы: эмодзи — один символ, хотя в Java это две
-     * единицы UTF-16.
-     */
-    private static @Nullable String normalizeComment(@Nullable String comment) {
-        if (comment == null) {
-            return null;
-        }
-        var stripped = comment.strip();
-        if (stripped.isEmpty()) {
-            return null;
-        }
-        if (stripped.codePointCount(0, stripped.length()) > MAX_COMMENT_LENGTH) {
-            throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
-        }
-        return stripped;
+                EntryRules.comment(comment));
     }
 
     /**
