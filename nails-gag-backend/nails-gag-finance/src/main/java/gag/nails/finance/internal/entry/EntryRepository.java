@@ -4,6 +4,7 @@ import gag.nails.finance.model.EntryKind;
 import gag.nails.finance.model.QuickCombo;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +47,34 @@ interface EntryRepository extends JpaRepository<EntryEntity, UUID> {
             + " group by c.id, c.name, e.amount"
             + " order by max(e.createdAt) desc, c.id, e.amount")
     List<QuickCombo> findRecentCombos(EntryKind kind, Pageable pageable);
+
+    /**
+     * Суммы записей периода (обе границы включительно) по категориям; только категории с записями в периоде. По виду,
+     * внутри вида — в порядке категорий в списке.
+     */
+    @Query("select new gag.nails.finance.internal.entry.CategorySum(c.id, c.kind, c.name, c.hidden, sum(e.amount))"
+            + WITH_CATEGORY
+            + " where e.occurredOn between :from and :to"
+            + " group by c.id, c.kind, c.name, c.hidden, c.position"
+            + " order by c.kind, c.position, c.id")
+    List<CategorySum> sumByCategory(LocalDate from, LocalDate to);
+
+    /** Суммы записей периода (обе границы включительно) по месяцу дня операции и виду; только непустые. */
+    @Query("select new gag.nails.finance.internal.entry.MonthSum(year(e.occurredOn), month(e.occurredOn), e.kind,"
+            + " sum(e.amount)) from EntryEntity e where e.occurredOn between :from and :to"
+            + " group by year(e.occurredOn), month(e.occurredOn), e.kind")
+    List<MonthSum> sumByMonth(LocalDate from, LocalDate to);
+
+    /**
+     * Записи периода (обе границы включительно) видов {@code kinds} и, если задана, одной категории — для журнала
+     * операций. Порядок — как у {@link #findPage}: новые дни первыми, внутри дня позже внесённые, затем по id.
+     */
+    @Query("select new gag.nails.finance.internal.entry.EntryLine(e.id, e.kind, e.categoryId, c.name, e.amount,"
+            + " e.occurredOn)" + WITH_CATEGORY
+            + " where e.occurredOn between :from and :to and e.kind in :kinds"
+            + " and (:categoryId is null or e.categoryId = :categoryId)"
+            + " order by e.occurredOn desc, e.createdAt desc, e.id desc")
+    List<EntryLine> findLines(LocalDate from, LocalDate to, Collection<EntryKind> kinds, @Nullable UUID categoryId);
 
     /** Есть ли у шаблона другая запись в этот день ({@code entry_recurring_id_occurred_on_key}). */
     boolean existsByRecurringIdAndOccurredOnAndIdNot(UUID recurringId, LocalDate occurredOn, UUID id);
