@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.common.error.InternalException;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -88,6 +90,33 @@ class AnalyticsMaintenanceTest extends AnalyticsTestSupport {
                         .query(Long.class)
                         .single())
                 .isEqualTo(before);
+    }
+
+    /** В первые пять минут нового дня по времени салона вчерашний день не убирается: приём может его дописывать. */
+    @Test
+    void purgeRightAfterMidnightKeepsYesterday() {
+        var yesterday = onDay(LocalDate.of(1991, 7, 1));
+        view("/");
+        at(yesterday.plusDays(1), LocalTime.of(0, 3));
+
+        assertThat(maintenance.purgeExpired()).isZero();
+
+        assertThat(visitorRows(yesterday)).isOne();
+        assertThat(saltRows(yesterday)).isOne();
+    }
+
+    /** После запаса вчерашний день убирается. В 00:10 по Москве в UTC ещё вчера — граница считается в поясе салона. */
+    @Test
+    void purgeAfterGraceRemovesYesterday() {
+        var yesterday = onDay(LocalDate.of(1991, 7, 3));
+        view("/");
+        at(yesterday.plusDays(1), LocalTime.of(0, 10));
+        assertThat(clock.instant().atZone(ZoneOffset.UTC).toLocalDate()).isEqualTo(yesterday);
+
+        assertThat(maintenance.purgeExpired()).isOne();
+
+        assertThat(visitorRows(yesterday)).isZero();
+        assertThat(saltRows(yesterday)).isZero();
     }
 
     /** Вызов изнутри чужой транзакции — отказ: уборка фиксирует своё удаление сама. Ничего не удаляется. */

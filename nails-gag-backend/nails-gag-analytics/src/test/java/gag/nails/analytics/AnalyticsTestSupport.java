@@ -21,6 +21,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * Общее для тестов приёма: события, чтение счётчиков и уборка. Тест берёт свои далёкие дни через {@link #onDay}: день
  * должен быть пуст (чужих строк в нём нет), часы ставятся на полдень этого дня в поясе салона, а после теста строки
  * всех взятых дней удаляются — данные фиксируются на самом деле.
+ *
+ * <p>Дни раньше 2000 года ({@link #PURGE_TEST_DAYS_BEFORE}) — только для {@link AnalyticsMaintenanceTest}: уборка
+ * стирает соли и отпечатки всех дней раньше своего «сегодня», и чужие дни там она бы задела. Остальные тесты берут
+ * дни не раньше 2000 года; {@link #take} это проверяет.
  */
 abstract class AnalyticsTestSupport {
 
@@ -29,6 +33,9 @@ abstract class AnalyticsTestSupport {
             + " (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
     static final String IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
             + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+
+    /** Граница дней {@link AnalyticsMaintenanceTest}: его дни — раньше, дни остальных тестов — не раньше. */
+    static final LocalDate PURGE_TEST_DAYS_BEFORE = LocalDate.of(2000, 1, 1);
 
     private static final String ROWS = """
             select (select count(*) from analytics.daily_count where day = :day)
@@ -71,6 +78,9 @@ abstract class AnalyticsTestSupport {
 
     /** Берёт пустой день теста, не трогая часы. */
     LocalDate take(LocalDate day) {
+        assertThat(day.isBefore(PURGE_TEST_DAYS_BEFORE))
+                .as("%s is before %s only in AnalyticsMaintenanceTest", day, PURGE_TEST_DAYS_BEFORE)
+                .isEqualTo(this instanceof AnalyticsMaintenanceTest);
         assertThat(rows(day)).as("rows of %s before the test", day).isZero();
         days.add(day);
         return day;
