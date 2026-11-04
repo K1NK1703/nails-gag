@@ -14,6 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.invocation.InvocationOnMock;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,10 +24,14 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * Транзакция отчётов на рабочем пути — без тестовой транзакции, внутри которой отчёт присоединился бы к чужой: каждый
  * отчёт сам открывает транзакцию только для чтения с {@code REPEATABLE READ}, и факты модуля записей читаются в ней
  * же — с тем же снимком базы. Состояние транзакции снимает шпион {@link BookingFinance} в момент вызова фактов: и по
- * Spring, и по самому соединению PostgreSQL. Периоды пусты, данных тест не создаёт и не фиксирует.
+ * Spring, и по самому соединению PostgreSQL. Шпион оборачивает сам объект модуля записей, внутри его транзакционного
+ * прокси, поэтому видит ту транзакцию, в которой факты действительно читаются: своя транзакция модуля записей вместо
+ * присоединения ({@code REQUIRES_NEW}) показала бы {@code READ COMMITTED}. Периоды пусты, данных тест не создаёт и не
+ * фиксирует. Контекст со шпионом после теста закрывается: второй контекст с контейнером базы не остаётся в кеше.
  */
 @FinanceModuleTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
+@DirtiesContext
 class FinanceReportsTransactionTest extends ReportsTestSupport {
 
     private static final LocalDate FROM = LocalDate.of(2031, 3, 2);

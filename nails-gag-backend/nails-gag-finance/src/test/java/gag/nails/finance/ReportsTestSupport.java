@@ -13,6 +13,7 @@ import gag.nails.clients.command.CreateClient;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.common.time.SalonTimeZone;
 import gag.nails.finance.model.EntryKind;
 import gag.nails.schedule.ScheduleService;
 import gag.nails.schedule.model.SlotView;
@@ -20,7 +21,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -56,12 +57,13 @@ abstract class ReportsTestSupport extends FinanceTestSupport {
     /** Последний день дней тестов отчётов — предел периода при {@link #REPORTS_TODAY}. */
     static final LocalDate REPORTS_LAST_DAY = LocalDate.of(2032, 6, 1);
 
-    private static final ZoneId SALON = ZoneId.of("Europe/Moscow");
-
     private static final AtomicInteger CLIENTS = new AtomicInteger();
 
     @Autowired
     FinanceReports reports;
+
+    @Autowired
+    SalonTimeZone salonTimeZone;
 
     @Autowired
     ScheduleService schedule;
@@ -84,8 +86,10 @@ abstract class ReportsTestSupport extends FinanceTestSupport {
      * проверка читает базу напрямую, мимо проверяемого кода.
      */
     void requireReportDaysEmpty() {
-        var from = REPORTS_FIRST_DAY.atStartOfDay(SALON).toOffsetDateTime();
-        var to = REPORTS_LAST_DAY.plusDays(1).atStartOfDay(SALON).toOffsetDateTime();
+        var from = salonTimeZone.at(REPORTS_FIRST_DAY, LocalTime.MIDNIGHT).atOffset(ZoneOffset.UTC);
+        var to = salonTimeZone
+                .at(REPORTS_LAST_DAY.plusDays(1), LocalTime.MIDNIGHT)
+                .atOffset(ZoneOffset.UTC);
         var entries = jdbc.sql("select count(*) from finance.entry where occurred_on between :from and :to")
                 .param("from", REPORTS_FIRST_DAY)
                 .param("to", REPORTS_LAST_DAY)
@@ -110,7 +114,7 @@ abstract class ReportsTestSupport extends FinanceTestSupport {
 
     /** Часы — на 09:00 салона в {@link #REPORTS_TODAY}. */
     void reportsToday() {
-        clock.set(REPORTS_TODAY.atTime(LocalTime.of(9, 0)).atZone(SALON).toInstant());
+        clock.set(salonTimeZone.at(REPORTS_TODAY, LocalTime.of(9, 0)));
     }
 
     /** Новый клиент без аккаунта; имя различает клиентов в выводе упавшего теста. */
