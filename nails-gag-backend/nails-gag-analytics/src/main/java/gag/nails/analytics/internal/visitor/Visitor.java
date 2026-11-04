@@ -8,15 +8,12 @@ import java.util.Optional;
  * Кто зашёл — только для суточного отпечатка; не хранится. {@link #toString()} не показывает значений, чтобы адрес и
  * {@code User-Agent} не попали в лог случайно.
  *
- * @param address байты IP-адреса в каноническом виде: 4 байта IPv4 (в том числе из IPv4-mapped IPv6), 16 байт IPv6 —
- *     разные записи одного адреса дают один отпечаток
+ * @param address байты IP-адреса: 4 у IPv4, 16 у IPv6. Разные записи одного адреса дают одни байты — это делает
+ *     JDK: {@link InetAddress#ofLiteral} разбирает литерал в число, а IPv4-mapped IPv6 ({@code ::ffff:a.b.c.d}) отдаёт
+ *     как {@code Inet4Address}
  * @param userAgent заголовок {@code User-Agent}
  */
 public record Visitor(byte[] address, String userAgent) {
-
-    private static final int IPV4_BYTES = 4;
-    private static final int IPV6_BYTES = 16;
-    private static final int MAPPED_PREFIX_ZEROS = 10;
 
     /**
      * Посетитель по IP-литералу, без обращения к DNS ({@link InetAddress#ofLiteral}).
@@ -30,24 +27,7 @@ public record Visitor(byte[] address, String userAgent) {
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
-        return Optional.of(new Visitor(canonical(address.getAddress()), userAgent));
-    }
-
-    /** IPv4-mapped IPv6 ({@code ::ffff:a.b.c.d}) — те же 4 байта, что у IPv4. */
-    private static byte[] canonical(byte[] address) {
-        if (address.length == IPV6_BYTES && isMappedIpv4(address)) {
-            return Arrays.copyOfRange(address, IPV6_BYTES - IPV4_BYTES, IPV6_BYTES);
-        }
-        return address;
-    }
-
-    private static boolean isMappedIpv4(byte[] address) {
-        for (var i = 0; i < MAPPED_PREFIX_ZEROS; i++) {
-            if (address[i] != 0) {
-                return false;
-            }
-        }
-        return address[MAPPED_PREFIX_ZEROS] == (byte) 0xff && address[MAPPED_PREFIX_ZEROS + 1] == (byte) 0xff;
+        return Optional.of(new Visitor(address.getAddress(), userAgent));
     }
 
     @Override

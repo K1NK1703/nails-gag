@@ -81,6 +81,22 @@ class IngestWritesTest {
         assertThat(writes.availablePermits()).isEqualTo(taken);
     }
 
+    /** Сбой записи (переполнение {@code bigint} у счётчика) не уносит место записи: оно возвращается. */
+    @Test
+    void permitIsReturnedAfterWriteFailure() {
+        var writes = ((DefaultAnalyticsIngest) ingest).writes;
+        var available = writes.availablePermits();
+        jdbc.sql("insert into analytics.daily_count (day, metric, key, count) values (:day, 'map_open', 'map', :count)")
+                .param("day", DAY)
+                .param("count", Long.MAX_VALUE)
+                .update();
+
+        ingest.record(MAP, IP, BROWSER);
+
+        assertThat(mapCount()).isEqualTo(Long.MAX_VALUE);
+        assertThat(writes.availablePermits()).isEqualTo(available);
+    }
+
     @Test
     void counterNeedsCallerTransaction() {
         var event = new AcceptedEvent(List.of(new Tally(Metric.MAP_OPEN, "map")), null);
@@ -88,7 +104,7 @@ class IngestWritesTest {
     }
 
     private long mapCount() {
-        return jdbc.sql("select coalesce(sum(count), 0) from analytics.daily_count where day = :day")
+        return jdbc.sql("select coalesce(max(count), 0) from analytics.daily_count where day = :day")
                 .param("day", DAY)
                 .query(Long.class)
                 .single();

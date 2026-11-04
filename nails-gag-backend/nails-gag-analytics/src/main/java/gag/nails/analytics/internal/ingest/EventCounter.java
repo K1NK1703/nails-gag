@@ -2,6 +2,7 @@ package gag.nails.analytics.internal.ingest;
 
 import gag.nails.analytics.internal.count.DailyCounts;
 import gag.nails.analytics.internal.visitor.Visitors;
+import gag.nails.common.error.InternalException;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import org.springframework.stereotype.Component;
@@ -25,11 +26,20 @@ class EventCounter {
      * записи журнала на диск ({@code synchronous_commit = off}): при падении базы теряются доли секунды счётчиков —
      * для статистики это допустимо, а держать горячую строку (просмотры {@code /} за день) заблокированной на время
      * fsync каждого события — нет. Целостность базы при этом не страдает, теряются только последние фиксации.
+     *
+     * <p>Тем же запросом читается уровень изоляции: на {@code READ COMMITTED} держится общая соль дня при
+     * одновременных первых событиях ({@code DaySalts} читает соль, вставленную чужой транзакцией после начала своей).
+     * Уровень не задаётся у транзакции явно — тогда драйвер на каждое событие спрашивал бы его у базы лишним
+     * запросом; другой уровень (смена умолчания базы) — сбой приёма, он уходит в лог.
      */
     private static final String LIMITS = """
             select set_config('lock_timeout', '500ms', true),
                    set_config('statement_timeout', '2s', true),
-                   set_config('synchronous_commit', 'off', true)""";
+                   set_config('synchronous_commit', 'off', true),
+                   current_setting('transaction_isolation')""";
+
+    private static final String READ_COMMITTED = "read committed";
+    private static final int ISOLATION_COLUMN = 3;
 
     private final EntityManager entityManager;
     private final DailyCounts counts;
@@ -41,9 +51,18 @@ class EventCounter {
         this.visitors = visitors;
     }
 
-    /** Первым запросом транзакции ставит её пределы, затем отмечает посетителя и прибавляет счётчики. */
+    /**
+     * Первым запросом транзакции ставит её пределы и сверяет уровень изоляции, затем отмечает посетителя и прибавляет
+     * счётчики.
+     *
+     * @throws InternalException если транзакция не {@code READ COMMITTED}
+     */
     void count(LocalDate day, AcceptedEvent event) {
-        entityManager.createNativeQuery(LIMITS).getSingleResult();
+        var settings = (Object[]) entityManager.createNativeQuery(LIMITS).getSingleResult();
+        if (!READ_COMMITTED.equals(settings[ISOLATION_COLUMN])) {
+            throw new InternalException(
+                    "analytics ingest needs read committed, the transaction is " + settings[ISOLATION_COLUMN]);
+        }
         var visitor = event.visitor();
         if (visitor != null && visitors.firstVisitOfDay(day, visitor)) {
             counts.increment(day, Visitors.ALL);

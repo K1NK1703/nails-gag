@@ -6,10 +6,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Суточный отпечаток посетителя: {@code SHA-256(соль дня ‖ байты адреса ‖ 0x00 ‖ userAgent)}, адрес — в каноническом
- * виде ({@link Visitor#address()}), {@code User-Agent} — в UTF-8. Нулевой байт отделяет адрес от
- * {@code User-Agent}. Без соли дня отпечаток не сопоставить с человеком, а соль стирается после дня — восстановить,
- * кто был, тогда уже нельзя.
+ * Суточный отпечаток посетителя: {@code SHA-256(соль дня ‖ длина адреса ‖ байты адреса ‖ userAgent)}: длина — один
+ * байт (4 или 16), адрес — {@link Visitor#address()}, {@code User-Agent} — в UTF-8. Соль фиксированной длины, а длина
+ * адреса записана перед ним, поэтому граница между адресом и {@code User-Agent} однозначна и разделитель не нужен:
+ * разные пары не дают одну и ту же строку. Без соли дня отпечаток не сопоставить с человеком, а соль стирается после
+ * дня — восстановить, кто был, тогда уже нельзя.
  */
 final class Fingerprints {
 
@@ -26,8 +27,8 @@ final class Fingerprints {
             throw new InternalException("SHA-256 is not available", e);
         }
         digest.update(salt);
+        digest.update((byte) visitor.address().length);
         digest.update(visitor.address());
-        digest.update((byte) 0);
         digest.update(visitor.userAgent().getBytes(StandardCharsets.UTF_8));
         return digest.digest();
     }

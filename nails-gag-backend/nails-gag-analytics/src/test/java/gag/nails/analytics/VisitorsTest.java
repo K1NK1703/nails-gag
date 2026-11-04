@@ -26,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class VisitorsTest extends AnalyticsTestSupport {
 
     private static final long WAIT_SECONDS = 20;
+    private static final long POLL_MILLIS = 5;
 
     private static final String SALT_LOCK_WAITS = """
             select count(*) from pg_stat_activity
@@ -40,6 +41,9 @@ class VisitorsTest extends AnalyticsTestSupport {
 
     @Autowired
     DailyCounts counts;
+
+    @Autowired
+    AnalyticsProperties properties;
 
     @Test
     void sameIpAndUserAgentIsOneVisitorPerDay() {
@@ -110,14 +114,14 @@ class VisitorsTest extends AnalyticsTestSupport {
     }
 
     /**
-     * Сверх предела посетителей за день ({@code max-visitors-per-day}, по умолчанию 100000) новый не отмечается, а
+     * Сверх предела посетителей за день ({@code max-visitors-per-day}) новый не отмечается, а
      * просмотр считается. Число посетителей дня берётся из счётчика {@code visitors/all}: тест ставит его вплотную к
      * пределу.
      */
     @Test
     void visitorsOverTheDailyLimitAreNotMarked() {
         var day = onDay(LocalDate.of(2312, 1, 12));
-        var limit = Long.parseLong(AnalyticsProperties.DEFAULT_MAX_VISITORS_PER_DAY);
+        long limit = properties.maxVisitorsPerDay();
         jdbc.sql("insert into analytics.daily_count (day, metric, key, count) values (:day, 'visitors', 'all', :count)")
                 .param("day", day)
                 .param("count", limit - 1)
@@ -132,7 +136,7 @@ class VisitorsTest extends AnalyticsTestSupport {
         assertThat(count(day, "page_view", "/")).isEqualTo(3);
     }
 
-    /** Отпечаток — {@code SHA-256(соль дня ‖ байты адреса ‖ 0x00 ‖ userAgent в UTF-8)}; адрес и UA не хранятся. */
+    /** Отпечаток — {@code SHA-256(соль ‖ длина адреса ‖ байты адреса ‖ userAgent в UTF-8)}; адрес и UA не хранятся. */
     @Test
     void fingerprintIsSaltedHashOfIpAndUserAgent() throws Exception {
         var day = onDay(LocalDate.of(2312, 1, 6));
@@ -142,9 +146,9 @@ class VisitorsTest extends AnalyticsTestSupport {
 
         var digest = MessageDigest.getInstance("SHA-256");
         digest.update(salt(day));
-        // 203.0.113.7 — четыре байта адреса, не текст.
+        // 203.0.113.7 — один байт длины и четыре байта адреса, не текст.
+        digest.update((byte) 4);
         digest.update(new byte[] {(byte) 203, 0, 113, 7});
-        digest.update((byte) 0);
         digest.update(userAgent.getBytes(StandardCharsets.UTF_8));
         assertThat(hash(day)).isEqualTo(digest.digest());
         assertThat(salt(day)).hasSize(32);
@@ -154,6 +158,10 @@ class VisitorsTest extends AnalyticsTestSupport {
      * Два первых события дня одновременно. Первое (здесь — тот же путь приёма, что у {@code AnalyticsIngest}, в
      * транзакции теста) создало соль и отметило посетителя, но ещё не зафиксировано. Второе — тот же IP и браузер —
      * встаёт на вставке соли, ждёт фиксации первого и берёт его соль: соль у дня одна, посетитель — один.
+     *
+     * <p>У второго события {@code lock_timeout} 500 мс. Первая транзакция отпускается сразу, как только ожидание
+     * видно в {@code pg_stat_activity} (опрос раз в {@value #POLL_MILLIS} мс), поэтому второе ждёт лишь шаг опроса,
+     * один запрос и фиксацию первой — единицы миллисекунд, заведомо меньше 500 мс.
      */
     @Test
     void concurrentFirstEventsOfDayShareOneSalt() throws Exception {
@@ -208,7 +216,7 @@ class VisitorsTest extends AnalyticsTestSupport {
             if (jdbc.sql(SALT_LOCK_WAITS).query(Integer.class).single() > 0) {
                 return;
             }
-            Thread.sleep(20);
+            Thread.sleep(POLL_MILLIS);
         }
         throw new AssertionError("no event is waiting for the salt of the day");
     }

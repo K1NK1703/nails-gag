@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -24,9 +25,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Цена — второе соединение, пока вызывающий держит своё; HTTP-адрес приёма вызывает без транзакции.
  *
  * <p>Приём не должен занимать общий пул соединений: одновременно пишется не больше
- * {@code nails-gag.analytics.max-concurrent-writes} событий, лишнее отбрасывается без ожидания; у транзакции короткие
- * пределы ожидания блокировок и запросов ({@link EventCounter}). Уровень изоляции задан явно — {@code READ COMMITTED}:
- * на нём держится общая соль дня при одновременных первых событиях ({@code DaySalts}).
+ * {@code nails-gag.analytics.max-concurrent-writes} событий; событие ждёт места не дольше
+ * {@value #WRITE_WAIT_MILLIS} мс (сглаживает обычные всплески, потоки запросов виртуальные), потом отбрасывается. У
+ * транзакции короткие пределы ожидания блокировок и запросов, а её уровень изоляции — {@code READ COMMITTED},
+ * умолчание PostgreSQL — сверяется первым запросом ({@link EventCounter}).
  *
  * <p>Сбой ловится снаружи транзакции: к этому моменту {@link TransactionTemplate} её уже откатил, частично
  * записанных счётчиков не остаётся. Потери пишутся в лог с ограничением частоты ({@link LossLog}). IP и
@@ -34,6 +36,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @Service
 class DefaultAnalyticsIngest implements AnalyticsIngest {
+
+    static final long WRITE_WAIT_MILLIS = 50;
 
     /** Места записи; пакетный доступ — для теста, который занимает их все. */
     final Semaphore writes;
@@ -55,7 +59,6 @@ class DefaultAnalyticsIngest implements AnalyticsIngest {
         this.counter = counter;
         this.transaction = new TransactionTemplate(transactionManager);
         this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        this.transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         this.clock = clock;
         this.salonTimeZone = salonTimeZone;
         this.ownHost = EventKeys.ownHost(properties.siteHost());
@@ -75,7 +78,14 @@ class DefaultAnalyticsIngest implements AnalyticsIngest {
     }
 
     private void write(AcceptedEvent event) {
-        if (!writes.tryAcquire()) {
+        try {
+            if (!writes.tryAcquire(WRITE_WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
+                losses.busy();
+                return;
+            }
+        } catch (InterruptedException e) {
+            // Поток прерывают (остановка приложения): событие отбрасывается, флаг прерывания остаётся для вызывающего.
+            Thread.currentThread().interrupt();
             losses.busy();
             return;
         }
