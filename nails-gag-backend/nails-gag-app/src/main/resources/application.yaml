@@ -52,6 +52,10 @@ nails-gag:
     # Домен сайта: переход с него (с www. или без) считается источником direct, а не внешним сайтом.
     site-host: nails-gag.ru
     # Пределы max-keys-per-metric, max-visitors-per-day и max-concurrent-writes — по умолчанию из AnalyticsProperties.
+    jobs:
+      enabled: true
+      # Уборка солей и отпечатков прошедших дней, по времени салона: вскоре после смены дня.
+      purge-cron: "0 30 0 * * *"
   identity:
     # Пары provider:subject, которым при входе выдаётся роль «Разработчик»: ["YANDEX:1234567", "VK:7654321"]
     bootstrap-developers: []

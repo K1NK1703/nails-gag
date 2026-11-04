@@ -21,6 +21,7 @@ import org.springframework.validation.annotation.Validated;
  *     отмечаются (просмотры считаются как обычно) — защита таблицы отпечатков от накрутки с разных адресов
  * @param maxConcurrentWrites сколько событий пишется в базу одновременно; событие сверх этого числа отбрасывается без
  *     ожидания — приём не занимает общий пул соединений приложения
+ * @param jobs фоновые задачи; в тестах выключены
  */
 @Validated
 @ConfigurationProperties("nails-gag.analytics")
@@ -32,15 +33,31 @@ public record AnalyticsProperties(
         int maxVisitorsPerDay,
 
         @DefaultValue(DEFAULT_MAX_CONCURRENT_WRITES) @Positive
-        int maxConcurrentWrites) {
+        int maxConcurrentWrites,
+
+        @DefaultValue Jobs jobs) {
 
     public static final String DEFAULT_MAX_KEYS_PER_METRIC = "50";
     public static final String DEFAULT_MAX_VISITORS_PER_DAY = "100000";
     public static final String DEFAULT_MAX_CONCURRENT_WRITES = "3";
+    public static final String DEFAULT_JOBS_ENABLED = "true";
+    public static final String DEFAULT_PURGE_CRON = "0 30 0 * * *";
 
     /** Метка имени хоста: латиница в нижнем регистре, цифры и дефис, без дефиса по краям, до 63 символов. */
     public static final String LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 
     /** Имя хоста: одна или несколько меток через точку ({@code localhost} — тоже). */
     public static final String HOST = LABEL + "(?:\\." + LABEL + ")*";
+
+    /**
+     * Читаются аннотациями {@code AnalyticsJobs} ({@code @ConditionalOnProperty}, {@code @Scheduled}); поля здесь —
+     * чтобы все настройки модуля были описаны в одном месте.
+     *
+     * @param enabled включена ли уборка по расписанию и после старта
+     * @param purgeCron когда стираются соли и отпечатки прошедших дней, по времени салона ({@code nails-gag.time-zone})
+     */
+    public record Jobs(
+            @DefaultValue(DEFAULT_JOBS_ENABLED) boolean enabled,
+
+            @DefaultValue(DEFAULT_PURGE_CRON) String purgeCron) {}
 }
