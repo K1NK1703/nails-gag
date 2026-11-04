@@ -21,6 +21,9 @@ nails-gag:
   # от каталога запуска (bootRun — корень проекта бэкенда). Пусто — импорт не запускается.
   portfolio-import:
     source: ""
+  analytics:
+    # Сайт открывается с localhost (Vite): переходы внутри него — direct.
+    site-host: localhost
   api:
     # Vite отдаёт сайт на 5173 и проксирует /api на 8080.
     site-origin: http://localhost:5173

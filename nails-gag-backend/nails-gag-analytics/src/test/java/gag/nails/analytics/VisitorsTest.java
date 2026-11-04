@@ -1,0 +1,184 @@
+package gag.nails.analytics;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import gag.nails.analytics.internal.count.DailyCounts;
+import gag.nails.analytics.internal.count.Tally;
+import gag.nails.analytics.internal.visitor.Visitor;
+import gag.nails.analytics.internal.visitor.Visitors;
+import gag.nails.analytics.model.Metric;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDate;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * Уникальные посетители дня по суточному отпечатку — на настоящих транзакциях, с уборкой своих дней (2312 год).
+ */
+@AnalyticsModuleTest
+class VisitorsTest extends AnalyticsTestSupport {
+
+    private static final long WAIT_SECONDS = 20;
+
+    private static final String SALT_LOCK_WAITS = """
+            select count(*) from pg_stat_activity
+            where datname = current_database() and pid <> pg_backend_pid()
+              and wait_event_type = 'Lock' and query like '%analytics.day_salt%'""";
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
+
+    @Autowired
+    Visitors visitors;
+
+    @Autowired
+    DailyCounts counts;
+
+    @Test
+    void sameIpAndUserAgentIsOneVisitorPerDay() {
+        var day = onDay(LocalDate.of(2312, 1, 1));
+
+        view("/");
+        view("/terms");
+        ingest.record(pageView("/", true, "ya.ru"), IP, BROWSER);
+
+        assertThat(count(day, "visitors", "all")).isOne();
+        assertThat(visitorRows(day)).isOne();
+        assertThat(saltRows(day)).isOne();
+    }
+
+    @Test
+    void otherUserAgentOrIpIsAnotherVisitor() {
+        var day = onDay(LocalDate.of(2312, 1, 2));
+
+        view("/");
+        ingest.record(pageView("/", null, null), IP, IPHONE);
+        ingest.record(pageView("/", null, null), "198.51.100.1", BROWSER);
+        ingest.record(pageView("/", null, null), "198.51.100.1", BROWSER);
+
+        assertThat(count(day, "visitors", "all")).isEqualTo(3);
+        assertThat(visitorRows(day)).isEqualTo(3);
+    }
+
+    @Test
+    void onlyPageViewsCountVisitors() {
+        var day = onDay(LocalDate.of(2312, 1, 3));
+
+        ingest.record(cta("hero"), IP, BROWSER);
+        ingest.record(map(), IP, BROWSER);
+
+        assertThat(count(day, "visitors", "all")).isZero();
+        assertThat(visitorRows(day)).isZero();
+        assertThat(saltRows(day)).isZero();
+    }
+
+    @Test
+    void nextDayCountsAgainWithNewSalt() {
+        var day = onDay(LocalDate.of(2312, 1, 4));
+        view("/");
+        var next = onDay(day.plusDays(1));
+        view("/");
+
+        assertThat(count(day, "visitors", "all")).isOne();
+        assertThat(count(next, "visitors", "all")).isOne();
+        assertThat(salt(day)).isNotEqualTo(salt(next));
+        assertThat(hash(day)).isNotEqualTo(hash(next));
+    }
+
+    /** Отпечаток — {@code SHA-256(соль дня ‖ ip ‖ 0x00 ‖ userAgent)} в UTF-8; IP и {@code User-Agent} не хранятся. */
+    @Test
+    void fingerprintIsSaltedHashOfIpAndUserAgent() throws Exception {
+        var day = onDay(LocalDate.of(2312, 1, 6));
+        var userAgent = BROWSER + " Ёлка";
+
+        ingest.record(pageView("/", null, null), IP, userAgent);
+
+        var digest = MessageDigest.getInstance("SHA-256");
+        digest.update(salt(day));
+        digest.update(IP.getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+        digest.update(userAgent.getBytes(StandardCharsets.UTF_8));
+        assertThat(hash(day)).isEqualTo(digest.digest());
+        assertThat(salt(day)).hasSize(32);
+    }
+
+    /**
+     * Два первых события дня одновременно. Первое (здесь — тот же путь приёма, что у {@code AnalyticsIngest}, в
+     * транзакции теста) создало соль и отметило посетителя, но ещё не зафиксировано. Второе — тот же IP и браузер —
+     * встаёт на вставке соли, ждёт фиксации первого и берёт его соль: соль у дня одна, посетитель — один.
+     */
+    @Test
+    void concurrentFirstEventsOfDayShareOneSalt() throws Exception {
+        var day = onDay(LocalDate.of(2312, 1, 8));
+        var transaction = new TransactionTemplate(transactionManager);
+        var held = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> transaction.executeWithoutResult(status -> {
+                if (visitors.firstVisitOfDay(day, new Visitor(IP, BROWSER))) {
+                    counts.increment(day, new Tally(Metric.VISITORS, "all"));
+                }
+                counts.increment(day, new Tally(Metric.PAGE_VIEW, "/"));
+                held.countDown();
+                await(release);
+            }));
+            assertThat(held.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+            var second = executor.submit(() -> view("/"));
+            try {
+                awaitSaltLockWait();
+            } finally {
+                release.countDown();
+            }
+            first.get(WAIT_SECONDS, TimeUnit.SECONDS);
+            second.get(WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+
+        assertThat(saltRows(day)).isOne();
+        assertThat(visitorRows(day)).isOne();
+        assertThat(count(day, "visitors", "all")).isOne();
+        assertThat(count(day, "page_view", "/")).isEqualTo(2);
+    }
+
+    private byte[] salt(LocalDate day) {
+        return jdbc.sql("select salt from analytics.day_salt where day = :day")
+                .param("day", day)
+                .query(byte[].class)
+                .single();
+    }
+
+    private byte[] hash(LocalDate day) {
+        return jdbc.sql("select hash from analytics.visitor where day = :day")
+                .param("day", day)
+                .query(byte[].class)
+                .single();
+    }
+
+    private void awaitSaltLockWait() throws InterruptedException {
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+        while (System.nanoTime() < deadline) {
+            if (jdbc.sql(SALT_LOCK_WAITS).query(Integer.class).single() > 0) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("no event is waiting for the salt of the day");
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(WAIT_SECONDS, TimeUnit.SECONDS)) {
+                throw new AssertionError("latch was not released");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
+    }
+}
