@@ -24,6 +24,11 @@ describe('terms', () => {
     expect(fullText).toContain('вправе не требовать предоплату')
   })
 
+  it('keeps the prepayment of a deleted account only after a violation', () => {
+    expect(fullText).toContain('внёсший предоплату после поздней отмены или неявки, удалил аккаунт')
+    expect(fullText).toContain('от которых предоплата не требовалась, это правило не касается')
+  })
+
   it('contains only known placeholders', () => {
     const known = new Set<string>(PLACEHOLDERS)
     for (const m of fullText.matchAll(/\{\{[^}]*\}\}/g)) expect(known).toContain(m[0])
