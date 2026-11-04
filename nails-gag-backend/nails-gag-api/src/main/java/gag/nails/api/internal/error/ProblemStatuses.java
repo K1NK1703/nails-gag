@@ -32,6 +32,10 @@ import gag.nails.files.error.ProcessingBusyException;
 import gag.nails.files.error.TooLargeFileException;
 import gag.nails.files.error.TooLargeImageException;
 import gag.nails.files.error.UnsupportedFormatException;
+import gag.nails.finance.error.CategoryNameTakenException;
+import gag.nails.finance.error.CategoryNotFoundException;
+import gag.nails.finance.error.EntryNotFoundException;
+import gag.nails.finance.error.RecurringNotFoundException;
 import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.error.LastAccessAdminException;
@@ -128,6 +132,11 @@ final class ProblemStatuses {
             entry(ConsentMissingException.class, HttpStatus.CONFLICT),
             entry(ReferencesLimitReachedException.class, HttpStatus.CONFLICT),
             entry(ReferencesClosedException.class, HttpStatus.CONFLICT),
+            // finance
+            entry(CategoryNotFoundException.class, HttpStatus.NOT_FOUND),
+            entry(EntryNotFoundException.class, HttpStatus.NOT_FOUND),
+            entry(RecurringNotFoundException.class, HttpStatus.NOT_FOUND),
+            entry(CategoryNameTakenException.class, HttpStatus.CONFLICT),
             // identity
             entry(LoginFailedException.class, HttpStatus.UNAUTHORIZED),
             entry(RegistrationExpiredException.class, HttpStatus.UNAUTHORIZED),

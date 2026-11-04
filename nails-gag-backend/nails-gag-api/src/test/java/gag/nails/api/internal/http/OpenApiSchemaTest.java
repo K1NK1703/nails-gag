@@ -205,6 +205,49 @@ class OpenApiSchemaTest extends ApiTestSupport {
     }
 
     /**
+     * Вид записи финансов в параметре запроса ({@code ?entryKind=income}) и виды операций журнала
+     * ({@code ?type=visit&type=kept-prepayment}, список) — через дефис, как их принимает адрес.
+     */
+    @Test
+    void financeQueryEnumsAreKebabCase() {
+        var operations = operations(openApi());
+
+        var kinds = parameters(operations, "entryKind");
+        assertThat(kinds).hasSize(3);
+        kinds.forEach(kind -> {
+            assertThat(kind.path("in").asString()).isEqualTo("query");
+            assertThat(enumValues(kind)).containsExactly("income", "expense");
+        });
+        var journalTypes = parameters(operations, "type");
+        assertThat(journalTypes).hasSize(1);
+        var type = journalTypes.getFirst();
+        assertThat(type.path("in").asString()).isEqualTo("query");
+        assertThat(types(type.path("schema"))).containsExactly("array");
+        assertThat(type.path("schema").path("items").path("enum").values().stream()
+                        .map(JsonNode::asString)
+                        .toList())
+                .containsExactly("visit", "kept-prepayment", "income", "expense");
+    }
+
+    /** Длины текстов финансов проверяет модуль в символах; схема всё равно сообщает их фронту. */
+    @Test
+    void financeTextLengthsAreInSchema() {
+        var schemas = openApi().path("components").path("schemas");
+
+        for (var body : List.of("CreateFinanceCategory", "RenameFinanceCategory")) {
+            var name = schemas.path(body).path("properties").path("name");
+            assertThat(name.path("minLength").asInt()).as(body).isEqualTo(1);
+            assertThat(name.path("maxLength").asInt()).as(body).isEqualTo(60);
+        }
+        for (var body :
+                List.of("AddFinanceEntry", "ChangeFinanceEntry", "CreateRecurringEntry", "ChangeRecurringEntry")) {
+            var comment = schemas.path(body).path("properties").path("comment");
+            assertThat(comment.path("maxLength").asInt()).as(body).isEqualTo(500);
+            assertThat(types(comment)).as(body).containsExactlyInAnyOrder("string", "null");
+        }
+    }
+
+    /**
      * Схема полная: в ней каждый адрес контроллеров приложения ({@link #controllerOperations()}) с его методом и ничего
      * сверх них — фронт не останется без типа для адреса.
      */

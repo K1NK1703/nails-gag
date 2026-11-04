@@ -6,6 +6,8 @@ import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.files.model.FilePurpose;
+import gag.nails.finance.model.EntryKind;
+import gag.nails.finance.model.JournalType;
 import gag.nails.identity.model.Provider;
 import java.beans.PropertyEditorSupport;
 import java.util.Arrays;
@@ -16,6 +18,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.format.FormatterRegistry;
 import org.springframework.http.converter.HttpMessageConverters;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
@@ -26,7 +29,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * перечисления в пути и параметрах запроса — провайдер входа ({@code /api/auth/yandex/…}), документ
  * ({@code /api/documents/policy/…}), раздел админки ({@code …/overrides/booking-settings}), записи клиента
  * ({@code ?scope=history}), вид согласия ({@code …/consents/photo-publication}), назначение файла
- * ({@code ?purpose=reference}) — по имени в нижнем регистре через дефис.
+ * ({@code ?purpose=reference}), вид записи финансов ({@code ?entryKind=income}), виды операций журнала финансов
+ * ({@code ?type=visit&type=kept-prepayment}) — по имени в нижнем регистре через дефис.
  */
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
@@ -38,7 +42,9 @@ class WebConfiguration implements WebMvcConfigurer {
             KebabCaseEnum.of(Section.class),
             KebabCaseEnum.of(BookingScope.class),
             KebabCaseEnum.of(ConsentKind.class),
-            KebabCaseEnum.of(FilePurpose.class));
+            KebabCaseEnum.of(FilePurpose.class),
+            KebabCaseEnum.of(EntryKind.class),
+            KebabCaseEnum.of(JournalType.class));
 
     /** Типы из {@link #KEBAB_CASE_ENUMS}; по ним же схема OpenAPI показывает значения через дефис. */
     static final Set<Class<?>> KEBAB_CASE_TYPES =
@@ -48,6 +54,18 @@ class WebConfiguration implements WebMvcConfigurer {
     @Override
     public void configureMessageConverters(HttpMessageConverters.ServerBuilder builder) {
         builder.addCustomConverter(new ImageBodyConverter());
+    }
+
+    /**
+     * Список перечислений в параметре запроса ({@code ?type=visit&type=income} → {@code List<JournalType>}) Spring
+     * сначала разбирает службой преобразований, а не редактором элемента: без своего конвертера её общий разбор
+     * перечислений ({@code Enum.valueOf}) принял бы имя константы Java ({@code VISIT}). Свой конвертер принимает
+     * только написание через дефис; его отказ Spring проглатывает и разбирает элементы списка редакторами
+     * ({@link #registerKebabCaseEditors}) — те же {@code 400} с именем параметра, что и у одиночного значения.
+     */
+    @Override
+    public void addFormatters(FormatterRegistry registry) {
+        KEBAB_CASE_ENUMS.forEach(kebabCaseEnum -> kebabCaseEnum.registerConverter(registry));
     }
 
     @Override
@@ -62,7 +80,9 @@ class WebConfiguration implements WebMvcConfigurer {
      * пробует {@code Enum.valueOf}, так что имя константы Java ({@code BOOKING_SETTINGS}) прошло бы; при редакторе
      * службу преобразований Spring не вызывает. Неверное значение — {@link ValidationException}, поле — имя объекта
      * привязки: у {@code @PathVariable} и {@code @RequestParam} это имя параметра ({@code @ModelAttribute} слой не
-     * использует). Списки перечислений через запятую ({@code List<Section>}) не поддерживаются и не используются.
+     * использует). Список перечислений ({@code List<JournalType>}) — повтором параметра
+     * ({@code ?type=visit&type=income}) или через запятую; каждый элемент — тоже только через дефис
+     * ({@link #addFormatters}).
      *
      * <p>Аргументы разбираются по порядку, {@code Actor} — последний: неверное перечисление в пути даёт {@code 400} ещё
      * до проверки сессии, как и тело с {@code @Valid}.
@@ -104,6 +124,14 @@ class WebConfiguration implements WebMvcConfigurer {
                     setValue(parse(text, field));
                 }
             });
+        }
+
+        /**
+         * Конвертер службы преобразований: только написание через дефис. Отказ — без поля: Spring его не показывает,
+         * а разбирает значение редакторами, у которых поле есть.
+         */
+        void registerConverter(FormatterRegistry registry) {
+            registry.addConverter(String.class, type, source -> parse(source, ""));
         }
 
         private E parse(String source, String field) {

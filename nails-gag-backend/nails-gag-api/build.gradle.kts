@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":nails-gag-booking"))
     implementation(project(":nails-gag-files"))
     implementation(project(":nails-gag-portfolio"))
+    implementation(project(":nails-gag-finance"))
     implementation(project(":nails-gag-identity"))
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.validation)

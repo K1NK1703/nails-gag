@@ -12,12 +12,13 @@ import io.swagger.v3.oas.models.headers.Header;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
-import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springdoc.core.customizers.ParameterCustomizer;
@@ -62,9 +63,9 @@ class OpenApiConfiguration {
 
     /**
      * {@code Optional<Actor>} springdoc видит как {@code Optional} и не пропускает по типу: такой параметр убирается
-     * здесь. Перечисления в пути и запросе получают значения через дефис — только скалярный параметр со встроенным
-     * {@code enum}; список перечислений ({@code List<Section>}) или ссылка на схему перечисления остались бы с именами
-     * Java.
+     * здесь. Перечисления в пути и запросе получают значения через дефис — скалярный параметр со встроенным
+     * {@code enum} и список таких значений ({@code List<JournalType>}, {@code enum} у элементов); ссылка на схему
+     * перечисления осталась бы с именами Java.
      */
     @Bean
     ParameterCustomizer apiParameterCustomizer() {
@@ -72,10 +73,12 @@ class OpenApiConfiguration {
             if (optionalActor(methodParameter)) {
                 return null;
             }
-            if (parameter != null
-                    && ("path".equals(parameter.getIn()) || "query".equals(parameter.getIn()))
-                    && WebConfiguration.KEBAB_CASE_TYPES.contains(methodParameter.getParameterType())) {
-                kebabCaseEnum(parameter);
+            if (parameter != null && ("path".equals(parameter.getIn()) || "query".equals(parameter.getIn()))) {
+                if (WebConfiguration.KEBAB_CASE_TYPES.contains(methodParameter.getParameterType())) {
+                    kebabCaseEnum(parameter.getSchema());
+                } else if (kebabCaseList(methodParameter) && parameter.getSchema() != null) {
+                    kebabCaseEnum(parameter.getSchema().getItems());
+                }
             }
             return parameter;
         };
@@ -141,9 +144,21 @@ class OpenApiConfiguration {
                 && ResolvableType.forMethodParameter(parameter).getGeneric(0).resolve() == Actor.class;
     }
 
+    /** Параметр — коллекция перечислений, которые адрес принимает через дефис ({@code List<JournalType>}). */
+    private static boolean kebabCaseList(MethodParameter parameter) {
+        if (!Collection.class.isAssignableFrom(parameter.getParameterType())) {
+            return false;
+        }
+        var element = ResolvableType.forMethodParameter(parameter)
+                .asCollection()
+                .getGeneric(0)
+                .resolve();
+        return element != null && WebConfiguration.KEBAB_CASE_TYPES.contains(element);
+    }
+
     @SuppressWarnings("unchecked")
-    private static void kebabCaseEnum(Parameter parameter) {
-        var schema = (Schema<Object>) parameter.getSchema();
+    private static void kebabCaseEnum(@Nullable Schema<?> parameterSchema) {
+        var schema = (Schema<Object>) parameterSchema;
         if (schema != null && schema.getEnum() != null) {
             schema.setEnum(schema.getEnum().stream()
                     .map(value -> (Object) WebConfiguration.kebabCase(value.toString()))
