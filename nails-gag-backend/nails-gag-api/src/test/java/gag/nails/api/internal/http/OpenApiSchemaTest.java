@@ -206,11 +206,13 @@ class OpenApiSchemaTest extends ApiTestSupport {
 
     /**
      * Вид записи финансов в параметре запроса ({@code ?entryKind=income}) и виды операций журнала
-     * ({@code ?type=visit&type=kept-prepayment}, список) — через дефис, как их принимает адрес.
+     * ({@code ?type=visit&type=kept-prepayment}, список) — через дефис, как их принимает адрес. В JSON те же
+     * перечисления остаются именами Java (спецификация API, §4.2): дефис — только в адресе.
      */
     @Test
     void financeQueryEnumsAreKebabCase() {
-        var operations = operations(openApi());
+        var schema = openApi();
+        var operations = operations(schema);
 
         var kinds = parameters(operations, "entryKind");
         assertThat(kinds).hasSize(3);
@@ -227,6 +229,14 @@ class OpenApiSchemaTest extends ApiTestSupport {
                         .map(JsonNode::asString)
                         .toList())
                 .containsExactly("visit", "kept-prepayment", "income", "expense");
+
+        var schemas = schema.path("components").path("schemas");
+        assertThat(jsonEnum(schemas.path("JournalItem").path("properties").path("type")))
+                .containsExactly("VISIT", "KEPT_PREPAYMENT", "INCOME", "EXPENSE");
+        assertThat(jsonEnum(schemas.path("ReorderFinanceCategories")
+                        .path("properties")
+                        .path("kind")))
+                .containsExactly("INCOME", "EXPENSE");
     }
 
     /** Длины текстов финансов проверяет модуль в символах; схема всё равно сообщает их фронту. */
@@ -479,6 +489,11 @@ class OpenApiSchemaTest extends ApiTestSupport {
     private static List<String> types(JsonNode schema) {
         var type = schema.path("type");
         return type.isArray() ? type.values().stream().map(JsonNode::asString).toList() : List.of(type.asString());
+    }
+
+    /** Значения {@code enum} свойства схемы. */
+    private static List<String> jsonEnum(JsonNode property) {
+        return property.path("enum").values().stream().map(JsonNode::asString).toList();
     }
 
     private static List<String> enumValues(JsonNode parameter) {

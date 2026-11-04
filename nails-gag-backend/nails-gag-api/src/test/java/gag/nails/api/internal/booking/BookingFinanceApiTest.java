@@ -128,11 +128,7 @@ class BookingFinanceApiTest extends BookingApiTestSupport {
     @Test
     void prepaymentWithoutBodyTakesDefaultAmount() {
         var booking = bookFor(createClient(uniqueLastName()).id(), true);
-        var percent = BigDecimal.valueOf(bookingSettings.settings().prepaymentPercent());
-        var expected = new BigDecimal("1500")
-                .multiply(percent)
-                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
-                .max(BigDecimal.ONE);
+        var expected = defaultPrepayment();
 
         var paid = json(bookingAction(signInMaster(), booking.id(), "prepayment/received"));
 
@@ -152,7 +148,20 @@ class BookingFinanceApiTest extends BookingApiTestSupport {
         assertThat(field(paid, "prepaymentAmount").decimalValue()).isEqualByComparingTo("700.00");
 
         var byDefault = json(receivePrepayment(master, withNull.id(), amountBody(null)));
-        assertThat(field(byDefault, "prepaymentAmount").decimalValue()).isPositive();
+        assertThat(field(byDefault, "prepaymentAmount").decimalValue()).isEqualByComparingTo(defaultPrepayment());
+    }
+
+    /** Пустое тело с {@code Content-Type: application/json} — как без тела: сумма по умолчанию. */
+    @Test
+    void emptyJsonBodyTakesDefaultAmount() {
+        var booking = bookFor(createClient(uniqueLastName()).id(), true);
+
+        var paid =
+                json(as(signInMaster(), csrf(client.post().uri("/api/bookings/{id}/prepayment/received", booking.id())))
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        assertThat(field(paid, "status").asString()).isEqualTo("CONFIRMED");
+        assertThat(field(paid, "prepaymentAmount").decimalValue()).isEqualByComparingTo(defaultPrepayment());
     }
 
     @Test
@@ -266,6 +275,17 @@ class BookingFinanceApiTest extends BookingApiTestSupport {
         return as(session, csrf(client.put().uri("/api/bookings/{id}/prepayment/outcome", bookingId)))
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("outcome", outcome));
+    }
+
+    /**
+     * Сумма предоплаты по умолчанию для записи на услугу {@link #mainService()} за 1500: процент из текущих правил, до
+     * рубля, половина — вверх, не меньше рубля.
+     */
+    private BigDecimal defaultPrepayment() {
+        return new BigDecimal("1500")
+                .multiply(BigDecimal.valueOf(bookingSettings.settings().prepaymentPercent()))
+                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                .max(BigDecimal.ONE);
     }
 
     private static Map<String, @Nullable Object> visitBody(

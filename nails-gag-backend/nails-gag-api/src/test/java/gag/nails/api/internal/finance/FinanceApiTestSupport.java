@@ -11,6 +11,7 @@ import gag.nails.finance.command.CreateCategory;
 import gag.nails.finance.model.CategoryView;
 import gag.nails.finance.model.EntryKind;
 import gag.nails.finance.model.EntryView;
+import gag.nails.testsupport.TestTimeConfiguration;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Objects;
@@ -26,15 +27,16 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * Обвязка HTTP-тестов финансов. Категории общие для всей базы, поэтому тест заводит свои с уникальным названием;
- * ручные записи — на днях {@link #entryDay()}, которых не касается ни один другой тест прогона. Изменять финансы
+ * ручные записи — на днях {@link #entryDay()}, которых этот прогон не выдаёт никому другому. Изменять финансы
  * разработчик не может (у него только чтение раздела), поэтому данные готовит мастер.
  */
 abstract class FinanceApiTestSupport extends ApiTestSupport {
 
     /**
-     * Счётчик прошедших дней для ручных записей: от случайного дня в 400–8000 днях до {@code clock} назад, так что все
-     * дни прогона — между {@code 2000-01-01} и сегодняшним и не пересекаются с днями слотов ({@link #freshDay()} — в
-     * будущем).
+     * На сколько дней до {@link TestTimeConfiguration#START} уходит следующий {@link #entryDay()}. Статический — общий
+     * для всех классов тестов прогона, поэтому день не выдаётся дважды; случайное начало в 400–8000 днях лишь разносит
+     * дни по календарю. До {@code 2000-01-01} (нижний предел дня записи) от начала остаётся больше 1700 дней — больше,
+     * чем вызовов за прогон.
      */
     private static final AtomicLong DAYS_BACK =
             new AtomicLong(ThreadLocalRandom.current().nextLong(400, 8000));
@@ -45,9 +47,13 @@ abstract class FinanceApiTestSupport extends ApiTestSupport {
     @Autowired
     FinanceEntries entries;
 
-    /** Прошедший день, которого ещё не выдавал этот прогон: ручных записей других тестов на нём нет. */
+    /**
+     * День до {@link TestTimeConfiguration#START}, которого ещё не выдавал этот прогон, — от {@code START}, а не от
+     * текущих часов, поэтому не зависит от их сдвига. Другие тесты финансов кладут ручные записи только на свои такие
+     * дни, а записи на визит — на дни {@link #freshDay()}, которые позже {@code START}: чужих операций на этом дне нет.
+     */
     LocalDate entryDay() {
-        return LocalDate.now(clock).minusDays(DAYS_BACK.getAndIncrement());
+        return LocalDate.ofInstant(TestTimeConfiguration.START, clock.getZone()).minusDays(DAYS_BACK.getAndIncrement());
     }
 
     /** Новая категория вида с уникальным названием; её заводит мастер. */
@@ -67,9 +73,14 @@ abstract class FinanceApiTestSupport extends ApiTestSupport {
 
     /** Тело ответа {@code 200}, который запрещено сохранять: {@code Cache-Control: no-store}. */
     static JsonNode noStore(RequestHeadersSpec<?> spec) {
+        return noStore(spec, HttpStatus.OK);
+    }
+
+    /** Тело ответа с ожидаемым статусом, который запрещено сохранять: {@code Cache-Control: no-store}. */
+    static JsonNode noStore(RequestHeadersSpec<?> spec, HttpStatus status) {
         return Objects.requireNonNull(spec.exchange()
                 .expectStatus()
-                .isOk()
+                .isEqualTo(status)
                 .expectHeader()
                 .valueEquals(HttpHeaders.CACHE_CONTROL, "no-store")
                 .expectBody(JsonNode.class)

@@ -29,7 +29,7 @@ class FinanceEntriesApiTest extends FinanceApiTestSupport {
         var category = category(actor(master), EntryKind.EXPENSE);
         var day = entryDay();
 
-        var added = json(
+        var added = noStore(
                 post(master, entryBody(category.id(), "1500.50", day.toString(), "Лаки"), "/api/finance/entries"),
                 HttpStatus.CREATED);
         var id = UUID.fromString(field(added, "id").asString());
@@ -45,7 +45,7 @@ class FinanceEntriesApiTest extends FinanceApiTestSupport {
         var read = noStore(get(master, "/api/finance/entries/{id}", id));
         assertThat(field(read, "id").asString()).isEqualTo(id.toString());
 
-        var changed = json(
+        var changed = noStore(
                 patch(master, entryBody(category.id(), "1200", day.toString(), null), "/api/finance/entries/{id}", id));
         assertThat(field(changed, "amount").decimalValue()).isEqualByComparingTo("1200.00");
         assertThat(field(changed, "comment").isNull()).isTrue();
@@ -123,18 +123,27 @@ class FinanceEntriesApiTest extends FinanceApiTestSupport {
     @Test
     void recentCombosOfferLastEntries() {
         var master = signInMaster();
-        var income = category(actor(master), EntryKind.INCOME);
-        entry(actor(master), income.id(), "777.70", entryDay());
+        var hidden = category(actor(master), EntryKind.INCOME);
+        entry(actor(master), hidden.id(), "777.70", entryDay());
+        categories.hide(hidden.id(), actor(master));
 
+        // Пары общие для всей базы: ответ сверяется с ответом модуля, прочитанным сразу перед запросом, — чтение пар
+        // само записей не добавляет.
+        var expected = entries.recentCombos(EntryKind.INCOME, actor(master));
         var combos = noStore(get(master, "/api/finance/entries/recent?entryKind=income"));
 
-        assertThat(combos.size()).isLessThanOrEqualTo(5);
-        assertThat(combos.values()).anySatisfy(combo -> {
-            assertThat(field(combo, "categoryId").asString())
-                    .isEqualTo(income.id().toString());
-            assertThat(field(combo, "categoryName").asString()).isEqualTo(income.name());
-            assertThat(field(combo, "amount").decimalValue()).isEqualByComparingTo("777.70");
-        });
+        assertThat(combos.values())
+                .extracting(combo -> field(combo, "categoryId").asString()
+                        + " " + field(combo, "categoryName").asString()
+                        + " " + field(combo, "amount").decimalValue().toPlainString())
+                .containsExactlyElementsOf(expected.stream()
+                        .map(combo -> combo.categoryId() + " " + combo.categoryName() + " "
+                                + combo.amount().toPlainString())
+                        .toList());
+        // Своя пара со скрытой категорией не предлагается, сколько бы пар ни было в базе.
+        assertThat(combos.values())
+                .noneSatisfy(combo -> assertThat(field(combo, "categoryId").asString())
+                        .isEqualTo(hidden.id().toString()));
     }
 
     @Test

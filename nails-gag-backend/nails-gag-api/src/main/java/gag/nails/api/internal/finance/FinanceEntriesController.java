@@ -4,6 +4,7 @@ import gag.nails.api.internal.http.PageDefaults;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.paging.Paged;
 import gag.nails.common.paging.Paging;
+import gag.nails.common.time.ReportPeriod;
 import gag.nails.finance.FinanceEntries;
 import gag.nails.finance.model.EntryChangeView;
 import gag.nails.finance.model.EntryFilter;
@@ -30,8 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Ручные доходы и расходы (спецификация финансов, §5): внесение, правка, удаление, история изменений, список периода
  * постранично, быстрый ввод. Чтение — по уровню чтения раздела «Финансы», изменения — по уровню изменения; права и
- * правила проверяет модуль. Клиенту адреса отвечают {@code 404 common.not_found}, как несуществующие. Период
- * {@code from}/{@code to} — дни операций в поясе салона, включительно, не длиннее 366 дней — его проверяет модуль.
+ * правила проверяет модуль. На корректный запрос клиенту адреса отвечают {@code 404 common.not_found}, как
+ * несуществующие. Период {@code from}/{@code to} — дни операций в поясе салона, обе границы включительно, по правилам
+ * {@link ReportPeriod} — его проверяет модуль ({@code 400} с полем {@code from} или {@code to}).
  */
 @RestController
 @RequestMapping("/api/finance/entries")
@@ -45,7 +47,7 @@ class FinanceEntriesController {
 
     /**
      * Записи периода по дню операции, новые дни первыми, внутри дня — позже внесённые первыми; если заданы, только вида
-     * {@code entryKind} и категории {@code categoryId}. Период вне правил — {@code 400}.
+     * {@code entryKind} и категории {@code categoryId}. Период вне правил {@link ReportPeriod} — {@code 400}.
      */
     @GetMapping
     Paged<EntryView> list(
