@@ -56,7 +56,7 @@ public interface FinanceReports {
      * затем ручные записи обоих видов (позже внесённые первыми). Порядок однозначен: страницы не перекрываются.
      *
      * @throws ValidationException (поля {@code from}, {@code to}) период пуст или вне правил {@link ReportPeriod};
-     *     ({@code types}) среди видов есть пустой
+     *     ({@code types[].<iterable element>} — путь Bean Validation к элементу набора) среди видов есть пустой
      */
     Paged<JournalItem> journal(JournalFilter filter, Paging paging, Actor actor);
 }

@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
  * факты модуля записей в одной транзакции — с одним снимком базы.
  */
 @Component
-@Transactional(propagation = Propagation.MANDATORY, readOnly = true)
+@Transactional(propagation = Propagation.MANDATORY)
 public class EntryReports {
 
     private final EntryRepository entries;

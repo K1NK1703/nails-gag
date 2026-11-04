@@ -31,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,7 +67,8 @@ class FinanceReportsTest extends ReportsTestSupport {
     EntityManager entityManager;
 
     @BeforeEach
-    void setClock() {
+    void setUp() {
+        requireReportDaysEmpty();
         reportsToday();
     }
 
@@ -385,6 +387,28 @@ class FinanceReportsTest extends ReportsTestSupport {
         assertInvalid(() -> reports.journal(new JournalFilter(null, MAR_2, null, null), ALL, MASTER), "from");
     }
 
+    /** Вызывающий код на Java может передать пустые границы мимо HTTP-слоя: ошибка запроса по полю, а не сбой. */
+    @Test
+    void missingPeriodBoundsAreRejected() {
+        assertInvalid(() -> reports.summary(null, MAR_2, MASTER), "from");
+        assertInvalid(() -> reports.summary(MAR_2, null, MASTER), "to");
+        assertInvalid(() -> reports.services(null, MAR_2, MASTER), "from");
+        assertInvalid(() -> reports.services(MAR_2, null, MASTER), "to");
+        assertInvalid(() -> reports.journal(new JournalFilter(MAR_2, null, null, null), ALL, MASTER), "to");
+    }
+
+    /** Поле ошибки — путь Bean Validation к пустому элементу набора, как его отдаёт {@code CommandValidator}. */
+    @Test
+    void journalRejectsEmptyType() {
+        var types = new HashSet<JournalType>();
+        types.add(JournalType.VISIT);
+        types.add(null);
+
+        assertInvalid(
+                () -> reports.journal(new JournalFilter(MAR_2, MAR_2, types, null), ALL, MASTER),
+                "types[].<iterable element>");
+    }
+
     @Test
     void reportsNeedFinanceRead() {
         var visit = visit(MAR_2, "08:00");
@@ -438,8 +462,9 @@ class FinanceReportsTest extends ReportsTestSupport {
         assertThat(statements(() -> reports.monthly(2031, MASTER))).isEqualTo(monthly);
         assertThat(statements(() -> reports.services(MAR_2, MAR_3, MASTER))).isEqualTo(services);
         assertThat(statements(() -> reports.journal(filter, ALL, MASTER))).isEqualTo(journal);
-        assertThat(List.of(summary, monthly, services, journal))
-                .allSatisfy(count -> assertThat(count).isBetween(1L, 3L));
+        // Сводка и помесячно: визиты, предоплаты, суммы записей; по услугам: визиты; журнал: визиты, предоплаты,
+        // записи.
+        assertThat(List.of(summary, monthly, services, journal)).containsExactly(3L, 3L, 1L, 3L);
     }
 
     private List<UUID> journalIds(@Nullable Set<JournalType> types, @Nullable UUID categoryId) {

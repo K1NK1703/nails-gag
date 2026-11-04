@@ -1,5 +1,7 @@
 package gag.nails.finance;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import gag.nails.booking.BookingPrepayments;
 import gag.nails.booking.BookingService;
 import gag.nails.booking.VisitMarks;
@@ -48,6 +50,12 @@ abstract class ReportsTestSupport extends FinanceTestSupport {
     /** Сегодня в поясе салона на время тестов отчётов: отчёты могут смотреть до 1 июня 2032 включительно. */
     static final LocalDate REPORTS_TODAY = LocalDate.of(2031, 6, 1);
 
+    /** Первый день дней тестов отчётов. */
+    static final LocalDate REPORTS_FIRST_DAY = LocalDate.of(2031, 1, 1);
+
+    /** Последний день дней тестов отчётов — предел периода при {@link #REPORTS_TODAY}. */
+    static final LocalDate REPORTS_LAST_DAY = LocalDate.of(2032, 6, 1);
+
     private static final ZoneId SALON = ZoneId.of("Europe/Moscow");
 
     private static final AtomicInteger CLIENTS = new AtomicInteger();
@@ -69,6 +77,36 @@ abstract class ReportsTestSupport extends FinanceTestSupport {
 
     @Autowired
     ClientService clients;
+
+    /**
+     * Дни тестов отчётов пусты: ни ручных записей, ни записей на визит, начавшихся, отменённых или отмеченных неявкой
+     * в эти дни. Тесты отчётов сверяют точные суммы периода, поэтому чужие данные там — ошибка окружения, а не кода;
+     * проверка читает базу напрямую, мимо проверяемого кода.
+     */
+    void requireReportDaysEmpty() {
+        var from = REPORTS_FIRST_DAY.atStartOfDay(SALON).toOffsetDateTime();
+        var to = REPORTS_LAST_DAY.plusDays(1).atStartOfDay(SALON).toOffsetDateTime();
+        var entries = jdbc.sql("select count(*) from finance.entry where occurred_on between :from and :to")
+                .param("from", REPORTS_FIRST_DAY)
+                .param("to", REPORTS_LAST_DAY)
+                .query(Long.class)
+                .single();
+        var bookings = jdbc.sql("""
+                        select count(*) from booking.booking
+                        where (slot_starts_at >= :from and slot_starts_at < :to)
+                            or (agreed_start >= :from and agreed_start < :to)
+                            or (cancelled_at >= :from and cancelled_at < :to)
+                            or (no_show_at >= :from and no_show_at < :to)""")
+                .param("from", from)
+                .param("to", to)
+                .query(Long.class)
+                .single();
+        assertThat(entries + bookings)
+                .as(
+                        "дни тестов отчётов %s..%s должны быть пусты, а там ручных записей: %d, записей на визит: %d",
+                        REPORTS_FIRST_DAY, REPORTS_LAST_DAY, entries, bookings)
+                .isZero();
+    }
 
     /** Часы — на 09:00 салона в {@link #REPORTS_TODAY}. */
     void reportsToday() {

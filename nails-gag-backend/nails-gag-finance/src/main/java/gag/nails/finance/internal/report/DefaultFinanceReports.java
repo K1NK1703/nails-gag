@@ -119,9 +119,9 @@ class DefaultFinanceReports implements FinanceReports {
                 kept,
                 incomeByCategory,
                 expenseByCategory,
-                income,
-                expenses,
-                income.subtract(expenses));
+                Money.of(income),
+                Money.of(expenses),
+                Money.of(income.subtract(expenses)));
     }
 
     /**
@@ -153,6 +153,9 @@ class DefaultFinanceReports implements FinanceReports {
             add(income, kept.day().getMonthValue(), kept.amount());
         }
         for (var sum : entries.sumByMonth(period.from(), period.to())) {
+            if (sum.month().getYear() != year) {
+                throw new InternalException("entry sum of " + sum.month() + " in the period " + period);
+            }
             add(sum.kind() == EntryKind.INCOME ? income : expenses, sum.month().getMonthValue(), sum.amount());
         }
         var months = new ArrayList<MonthTotals>(12);
@@ -160,7 +163,10 @@ class DefaultFinanceReports implements FinanceReports {
             var monthIncome = income[month - 1];
             var monthExpenses = expenses[month - 1];
             months.add(new MonthTotals(
-                    YearMonth.of(year, month), monthIncome, monthExpenses, monthIncome.subtract(monthExpenses)));
+                    YearMonth.of(year, month),
+                    Money.of(monthIncome),
+                    Money.of(monthExpenses),
+                    Money.of(monthIncome.subtract(monthExpenses))));
         }
         return List.copyOf(months);
     }
@@ -178,10 +184,13 @@ class DefaultFinanceReports implements FinanceReports {
         var services = new LinkedHashMap<ServiceKey, ServiceCounter>();
         for (var visit : visits) {
             for (var service : visit.services()) {
-                services.computeIfAbsent(
-                                new ServiceKey(service.serviceId(), service.kind()),
-                                key -> new ServiceCounter(service.title()))
-                        .count(service);
+                var key = new ServiceKey(service.serviceId(), service.kind());
+                var counter = services.get(key);
+                if (counter == null) {
+                    services.put(key, new ServiceCounter(service));
+                } else {
+                    counter.add(service);
+                }
             }
         }
         var totals = services.entrySet().stream()
@@ -196,7 +205,7 @@ class DefaultFinanceReports implements FinanceReports {
      * Три источника — визиты, удержанные предоплаты, ручные записи — каждый уже упорядочен (факты модуля записей — по
      * моменту, их порядок разворачивается: внутри дня позже первыми; записи — запросом). Они сливаются устойчивой
      * сортировкой по дню и группе, а страница вырезается в памяти: страницу в базе не сделать, пока источники живут в
-     * двух модулях. Это дёшево: у одного мастера за период не больше года — сотни визитов и записей, и все три
+     * двух модулях. Это дёшево: у одного мастера за период не больше года — тысячи визитов и записей, и все три
      * источника читаются за период целиком так же, как для сводки.
      */
     @Override
@@ -287,8 +296,8 @@ class DefaultFinanceReports implements FinanceReports {
     }
 
     private static KeptPrepayments keptTotals(List<KeptPrepaymentFact> kept) {
-        var amount = kept.stream().map(KeptPrepaymentFact::amount).reduce(Money.ZERO, BigDecimal::add);
-        return new KeptPrepayments(kept.size(), amount);
+        var amount = kept.stream().map(KeptPrepaymentFact::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new KeptPrepayments(kept.size(), Money.of(amount));
     }
 
     private static List<CategoryTotal> totals(List<CategorySum> sums, EntryKind kind) {
@@ -299,12 +308,12 @@ class DefaultFinanceReports implements FinanceReports {
     }
 
     private static BigDecimal sum(List<CategoryTotal> totals) {
-        return totals.stream().map(CategoryTotal::amount).reduce(Money.ZERO, BigDecimal::add);
+        return totals.stream().map(CategoryTotal::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static BigDecimal[] zeros() {
         var months = new BigDecimal[12];
-        Arrays.fill(months, Money.ZERO);
+        Arrays.fill(months, BigDecimal.ZERO);
         return months;
     }
 
@@ -333,25 +342,30 @@ class DefaultFinanceReports implements FinanceReports {
     /** Услуга отчёта: одна и та же услуга каталога — один id и один вид. */
     private record ServiceKey(UUID serviceId, ServiceKind kind) {}
 
-    /** Счётчик услуги по визитам в порядке их начала. */
+    /**
+     * Счётчик услуги по визитам в порядке их начала. Создаётся по первому факту услуги и сразу его учитывает; каждый
+     * следующий факт ({@link #add}) заменяет название — остаётся название самого позднего визита.
+     */
     private static final class ServiceCounter {
 
         private int count;
-        private BigDecimal priceSum = Money.ZERO;
+        private BigDecimal priceSum;
         private String title;
 
-        ServiceCounter(String title) {
-            this.title = title;
+        ServiceCounter(VisitServiceFact first) {
+            this.count = 1;
+            this.priceSum = first.price();
+            this.title = first.title();
         }
 
-        void count(VisitServiceFact service) {
+        void add(VisitServiceFact service) {
             count++;
             priceSum = priceSum.add(service.price());
             title = service.title();
         }
 
         ServiceTotal toTotal(ServiceKey key) {
-            return new ServiceTotal(key.serviceId(), key.kind(), title, count, priceSum);
+            return new ServiceTotal(key.serviceId(), key.kind(), title, count, Money.of(priceSum));
         }
     }
 }

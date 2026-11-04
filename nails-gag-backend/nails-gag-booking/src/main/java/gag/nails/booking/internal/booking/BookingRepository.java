@@ -64,10 +64,13 @@ public interface BookingRepository extends JpaRepository<BookingEntity, UUID> {
 
     /**
      * Записи в состоянии {@code status}, начало визита которых (согласованное более раннее время или начало слота) в
-     * полуинтервале {@code [from, to)}, вместе с составом — одним запросом; по началу визита.
+     * полуинтервале {@code [from, to)}, вместе с составом — одним запросом; по началу визита, при равенстве — по id
+     * записи. Условие на начало слота избыточно (согласованное время раньше слота, {@code
+     * booking_agreed_start_before_slot_check}), но позволяет пользоваться индексом по слоту.
      */
     @Query("select b from BookingEntity b left join fetch b.services where b.status = :status"
             + " and coalesce(b.agreedStart, b.slotStartsAt) >= :from and coalesce(b.agreedStart, b.slotStartsAt) < :to"
+            + " and b.slotStartsAt >= :from"
             + " order by coalesce(b.agreedStart, b.slotStartsAt), b.id")
     List<BookingEntity> completedVisitsWithServices(BookingStatus status, Instant from, Instant to);
 

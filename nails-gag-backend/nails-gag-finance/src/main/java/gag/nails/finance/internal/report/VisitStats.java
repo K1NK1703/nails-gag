@@ -2,6 +2,7 @@ package gag.nails.finance.internal.report;
 
 import gag.nails.booking.model.VisitFact;
 import gag.nails.finance.model.VisitTotals;
+import java.math.BigDecimal;
 import java.util.List;
 
 /** Итоги визитов из денежных фактов модуля записей. */
@@ -14,10 +15,10 @@ final class VisitStats {
      * Сумма по всем визитам сразу дала бы чистую разницу, и надбавка одного визита погасила бы скидку другого.
      */
     static VisitTotals totals(List<VisitFact> visits) {
-        var priceSum = Money.ZERO;
-        var discounts = Money.ZERO;
-        var surcharges = Money.ZERO;
-        var received = Money.ZERO;
+        var priceSum = BigDecimal.ZERO;
+        var discounts = BigDecimal.ZERO;
+        var surcharges = BigDecimal.ZERO;
+        var received = BigDecimal.ZERO;
         for (var visit : visits) {
             var difference = visit.priceSum().subtract(visit.finalAmount());
             priceSum = priceSum.add(visit.priceSum());
@@ -29,6 +30,11 @@ final class VisitStats {
             }
         }
         return new VisitTotals(
-                visits.size(), priceSum, discounts, surcharges, received, Money.average(received, visits.size()));
+                visits.size(),
+                Money.of(priceSum),
+                Money.of(discounts),
+                Money.of(surcharges),
+                Money.of(received),
+                Money.average(received, visits.size()));
     }
 }
