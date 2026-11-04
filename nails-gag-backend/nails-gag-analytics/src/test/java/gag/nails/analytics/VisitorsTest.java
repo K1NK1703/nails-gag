@@ -2,6 +2,7 @@ package gag.nails.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import gag.nails.analytics.internal.AnalyticsProperties;
 import gag.nails.analytics.internal.count.DailyCounts;
 import gag.nails.analytics.internal.count.Tally;
 import gag.nails.analytics.internal.visitor.Visitor;
@@ -91,7 +92,47 @@ class VisitorsTest extends AnalyticsTestSupport {
         assertThat(hash(day)).isNotEqualTo(hash(next));
     }
 
-    /** Отпечаток — {@code SHA-256(соль дня ‖ ip ‖ 0x00 ‖ userAgent)} в UTF-8; IP и {@code User-Agent} не хранятся. */
+    /** Разные записи одного адреса — один посетитель: IPv6 с нулями и без, IPv4 и IPv4-mapped IPv6. */
+    @Test
+    void sameAddressWrittenDifferentlyIsOneVisitor() {
+        var day = onDay(LocalDate.of(2312, 1, 10));
+
+        ingest.record(pageView("/", null, null), "2001:db8::1", BROWSER);
+        ingest.record(pageView("/", null, null), "2001:0db8:0:0::1", BROWSER);
+        ingest.record(pageView("/", null, null), "2001:DB8:0:0:0:0:0:1", BROWSER);
+        assertThat(count(day, "visitors", "all")).isOne();
+
+        ingest.record(pageView("/", null, null), "::ffff:203.0.113.7", BROWSER);
+        ingest.record(pageView("/", null, null), "203.0.113.7", BROWSER);
+        assertThat(count(day, "visitors", "all")).isEqualTo(2);
+        assertThat(visitorRows(day)).isEqualTo(2);
+        assertThat(count(day, "page_view", "/")).isEqualTo(5);
+    }
+
+    /**
+     * Сверх предела посетителей за день ({@code max-visitors-per-day}, по умолчанию 100000) новый не отмечается, а
+     * просмотр считается. Число посетителей дня берётся из счётчика {@code visitors/all}: тест ставит его вплотную к
+     * пределу.
+     */
+    @Test
+    void visitorsOverTheDailyLimitAreNotMarked() {
+        var day = onDay(LocalDate.of(2312, 1, 12));
+        var limit = Long.parseLong(AnalyticsProperties.DEFAULT_MAX_VISITORS_PER_DAY);
+        jdbc.sql("insert into analytics.daily_count (day, metric, key, count) values (:day, 'visitors', 'all', :count)")
+                .param("day", day)
+                .param("count", limit - 1)
+                .update();
+
+        ingest.record(pageView("/", null, null), "198.51.100.1", BROWSER);
+        ingest.record(pageView("/", null, null), "198.51.100.2", BROWSER);
+        ingest.record(pageView("/", null, null), "198.51.100.1", BROWSER);
+
+        assertThat(count(day, "visitors", "all")).isEqualTo(limit);
+        assertThat(visitorRows(day)).isOne();
+        assertThat(count(day, "page_view", "/")).isEqualTo(3);
+    }
+
+    /** Отпечаток — {@code SHA-256(соль дня ‖ байты адреса ‖ 0x00 ‖ userAgent в UTF-8)}; адрес и UA не хранятся. */
     @Test
     void fingerprintIsSaltedHashOfIpAndUserAgent() throws Exception {
         var day = onDay(LocalDate.of(2312, 1, 6));
@@ -101,7 +142,8 @@ class VisitorsTest extends AnalyticsTestSupport {
 
         var digest = MessageDigest.getInstance("SHA-256");
         digest.update(salt(day));
-        digest.update(IP.getBytes(StandardCharsets.UTF_8));
+        // 203.0.113.7 — четыре байта адреса, не текст.
+        digest.update(new byte[] {(byte) 203, 0, 113, 7});
         digest.update((byte) 0);
         digest.update(userAgent.getBytes(StandardCharsets.UTF_8));
         assertThat(hash(day)).isEqualTo(digest.digest());
@@ -122,8 +164,8 @@ class VisitorsTest extends AnalyticsTestSupport {
 
         try (var executor = Executors.newFixedThreadPool(2)) {
             var first = executor.submit(() -> transaction.executeWithoutResult(status -> {
-                if (visitors.firstVisitOfDay(day, new Visitor(IP, BROWSER))) {
-                    counts.increment(day, new Tally(Metric.VISITORS, "all"));
+                if (visitors.firstVisitOfDay(day, Visitor.of(IP, BROWSER).orElseThrow())) {
+                    counts.increment(day, Visitors.ALL);
                 }
                 counts.increment(day, new Tally(Metric.PAGE_VIEW, "/"));
                 held.countDown();

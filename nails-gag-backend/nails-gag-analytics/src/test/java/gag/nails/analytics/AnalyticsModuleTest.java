@@ -29,4 +29,4 @@ import org.springframework.test.context.TestExecutionListeners.MergeMode;
 @ActiveProfiles("test")
 @Import({PostgresTestcontainers.class, TestTimeConfiguration.class})
 @TestExecutionListeners(listeners = ResetClockListener.class, mergeMode = MergeMode.MERGE_WITH_DEFAULTS)
-@interface AnalyticsModuleTest {}
+public @interface AnalyticsModuleTest {}

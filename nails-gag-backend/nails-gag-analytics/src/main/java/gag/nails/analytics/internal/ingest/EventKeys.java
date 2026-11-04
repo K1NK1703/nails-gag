@@ -28,7 +28,18 @@ final class EventKeys {
     private static final Set<String> PLACES = Set.of("header", "hero", "price");
     private static final Set<String> CHANNELS = Set.of("telegram", "channel");
     private static final Pattern FAQ_ID = Pattern.compile("[a-z0-9-]{1,40}");
-    private static final Pattern HOST = Pattern.compile(AnalyticsProperties.HOST);
+
+    /** Служебные ключи: обычным значением события они не бывают, иначе смешались бы со сводными счётчиками. */
+    private static final Set<String> RESERVED = Set.of(Tally.OTHER, DIRECT);
+
+    /**
+     * Внешний хост: хотя бы две метки через точку. Сверяется с сырой строкой без учёта регистра только для ASCII
+     * (без {@code UNICODE_CASE}): знак Кельвина и подобные символы, которые {@code toLowerCase} превратил бы в
+     * латиницу, не проходят.
+     */
+    private static final Pattern DOTTED_HOST = Pattern.compile(
+            AnalyticsProperties.LABEL + "(?:\\." + AnalyticsProperties.LABEL + ")+", Pattern.CASE_INSENSITIVE);
+
     private static final String WWW = "www.";
 
     /** Поля события; поле «есть», если оно не {@code null}. */
@@ -70,6 +81,7 @@ final class EventKeys {
                 only(fields, Field.ID)
                                 && event.id() != null
                                 && FAQ_ID.matcher(event.id()).matches()
+                                && !RESERVED.contains(event.id())
                         ? Optional.of(new Tally(Metric.FAQ_OPEN, event.id()))
                         : Optional.empty();
             case "map_open" -> fields.isEmpty() ? Optional.of(new Tally(Metric.MAP_OPEN, MAP)) : Optional.empty();
@@ -100,20 +112,25 @@ final class EventKeys {
         return PAGES.contains(normalized) ? normalized : Tally.OTHER;
     }
 
+    /** Свой хост для сравнения с источником: нижний регистр, без {@code www.}. Считается один раз при старте. */
+    static String ownHost(String siteHost) {
+        return withoutWww(siteHost.toLowerCase(Locale.ROOT));
+    }
+
     /**
-     * Ключ источника из {@code referrer} — хоста, с которого пришли: нижний регистр, без {@code www.}. Пустой, свой
-     * сайт ({@code siteHost} с {@code www.} или без), не имя хоста (с портом, путём, схемой, пробелами) и длиннее
-     * {@value #MAX_HOST_LENGTH} символов — {@value #DIRECT}.
+     * Ключ источника из {@code referrer} — хоста, с которого пришли. Сырая строка должна быть именем хоста хотя бы из
+     * двух меток (ASCII, регистр любой); затем — нижний регистр и без {@code www.}. Пустой, свой сайт ({@code ownHost}
+     * из {@link #ownHost}), не имя хоста (с портом, путём, схемой, пробелами, без точки) и длиннее
+     * {@value #MAX_HOST_LENGTH} символов — {@value #DIRECT}. Без точки не бывает и служебных ключей.
      */
-    static String source(@Nullable String referrer, String siteHost) {
-        if (referrer == null || referrer.length() > WWW.length() + MAX_HOST_LENGTH) {
+    static String source(@Nullable String referrer, String ownHost) {
+        if (referrer == null
+                || referrer.length() > WWW.length() + MAX_HOST_LENGTH
+                || !DOTTED_HOST.matcher(referrer).matches()) {
             return DIRECT;
         }
         var host = withoutWww(referrer.toLowerCase(Locale.ROOT));
-        if (host.isEmpty()
-                || host.length() > MAX_HOST_LENGTH
-                || !HOST.matcher(host).matches()
-                || host.equals(withoutWww(siteHost.toLowerCase(Locale.ROOT)))) {
+        if (host.length() > MAX_HOST_LENGTH || !DOTTED_HOST.matcher(host).matches() || host.equals(ownHost)) {
             return DIRECT;
         }
         return host;

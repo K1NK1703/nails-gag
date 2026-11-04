@@ -51,8 +51,7 @@ nails-gag:
   analytics:
     # Домен сайта: переход с него (с www. или без) считается источником direct, а не внешним сайтом.
     site-host: nails-gag.ru
-    # Сколько разных ключей у метрики за день (пути, домены источников…), не считая other; новый сверх — в other.
-    max-keys-per-metric: 50
+    # Пределы max-keys-per-metric, max-visitors-per-day и max-concurrent-writes — по умолчанию из AnalyticsProperties.
   identity:
     # Пары provider:subject, которым при входе выдаётся роль «Разработчик»: ["YANDEX:1234567", "VK:7654321"]
     bootstrap-developers: []

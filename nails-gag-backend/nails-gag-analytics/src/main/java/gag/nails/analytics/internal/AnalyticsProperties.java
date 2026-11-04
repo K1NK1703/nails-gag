@@ -8,23 +8,39 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * {@code nails-gag.analytics.*}; неверные значения не дают приложению стартовать.
+ * {@code nails-gag.analytics.*}; неверные значения не дают приложению стартовать. Значения по умолчанию — только
+ * здесь, в константах {@code DEFAULT_*}.
  *
  * @param siteHost домен сайта в нижнем регистре, без порта ({@code nails-gag.ru}; в профиле {@code local} —
  *     {@code localhost}): переход с него (с {@code www.} или без) — не внешний источник, а {@code direct}. Своя
  *     настройка, а не {@code nails-gag.api.site-origin}: модуль зависит только от {@code common}
  * @param maxKeysPerMetric сколько разных ключей у метрики за день, не считая {@code other}; новый ключ сверх предела
- *     засчитывается в {@code other} — защита от раздувания таблицы мусорными значениями
+ *     засчитывается в {@code other} — защита от раздувания таблицы мусорными значениями. Предел мягкий: гонка новых
+ *     ключей может его немного превысить
+ * @param maxVisitorsPerDay сколько суточных отпечатков хранится за день; сверх предела новые посетители не
+ *     отмечаются (просмотры считаются как обычно) — защита таблицы отпечатков от накрутки с разных адресов
+ * @param maxConcurrentWrites сколько событий пишется в базу одновременно; событие сверх этого числа отбрасывается без
+ *     ожидания — приём не занимает общий пул соединений приложения
  */
 @Validated
 @ConfigurationProperties("nails-gag.analytics")
 public record AnalyticsProperties(
         @NotNull @Pattern(regexp = HOST) String siteHost,
-        @DefaultValue("50") @Positive int maxKeysPerMetric) {
+        @DefaultValue(DEFAULT_MAX_KEYS_PER_METRIC) @Positive int maxKeysPerMetric,
+
+        @DefaultValue(DEFAULT_MAX_VISITORS_PER_DAY) @Positive
+        int maxVisitorsPerDay,
+
+        @DefaultValue(DEFAULT_MAX_CONCURRENT_WRITES) @Positive
+        int maxConcurrentWrites) {
+
+    public static final String DEFAULT_MAX_KEYS_PER_METRIC = "50";
+    public static final String DEFAULT_MAX_VISITORS_PER_DAY = "100000";
+    public static final String DEFAULT_MAX_CONCURRENT_WRITES = "3";
 
     /** Метка имени хоста: латиница в нижнем регистре, цифры и дефис, без дефиса по краям, до 63 символов. */
-    private static final String LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+    public static final String LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 
-    /** Имя хоста: метки через точку. */
+    /** Имя хоста: одна или несколько меток через точку ({@code localhost} — тоже). */
     public static final String HOST = LABEL + "(?:\\." + LABEL + ")*";
 }

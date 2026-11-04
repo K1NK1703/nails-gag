@@ -10,8 +10,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Соль дня: 32 случайных байта, одна на день, создаётся первым событием дня. Только внутри транзакции приёма
- * ({@code MANDATORY}).
+ * Соль дня: 32 случайных байта, одна на день, создаётся первым просмотром страницы за день. Только внутри транзакции
+ * приёма ({@code MANDATORY}).
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)

@@ -2,8 +2,10 @@ package gag.nails.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import gag.nails.analytics.command.RecordEvent;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Map;
@@ -17,12 +19,16 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Приём событий: счётчики дня, отбраковка, день салона, предел ключей, источник и устройство, сбой записи. Дни —
- * 2311 год, свой у каждого теста.
+ * Приём событий: счётчики дня, отбраковка, день салона, предел ключей, источник и устройство, сбой записи, пределы
+ * ожидания. Дни — 2311 год, свои у каждого теста.
  */
 @AnalyticsModuleTest
 @ExtendWith(OutputCaptureExtension.class)
 class AnalyticsIngestTest extends AnalyticsTestSupport {
+
+    private static final String LOCK_HOME_VIEWS = """
+            select count from analytics.daily_count
+            where day = :day and metric = 'page_view' and key = '/' for update""";
 
     @Autowired
     PlatformTransactionManager transactionManager;
@@ -114,7 +120,7 @@ class AnalyticsIngestTest extends AnalyticsTestSupport {
 
     @Test
     void newKeysOverTheLimitGoToOther() {
-        var day = onDay(LocalDate.of(2311, 1, 6));
+        var day = onDay(LocalDate.of(2311, 1, 11));
 
         IntStream.range(0, 50).forEach(i -> ingest.record(gallery(i), IP, BROWSER));
         ingest.record(gallery(50), IP, BROWSER);
@@ -186,7 +192,8 @@ class AnalyticsIngestTest extends AnalyticsTestSupport {
         assertThat(visitorRows(day)).isZero();
         assertThat(saltRows(day)).isZero();
         assertThat(output.getAll())
-                .contains("analytics PAGE_VIEW event was not recorded")
+                .contains("analytics")
+                .contains("lost")
                 .doesNotContain(IP)
                 .doesNotContain(IPHONE);
 
@@ -218,6 +225,41 @@ class AnalyticsIngestTest extends AnalyticsTestSupport {
             status.setRollbackOnly();
         });
         assertThat(count(day, "page_view", "/")).isOne();
+    }
+
+    /** Адрес — только IP-литерал: имя хоста не разрешается через DNS, событие отбраковывается. */
+    @Test
+    void nonLiteralIpCountsNothing() {
+        var day = onDay(LocalDate.of(2311, 1, 12));
+
+        ingest.record(pageView("/", true, "ya.ru"), "example.com", BROWSER);
+        ingest.record(cta("hero"), "localhost", BROWSER);
+        ingest.record(map(), "", BROWSER);
+        ingest.record(map(), "203.0.113.7:443", BROWSER);
+
+        assertThat(rows(day)).isZero();
+    }
+
+    /**
+     * Ожидание блокировки обрывается за {@code lock_timeout}: строку просмотров {@code /} за день держит чужая
+     * транзакция, а приём возвращается быстро, без исключения, и ничего не записывает — ни просмотра, ни нового
+     * посетителя, отмеченного до ожидания.
+     */
+    @Test
+    void lockWaitIsCutShort() {
+        var day = onDay(LocalDate.of(2311, 1, 13));
+        view("/");
+        var holder = new TransactionTemplate(transactionManager);
+
+        holder.executeWithoutResult(status -> {
+            jdbc.sql(LOCK_HOME_VIEWS).param("day", day).query(Long.class).single();
+            assertTimeoutPreemptively(
+                    Duration.ofMillis(1500), () -> ingest.record(pageView("/", null, null), "198.51.100.9", BROWSER));
+        });
+
+        assertThat(count(day, "page_view", "/")).isOne();
+        assertThat(count(day, "visitors", "all")).isOne();
+        assertThat(visitorRows(day)).isOne();
     }
 
     private void overflow(LocalDate day, String metric, String key) {

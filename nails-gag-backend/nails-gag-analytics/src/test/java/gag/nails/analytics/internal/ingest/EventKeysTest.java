@@ -13,7 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 /** Ключи счётчиков, устройство и роботы — чистые функции, без Spring и базы. */
 class EventKeysTest {
 
-    private static final String SITE = "nails-gag.ru";
+    private static final String SITE = EventKeys.ownHost("nails-gag.ru");
 
     private static final String IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
             + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -131,6 +131,13 @@ class EventKeysTest {
         assertThat(EventKeys.tally(event("faq_open", null, null, null, id))).isEmpty();
     }
 
+    /** Служебные ключи {@code other} и {@code direct} не бывают обычным значением. */
+    @ParameterizedTest
+    @ValueSource(strings = {"other", "direct"})
+    void reservedKeysAreRejectedAsFaqIds(String id) {
+        assertThat(EventKeys.tally(event("faq_open", null, null, null, id))).isEmpty();
+    }
+
     @Test
     void mapOpenHasNoFields() {
         assertThat(EventKeys.tally(event("map_open", null, null, null, null)))
@@ -225,10 +232,26 @@ class EventKeysTest {
         assertThat(EventKeys.source("x".repeat(10_000), SITE)).isEqualTo("direct");
     }
 
+    /** Хост без точки — не внешний сайт: {@code localhost}, служебные ключи, домен верхнего уровня. */
+    @ParameterizedTest
+    @ValueSource(strings = {"localhost", "other", "direct", "com", "www.com", "WWW.ru"})
+    void hostWithoutDotIsDirect(String referrer) {
+        assertThat(EventKeys.source(referrer, SITE)).isEqualTo("direct");
+        assertThat(EventKeys.source(referrer, EventKeys.ownHost("localhost"))).isEqualTo("direct");
+    }
+
+    /** Шаблон сверяется с сырой строкой: символы, которые {@code toLowerCase} сделал бы латиницей, не проходят. */
+    @ParameterizedTest
+    @ValueSource(strings = {"\u212Aazan.ru", "ya.r\u0130", "\u0130nstagram.com"})
+    void nonAsciiLettersAreNotFoldedIntoLatin(String referrer) {
+        assertThat(EventKeys.source(referrer, SITE)).isEqualTo("direct");
+    }
+
     @Test
-    void localSiteHostIsDirectToo() {
-        assertThat(EventKeys.source("localhost", "localhost")).isEqualTo("direct");
-        assertThat(EventKeys.source("localhost", SITE)).isEqualTo("localhost");
+    void ownHostIsLowerCaseWithoutWww() {
+        assertThat(EventKeys.ownHost("WWW.Nails-Gag.RU")).isEqualTo("nails-gag.ru");
+        assertThat(EventKeys.source("www.nails-gag.ru", EventKeys.ownHost("www.nails-gag.ru")))
+                .isEqualTo("direct");
     }
 
     @Test

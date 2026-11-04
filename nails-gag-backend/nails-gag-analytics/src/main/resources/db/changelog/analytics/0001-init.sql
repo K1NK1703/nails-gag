@@ -11,8 +11,9 @@ CREATE TABLE analytics.daily_count (
     metric varchar(16) NOT NULL CONSTRAINT daily_count_metric_check CHECK (metric IN (
                'page_view', 'cta_click', 'contact_click', 'gallery_open', 'faq_open', 'map_open',
                'source', 'device', 'visitors')),
-    -- Путь, место кнопки, номер фото, домен источника… Не больше max-keys-per-metric ключей за день плюс other.
-    key    varchar(64) NOT NULL CONSTRAINT daily_count_key_check CHECK (char_length(key) BETWEEN 1 AND 64),
+    -- Путь, место кнопки, номер фото, домен источника… За день у метрики около max-keys-per-metric ключей плюс
+    -- other: предел мягкий, гонка новых ключей может его немного превысить.
+    key    text        NOT NULL CONSTRAINT daily_count_key_check CHECK (char_length(key) BETWEEN 1 AND 64),
     count  bigint      NOT NULL CONSTRAINT daily_count_count_check CHECK (count > 0),
     CONSTRAINT daily_count_pkey PRIMARY KEY (day, metric, key)
 );
