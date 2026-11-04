@@ -126,20 +126,30 @@ class FinanceEntriesApiTest extends FinanceApiTestSupport {
         var hidden = category(actor(master), EntryKind.INCOME);
         entry(actor(master), hidden.id(), "777.70", entryDay());
         categories.hide(hidden.id(), actor(master));
+        var visible = category(actor(master), EntryKind.INCOME);
+        entry(actor(master), visible.id(), "555.50", entryDay());
+        var own = pair(visible.id(), visible.name(), new BigDecimal("555.50"));
 
         // Пары общие для всей базы: ответ сверяется с ответом модуля, прочитанным сразу перед запросом, — чтение пар
         // само записей не добавляет.
         var expected = entries.recentCombos(EntryKind.INCOME, actor(master));
         var combos = noStore(get(master, "/api/finance/entries/recent?entryKind=income"));
 
-        assertThat(combos.values())
-                .extracting(combo -> field(combo, "categoryId").asString()
-                        + " " + field(combo, "categoryName").asString()
-                        + " " + field(combo, "amount").decimalValue().toPlainString())
-                .containsExactlyElementsOf(expected.stream()
-                        .map(combo -> combo.categoryId() + " " + combo.categoryName() + " "
-                                + combo.amount().toPlainString())
-                        .toList());
+        var offered = combos.values().stream()
+                .map(combo -> pair(
+                        UUID.fromString(field(combo, "categoryId").asString()),
+                        field(combo, "categoryName").asString(),
+                        field(combo, "amount").decimalValue()))
+                .toList();
+        var expectedPairs = expected.stream()
+                .map(combo -> pair(combo.categoryId(), combo.categoryName(), combo.amount()))
+                .toList();
+        assertThat(offered).containsExactlyElementsOf(expectedPairs);
+        // Своя видимая пара — в ответе, когда модуль относит её к последним пяти: чужие записи с более поздним моментом
+        // внесения могут её вытеснить, и это не ошибка адреса.
+        if (expectedPairs.contains(own)) {
+            assertThat(offered).contains(own);
+        }
         // Своя пара со скрытой категорией не предлагается, сколько бы пар ни было в базе.
         assertThat(combos.values())
                 .noneSatisfy(combo -> assertThat(field(combo, "categoryId").asString())
@@ -238,6 +248,12 @@ class FinanceEntriesApiTest extends FinanceApiTestSupport {
                 client.get().uri("/api/finance/entries/recent?entryKind=expense"),
                 HttpStatus.UNAUTHORIZED,
                 "common.unauthenticated");
+    }
+
+    /** Пара быстрого ввода строкой для сравнения; сумма — без незначащих нулей (JSON их не сохраняет). */
+    private static String pair(UUID categoryId, String categoryName, BigDecimal amount) {
+        return categoryId + " " + categoryName + " "
+                + amount.stripTrailingZeros().toPlainString();
     }
 
     /** Тело записи; изменяемое — тест может убрать поле. */
