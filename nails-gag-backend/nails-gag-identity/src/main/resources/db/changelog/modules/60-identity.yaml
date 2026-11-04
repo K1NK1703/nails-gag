@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/identity/0001-init.sql
   - include:
       file: db/changelog/identity/0002-seed.sql
+  - include:
+      file: db/changelog/identity/0003-analytics.sql

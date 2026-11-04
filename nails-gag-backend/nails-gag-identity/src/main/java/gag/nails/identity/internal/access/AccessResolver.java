@@ -34,7 +34,7 @@ public class AccessResolver {
      *
      * @param roles по коду
      * @param overrides включая явный {@link AccessLevel#NONE}
-     * @param effective все девять разделов, в порядке {@link Section}
+     * @param effective все разделы, в порядке {@link Section}
      */
     record Resolved(List<RoleEntity> roles, Map<Section, AccessLevel> overrides, Map<Section, AccessLevel> effective) {}
 
@@ -54,7 +54,7 @@ public class AccessResolver {
         return resolve(accountId).effective();
     }
 
-    /** Итог по правилу спецификации для заданных ролей и переопределений; все девять разделов. */
+    /** Итог по правилу спецификации для заданных ролей и переопределений; все разделы. */
     public static Map<Section, AccessLevel> effective(
             Collection<RoleEntity> roles, Map<Section, AccessLevel> overrides) {
         var effective = new EnumMap<Section, AccessLevel>(Section.class);

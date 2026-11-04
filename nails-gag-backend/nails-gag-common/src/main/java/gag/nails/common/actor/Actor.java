@@ -21,9 +21,9 @@ import org.jspecify.annotations.Nullable;
 public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Section, AccessLevel> access) {
 
     private static final Map<Section, AccessLevel> MASTER_ACCESS =
-            builtIn(AccessLevel.READ, AccessLevel.NONE, AccessLevel.WRITE);
+            builtIn(AccessLevel.READ, AccessLevel.NONE, AccessLevel.WRITE, AccessLevel.NONE);
     private static final Map<Section, AccessLevel> DEVELOPER_ACCESS =
-            builtIn(AccessLevel.WRITE, AccessLevel.WRITE, AccessLevel.READ);
+            builtIn(AccessLevel.WRITE, AccessLevel.WRITE, AccessLevel.READ, AccessLevel.READ);
 
     public Actor {
         access = Map.copyOf(access);
@@ -53,7 +53,7 @@ public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Secti
         return MASTER_ACCESS;
     }
 
-    /** Уровни встроенной роли «Разработчик». */
+    /** Уровни встроенной роли «Разработчик»: их же сеют миграции модуля входа. */
     public static Map<Section, AccessLevel> developerAccess() {
         return DEVELOPER_ACCESS;
     }
@@ -113,7 +113,9 @@ public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Secti
         return client().orElseThrow(AccessDeniedException::new);
     }
 
-    private static Map<Section, AccessLevel> builtIn(AccessLevel documents, AccessLevel access, AccessLevel finance) {
+    /** Встроенный набор: всем разделам {@link AccessLevel#WRITE}, кроме переданных; {@code NONE} не хранится. */
+    private static Map<Section, AccessLevel> builtIn(
+            AccessLevel documents, AccessLevel access, AccessLevel finance, AccessLevel analytics) {
         var levels = new EnumMap<Section, AccessLevel>(Section.class);
         for (var section : Section.values()) {
             levels.put(section, AccessLevel.WRITE);
@@ -121,6 +123,7 @@ public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Secti
         levels.put(Section.DOCUMENTS, documents);
         levels.put(Section.ACCESS, access);
         levels.put(Section.FINANCE, finance);
+        levels.put(Section.ANALYTICS, analytics);
         levels.values().removeIf(level -> level == AccessLevel.NONE);
         return Map.copyOf(levels);
     }

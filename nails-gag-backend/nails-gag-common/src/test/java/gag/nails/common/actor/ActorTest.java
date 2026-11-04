@@ -39,9 +39,20 @@ class ActorTest {
         var developer = Actor.developer();
 
         for (var section : Section.values()) {
-            var expected = section == Section.FINANCE ? AccessLevel.READ : AccessLevel.WRITE;
+            var expected =
+                    section == Section.FINANCE || section == Section.ANALYTICS ? AccessLevel.READ : AccessLevel.WRITE;
             assertThat(developer.level(section)).as(section.name()).isEqualTo(expected);
         }
+    }
+
+    @Test
+    void analyticsIsReadByDeveloperAndHiddenFromMaster() {
+        assertThat(Actor.developer().level(Section.ANALYTICS)).isEqualTo(AccessLevel.READ);
+        assertThat(Actor.developerAccess()).containsEntry(Section.ANALYTICS, AccessLevel.READ);
+
+        assertThat(Actor.master().level(Section.ANALYTICS)).isEqualTo(AccessLevel.NONE);
+        assertThat(Actor.master().canRead(Section.ANALYTICS)).isFalse();
+        assertThat(Actor.masterAccess()).doesNotContainKey(Section.ANALYTICS);
     }
 
     @Test
