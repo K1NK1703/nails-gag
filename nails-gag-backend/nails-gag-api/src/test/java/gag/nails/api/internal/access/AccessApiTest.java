@@ -354,7 +354,7 @@ class AccessApiTest extends ApiTestSupport {
                         Map.Entry::getKey, entry -> entry.getValue().asString()));
     }
 
-    /** Все девять разделов с одним уровнем — так модуль пишет итог. */
+    /** Все разделы с одним уровнем — так модуль пишет итог. */
     private static Map<String, String> allSections(AccessLevel level) {
         return Arrays.stream(Section.values()).collect(Collectors.toMap(Section::name, section -> level.name()));
     }
