@@ -24,6 +24,7 @@ import gag.nails.clients.error.DocumentVersionExistsException;
 import gag.nails.clients.error.DocumentVersionNotFoundException;
 import gag.nails.clients.error.PhoneTakenException;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.common.error.ErrorCodes;
 import gag.nails.common.error.UnauthenticatedException;
 import gag.nails.common.error.UserFacingException;
 import gag.nails.common.error.ValidationException;
@@ -31,6 +32,10 @@ import gag.nails.files.error.ProcessingBusyException;
 import gag.nails.files.error.TooLargeFileException;
 import gag.nails.files.error.TooLargeImageException;
 import gag.nails.files.error.UnsupportedFormatException;
+import gag.nails.finance.error.CategoryNameTakenException;
+import gag.nails.finance.error.CategoryNotFoundException;
+import gag.nails.finance.error.EntryNotFoundException;
+import gag.nails.finance.error.RecurringNotFoundException;
 import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.error.LastAccessAdminException;
@@ -72,8 +77,8 @@ final class ProblemStatuses {
     static final String NOT_ACCEPTABLE = "common.not_acceptable";
     static final String UNSUPPORTED_MEDIA_TYPE = "common.unsupported_media_type";
     static final String BAD_REQUEST = "common.bad_request";
-    static final String BUSY = "common.busy";
-    static final String INTERNAL = "common.internal";
+    static final String BUSY = ErrorCodes.BUSY;
+    static final String INTERNAL = ErrorCodes.INTERNAL;
 
     /**
      * {@link AccessDeniedException} здесь — статус для сотрудника; клиенту и анониму обработчик отвечает иначе
@@ -127,6 +132,11 @@ final class ProblemStatuses {
             entry(ConsentMissingException.class, HttpStatus.CONFLICT),
             entry(ReferencesLimitReachedException.class, HttpStatus.CONFLICT),
             entry(ReferencesClosedException.class, HttpStatus.CONFLICT),
+            // finance
+            entry(CategoryNotFoundException.class, HttpStatus.NOT_FOUND),
+            entry(EntryNotFoundException.class, HttpStatus.NOT_FOUND),
+            entry(RecurringNotFoundException.class, HttpStatus.NOT_FOUND),
+            entry(CategoryNameTakenException.class, HttpStatus.CONFLICT),
             // identity
             entry(LoginFailedException.class, HttpStatus.UNAUTHORIZED),
             entry(RegistrationExpiredException.class, HttpStatus.UNAUTHORIZED),

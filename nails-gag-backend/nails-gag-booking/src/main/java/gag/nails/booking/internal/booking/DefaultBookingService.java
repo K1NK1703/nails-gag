@@ -103,7 +103,7 @@ class DefaultBookingService implements BookingService {
         if (rules.tooLateToBook(slot.startsAt())) {
             throw new TooLateToBookException(slot.startsAt(), rules.settings().bookingCutoffMinutes());
         }
-        return create(command, slot, BookingCreator.CLIENT, client.prepaymentRequired(), rules);
+        return create(command, slot, BookingCreator.CLIENT, client.prepaymentRequired(), rules, actor);
     }
 
     @Override
@@ -118,7 +118,7 @@ class DefaultBookingService implements BookingService {
         locks.acquire(command.clientId());
         // Заблокированного мастер записать может, обезличенного — нет: записывать больше некого.
         requireNotErased(requireClient(command.clientId()));
-        return create(command, slot, BookingCreator.MASTER, awaitPrepayment, rules);
+        return create(command, slot, BookingCreator.MASTER, awaitPrepayment, rules, actor);
     }
 
     @Override
@@ -129,7 +129,8 @@ class DefaultBookingService implements BookingService {
         if (!actor.canWrite(Section.BOOKINGS) && rules.visitStarted(booking.slotStartsAt())) {
             throw new InvalidTransitionException(bookingId, booking.status(), "cancel a started visit");
         }
-        return cancellation.cancel(booking, cancelReason(actor, rules, booking), rules.now());
+        cancellation.cancel(booking, cancelReason(actor, rules, booking), rules.now());
+        return booking.toView(actor);
     }
 
     @Override
@@ -141,13 +142,15 @@ class DefaultBookingService implements BookingService {
         if (!rules.visitStarted(booking.slotStartsAt())) {
             throw new VisitNotStartedException(bookingId, booking.slotStartsAt());
         }
-        return cancellation.cancel(booking, CancelReason.LATE_ARRIVAL, rules.now());
+        cancellation.cancel(booking, CancelReason.LATE_ARRIVAL, rules.now());
+        return booking.toView(actor);
     }
 
     @Override
     public BookingView reschedule(UUID bookingId, UUID newSlotId, Actor actor) {
         var booking = finder.requireAccessibleForUpdate(bookingId, actor);
         booking.requireActive("reschedule");
+        booking.requireNotMarkedClientErased("reschedule");
         var rules = currentRules.get();
         var byClient = !actor.canWrite(Section.BOOKINGS);
         if (byClient) {
@@ -193,7 +196,7 @@ class DefaultBookingService implements BookingService {
         writer.flushMoved(booking);
         occupation.occupy(newSlotId, booking.id());
         events.rescheduled(booking, oldSlotId, oldSlotStartsAt, rules.now());
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -204,8 +207,9 @@ class DefaultBookingService implements BookingService {
             throw new ValidationException("comment", "must be at most " + MAX_COMMENT_LENGTH + " characters");
         }
         booking.requireActive("update comment");
+        booking.requireNotMarkedClientErased("update comment");
         booking.setComment(comment);
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -220,7 +224,12 @@ class DefaultBookingService implements BookingService {
     }
 
     private BookingView create(
-            CreateBooking command, SlotView slot, BookingCreator creator, boolean awaitPrepayment, BookingRules rules) {
+            CreateBooking command,
+            SlotView slot,
+            BookingCreator creator,
+            boolean awaitPrepayment,
+            BookingRules rules,
+            Actor actor) {
         if (slot.occupied()) {
             throw new SlotOccupiedException(slot.id());
         }
@@ -232,7 +241,7 @@ class DefaultBookingService implements BookingService {
         // Запись уже в базе (flush в writer), теперь слот: при гонке проходит один, второй откатывается целиком.
         occupation.occupy(slot.id(), booking.id());
         events.created(booking, rules.now());
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     private ClientView requireClient(UUID clientId) {
@@ -272,7 +281,9 @@ class DefaultBookingService implements BookingService {
     /** Мастер отменяет без последствий; клиент — бесплатно в окне, позже это поздняя отмена. */
     private static CancelReason cancelReason(Actor actor, BookingRules rules, BookingEntity booking) {
         if (actor.canWrite(Section.BOOKINGS)) {
-            return CancelReason.MASTER;
+            // Запись клиента, удалившего аккаунт, мастер отменяет по этой причине: признак не ставится, предоплата
+            // удерживается (спецификация финансов §3.3а).
+            return booking.clientErasedAt() != null ? CancelReason.ACCOUNT_DELETED : CancelReason.MASTER;
         }
         return rules.freeCancellationOpen(booking.slotStartsAt()) ? CancelReason.CLIENT : CancelReason.CLIENT_LATE;
     }

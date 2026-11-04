@@ -366,7 +366,7 @@ class BookingConcurrencyTest {
     }
 
     @Test
-    void eraseRacingWithClientBookingNeverLeavesActiveBookingOfErasedClient() throws Exception {
+    void eraseRacingWithClientBookingLeavesBookingForReviewOrRejectsIt() throws Exception {
         var day = daysFromNow(15);
         var slot = schedule.addSlot(day, NOON, master);
         var anna = client("Анна");
@@ -378,25 +378,29 @@ class BookingConcurrencyTest {
                 },
                 () -> book(anna, slot));
 
-        // Запись либо успела раньше и отменена обезличиванием, либо дождалась его и получила отказ по карточке.
+        // Запись либо успела раньше и осталась на рассмотрении у мастера (обезличивание записи не отменяет), либо
+        // дождалась обезличивания и получила отказ по карточке.
         var erased = outcomes.get(0);
         var created = outcomes.get(1);
         assertThat(erased.failure()).isNull();
         assertThat(clientQueries.get(anna, master).erased()).isTrue();
-        assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
-        assertThat(scheduleQueries.slotsOfDay(day, master))
-                .singleElement()
-                .matches(free -> free.id().equals(slot.id()) && !free.occupied());
         if (created.succeeded()) {
             assertThat(bookingQueries.ofDay(day, master)).singleElement().satisfies(booking -> {
                 assertThat(booking.clientId()).isEqualTo(anna);
-                assertThat(booking.status()).isEqualTo(BookingStatus.CANCELLED);
-                assertThat(booking.cancelReason()).isEqualTo(CancelReason.ACCOUNT_DELETED);
+                assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
+                assertThat(booking.clientErasedAt()).isNotNull();
                 assertThat(booking.comment()).isNull();
             });
+            assertThat(scheduleQueries.slotsOfDay(day, master))
+                    .singleElement()
+                    .matches(occupied -> occupied.id().equals(slot.id()) && occupied.occupied());
         } else {
             assertThat(created.failure()).isInstanceOf(ClientErasedException.class);
             assertThat(bookingQueries.ofDay(day, master)).isEmpty();
+            assertThat(bookingQueries.activeOfClient(anna, master)).isEmpty();
+            assertThat(scheduleQueries.slotsOfDay(day, master))
+                    .singleElement()
+                    .matches(free -> free.id().equals(slot.id()) && !free.occupied());
         }
     }
 

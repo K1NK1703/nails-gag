@@ -26,6 +26,10 @@ nails-gag:
     jobs:
       # Уборка хранилища в тестах не работает: тесты вызывают FileMaintenance сами.
       enabled: false
+  finance:
+    jobs:
+      # Записи повторяющихся шаблонов в тестах не создаются по расписанию: тесты вызывают FinanceMaintenance сами.
+      enabled: false
   identity:
     jobs:
       # Обслуживание входа в тестах не работает: тесты вызывают IdentityMaintenance сами.

@@ -6,8 +6,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
+import gag.nails.finance.model.JournalType;
 import gag.nails.identity.model.Provider;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.convert.TypeDescriptor;
+import org.springframework.format.support.DefaultFormattingConversionService;
 import org.springframework.web.bind.WebDataBinder;
 
 /**
@@ -54,6 +60,49 @@ class WebConfigurationTest {
     void kebabNameIsLowerCaseWithHyphens() {
         assertThat(WebConfiguration.kebabCase(Section.BOOKING_SETTINGS.name())).isEqualTo("booking-settings");
         assertThat(WebConfiguration.kebabCase(Provider.VK.name())).isEqualTo("vk");
+    }
+
+    /**
+     * Коллекция перечислений в параметре запроса ({@code ?type=…}): служба преобразований со строгими конвертерами
+     * ({@link WebConfiguration#addFormatters}) и редакторы привязки — как у аргумента {@code Set<JournalType>} журнала
+     * операций. Через запятую — только через дефис, пробелы у элементов срезаются; повтор параметра с именем константы
+     * Java или со значением через запятую — ошибка проверки с именем параметра; пустое значение — пустой набор.
+     */
+    @Test
+    void enumCollectionIsKebabCaseOnly() {
+        var conversions = new DefaultFormattingConversionService();
+        new WebConfiguration().addFormatters(conversions);
+        // Служба — до редакторов, как у Spring MVC: преобразователь привязки берёт её при создании.
+        var binder = new WebDataBinder(null, "type");
+        binder.setConversionService(conversions);
+        WebConfiguration.registerKebabCaseEditors(binder);
+
+        assertThat(journalTypes(binder, "visit,income"))
+                .containsExactlyInAnyOrder(JournalType.VISIT, JournalType.INCOME);
+        assertThat(journalTypes(binder, " visit , kept-prepayment"))
+                .containsExactlyInAnyOrder(JournalType.VISIT, JournalType.KEPT_PREPAYMENT);
+        assertThat(journalTypes(binder, new String[] {"visit", "income", "visit"}))
+                .containsExactlyInAnyOrder(JournalType.VISIT, JournalType.INCOME);
+        assertThat(journalTypes(binder, "")).isEmpty();
+        for (var values : List.of(
+                new String[] {"visit", "INCOME"}, new String[] {"visit,income", "expense"}, new String[] {"VISIT"})) {
+            assertThatThrownBy(() -> journalTypes(binder, values))
+                    .as(String.join("&", values))
+                    .isInstanceOfSatisfying(
+                            ValidationException.class,
+                            exception -> assertThat(exception.field()).isEqualTo("type"));
+        }
+        assertThatThrownBy(() -> journalTypes(binder, "visit,INCOME"))
+                .isInstanceOfSatisfying(
+                        ValidationException.class,
+                        exception -> assertThat(exception.field()).isEqualTo("type"));
+    }
+
+    /** Значение параметра {@code Set<JournalType>} после привязки; повторы видов схлопываются. */
+    private static Set<Object> journalTypes(WebDataBinder binder, Object value) {
+        Set<?> converted = binder.convertIfNecessary(
+                value, Set.class, TypeDescriptor.collection(Set.class, TypeDescriptor.valueOf(JournalType.class)));
+        return converted.stream().map(Object.class::cast).collect(Collectors.toUnmodifiableSet());
     }
 
     /** Привязка одного аргумента, как её готовит Spring MVC: имя объекта — имя параметра. */

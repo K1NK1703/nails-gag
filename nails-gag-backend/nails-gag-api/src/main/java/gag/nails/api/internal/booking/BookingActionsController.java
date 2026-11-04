@@ -4,10 +4,12 @@ import gag.nails.booking.BookingPrepayments;
 import gag.nails.booking.EarlierTimeOffers;
 import gag.nails.booking.VisitMarks;
 import gag.nails.booking.command.UpdateActualServices;
+import gag.nails.booking.command.UpdateVisit;
 import gag.nails.booking.model.BookingView;
 import gag.nails.common.actor.Actor;
 import jakarta.validation.Valid;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,10 +19,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Переходы записи по предоплате, предложению приехать раньше и отметкам визита (спецификация API, §7.6); отмена, отказ
- * опоздавшему и перенос — в {@link BookingsController}, при самой записи. Всё — по уровню изменения раздела «Записи»;
- * ответ на предложение даёт и клиент по своей записи. Права проверяет модуль; переход, недопустимый в текущем
- * состоянии записи, — {@code 409}. Ответ — запись после перехода.
+ * Переходы записи по предоплате, предложению приехать раньше и отметкам визита (спецификация API, §7.6; суммы —
+ * спецификация финансов, §3.2–3.3); отмена, отказ опоздавшему и перенос — в {@link BookingsController}, при самой
+ * записи. Всё — по уровню изменения раздела «Записи»; ответ на предложение даёт и клиент по своей записи. Права
+ * проверяет модуль; переход, недопустимый в текущем состоянии записи, — {@code 409}. Ответ — запись после перехода.
  */
 @RestController
 @RequestMapping("/api/bookings/{id}")
@@ -36,10 +38,30 @@ class BookingActionsController {
         this.marks = marks;
     }
 
-    /** Предоплата получена вне сайта: запись подтверждена. Запись не ждёт предоплату — {@code 409}. */
+    /**
+     * Предоплата получена вне сайта: запись подтверждена. Тело необязательное: без него или без суммы сумма — по
+     * умолчанию (процент предоплаты из правил записи от прайса выбранного состава, до рубля, не меньше рубля); сумма
+     * вне допустимого — {@code 400}. Запись не ждёт предоплату — {@code 409}.
+     */
     @PostMapping("/prepayment/received")
-    BookingView markPrepaymentReceived(@PathVariable UUID id, Actor actor) {
-        return prepayments.markReceived(id, actor);
+    BookingView markPrepaymentReceived(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) @Nullable ReceivePrepayment body,
+            Actor actor) {
+        var amount = body == null ? null : body.amount();
+        return amount == null ? prepayments.markReceived(id, actor) : prepayments.markReceived(id, amount, actor);
+    }
+
+    /**
+     * Исход полученной предоплаты отменённой записи или неявки: удержана или возвращена (спецификация финансов, §3.3).
+     * Значение, совпадающее с правилом, снимает переопределение. Предоплата не получена или запись не отменена и не
+     * отмечена неявкой — {@code 409}; срок исправления отметок от отмены или неявки истёк — {@code 409};
+     * {@code APPLIED} — {@code 400}.
+     */
+    @PutMapping("/prepayment/outcome")
+    BookingView choosePrepaymentOutcome(
+            @PathVariable UUID id, @Valid @RequestBody ChoosePrepaymentOutcome body, Actor actor) {
+        return prepayments.setOutcome(id, body.outcome(), actor);
     }
 
     /**
@@ -118,5 +140,16 @@ class BookingActionsController {
     BookingView updateActualServices(
             @PathVariable UUID id, @Valid @RequestBody UpdateActualServices body, Actor actor) {
         return marks.updateActualServices(id, body, actor);
+    }
+
+    /**
+     * Фактический состав, итог и причина суммы выполненного визита (спецификация финансов, §3.2): итог не меньше нуля,
+     * меньше прайса (скидка, бесплатно) и больше него — допустимы; причина до 200 символов, пустая стирает. Названия и
+     * цены — из каталога на момент правки. Визит не отмечен выполненным или срок исправления истёк — {@code 409};
+     * услуги нет — {@code 404}; неверный состав, отрицательная сумма или длинная причина — {@code 400}.
+     */
+    @PutMapping("/visit")
+    BookingView updateVisit(@PathVariable UUID id, @Valid @RequestBody UpdateVisit body, Actor actor) {
+        return marks.updateVisit(id, body, actor);
     }
 }

@@ -39,26 +39,27 @@ class DefaultBookingQueries implements BookingQueries {
 
     @Override
     public BookingView get(UUID bookingId, Actor actor) {
-        return finder.requireAccessible(bookingId, actor).toView();
+        return finder.requireAccessible(bookingId, actor).toView(actor);
     }
 
     @Override
     public List<BookingView> activeOfClient(UUID clientId, Actor actor) {
         actor.requireReadOrSelf(Section.BOOKINGS, clientId);
         return views(
-                bookings.findAllByClientIdAndStatusInOrderBySlotStartsAtAscIdAsc(clientId, BookingStatus.active()));
+                bookings.findAllByClientIdAndStatusInOrderBySlotStartsAtAscIdAsc(clientId, BookingStatus.active()),
+                actor);
     }
 
     @Override
     public List<BookingView> historyOfClient(UUID clientId, Actor actor) {
         actor.requireReadOrSelf(Section.BOOKINGS, clientId);
-        return views(bookings.findAllByClientIdAndStatusInOrderBySlotStartsAtDescIdDesc(clientId, FINISHED));
+        return views(bookings.findAllByClientIdAndStatusInOrderBySlotStartsAtDescIdDesc(clientId, FINISHED), actor);
     }
 
     @Override
     public List<BookingView> ofDay(LocalDate day, Actor actor) {
         actor.requireRead(Section.BOOKINGS);
-        return views(bookings.startingBetween(startOf(day), startOf(day.plusDays(1))));
+        return views(bookings.startingBetween(startOf(day), startOf(day.plusDays(1))), actor);
     }
 
     @Override
@@ -67,19 +68,26 @@ class DefaultBookingQueries implements BookingQueries {
         if (to.isBefore(from)) {
             throw new ValidationException("to", "must not be before from");
         }
-        return views(bookings.startingBetween(startOf(from), startOf(to.plusDays(1))));
+        return views(bookings.startingBetween(startOf(from), startOf(to.plusDays(1))), actor);
     }
 
     @Override
     public List<BookingView> awaitingMark(Actor actor) {
         actor.requireRead(Section.BOOKINGS);
-        return views(bookings.startedBy(BookingStatus.active(), clock.instant()));
+        return views(bookings.startedBy(BookingStatus.active(), clock.instant()), actor);
+    }
+
+    @Override
+    public List<BookingView> underReview(Actor actor) {
+        actor.requireRead(Section.BOOKINGS);
+        return views(bookings.underReview(BookingStatus.active(), clock.instant()), actor);
     }
 
     @Override
     public List<BookingView> awaitingPrepayment(Actor actor) {
         actor.requireRead(Section.BOOKINGS);
-        return views(bookings.findAllByStatusOrderByPrepaymentDeadlineAscIdAsc(BookingStatus.AWAITING_PREPAYMENT));
+        return views(
+                bookings.findAllByStatusOrderByPrepaymentDeadlineAscIdAsc(BookingStatus.AWAITING_PREPAYMENT), actor);
     }
 
     @Override
@@ -92,7 +100,7 @@ class DefaultBookingQueries implements BookingQueries {
         return salonTimeZone.at(day, LocalTime.MIDNIGHT);
     }
 
-    private static List<BookingView> views(List<BookingEntity> entities) {
-        return entities.stream().map(BookingEntity::toView).toList();
+    private static List<BookingView> views(List<BookingEntity> entities, Actor actor) {
+        return entities.stream().map(booking -> booking.toView(actor)).toList();
     }
 }

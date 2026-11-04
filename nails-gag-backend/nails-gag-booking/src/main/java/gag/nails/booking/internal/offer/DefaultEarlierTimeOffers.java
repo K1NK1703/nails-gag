@@ -34,6 +34,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
     public BookingView propose(UUID bookingId, Instant proposedStart, Actor actor) {
         actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
+        booking.requireNotMarkedClientErased("propose earlier time");
         var now = clock.instant();
         var slotStartsAt = booking.slotStartsAt();
         if (!salonTimeZone.dayOf(proposedStart).equals(salonTimeZone.dayOf(slotStartsAt))) {
@@ -44,7 +45,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
         }
         booking.proposeEarlierTime(proposedStart, now);
         events.earlierTimeProposed(booking, now);
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -52,7 +53,7 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
         actor.requireWrite(Section.BOOKINGS);
         var booking = finder.requireForUpdate(bookingId);
         booking.withdrawEarlierTime();
-        return booking.toView();
+        return booking.toView(actor);
     }
 
     @Override
@@ -65,6 +66,6 @@ class DefaultEarlierTimeOffers implements EarlierTimeOffers {
         } else {
             events.earlierTimeDeclined(booking, now);
         }
-        return booking.toView();
+        return booking.toView(actor);
     }
 }

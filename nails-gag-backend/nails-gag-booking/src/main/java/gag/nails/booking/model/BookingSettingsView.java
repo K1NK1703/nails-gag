@@ -7,7 +7,7 @@ package gag.nails.booking.model;
  * @param bookingCutoffMinutes за сколько минут до начала слота запись и перенос клиентом закрываются
  * @param prepaymentHoldHours сколько часов запись ждёт предоплату
  * @param freeCancelWindowHours до скольких часов до визита отмена и перенос клиентом бесплатны
- * @param prepaymentPercent размер предоплаты в процентах — только для текстов
+ * @param prepaymentPercent размер предоплаты в процентах — для текстов и суммы предоплаты по умолчанию (от прайса)
  * @param lateArrivalToleranceMinutes допустимое опоздание — только для текстов
  * @param markCorrectionWindowDays сколько дней после слота можно исправлять отметку и вносить визит задним числом
  */

@@ -68,6 +68,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/finance/categories/order': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['financeCategories_reorder']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/clients/{id}/prepayment-required': {
     parameters: {
       query?: never
@@ -109,6 +125,38 @@ export interface paths {
     }
     get?: never
     put: operations['clients_changeContactPhone']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/bookings/{id}/visit': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['bookingActions_updateVisit']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/bookings/{id}/prepayment/outcome': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['bookingActions_choosePrepaymentOutcome']
     post?: never
     delete?: never
     options?: never
@@ -398,6 +446,118 @@ export interface paths {
     get?: never
     put?: never
     post: operations['works_hide']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/recurring': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeRecurring_list']
+    put?: never
+    post: operations['financeRecurring_create']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/recurring/{id}/resume': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['financeRecurring_resume']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/recurring/{id}/pause': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['financeRecurring_pause']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/entries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeEntries_list']
+    put?: never
+    post: operations['financeEntries_add']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/categories': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeCategories_list']
+    put?: never
+    post: operations['financeCategories_create']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/categories/{id}/show': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['financeCategories_show']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/categories/{id}/hide': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['financeCategories_hide']
     delete?: never
     options?: never
     head?: never
@@ -724,6 +884,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/bookings/complete-as-planned': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['bookings_completeAsPlanned']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/bookings/by-master': {
     parameters: {
       query?: never
@@ -932,6 +1108,54 @@ export interface paths {
     patch: operations['works_update']
     trace?: never
   }
+  '/api/finance/recurring/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['financeRecurring_delete']
+    options?: never
+    head?: never
+    patch: operations['financeRecurring_update']
+    trace?: never
+  }
+  '/api/finance/entries/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeEntries_get']
+    put?: never
+    post?: never
+    delete: operations['financeEntries_delete']
+    options?: never
+    head?: never
+    patch: operations['financeEntries_update']
+    trace?: never
+  }
+  '/api/finance/categories/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch: operations['financeCategories_rename']
+    trace?: never
+  }
   '/api/clients/{id}': {
     parameters: {
       query?: never
@@ -1092,6 +1316,102 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/finance/summary': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeReports_summary']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/services': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeReports_services']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/monthly': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeReports_monthly']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/journal': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeReports_journal']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/entries/{id}/history': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeEntries_history']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/finance/entries/recent': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['financeEntries_recent']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/documents': {
     parameters: {
       query?: never
@@ -1180,6 +1500,22 @@ export interface paths {
       cookie?: never
     }
     get: operations['references_image']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/bookings/under-review': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['bookings_underReview']
     put?: never
     post?: never
     delete?: never
@@ -1412,6 +1748,11 @@ export interface components {
     ReorderWorks: {
       orderedWorkIds: string[]
     }
+    ReorderFinanceCategories: {
+      /** @enum {string} */
+      kind: 'INCOME' | 'EXPENSE'
+      orderedIds: string[]
+    }
     SetPrepaymentRequired: {
       required: boolean
       comment: string | null
@@ -1440,8 +1781,12 @@ export interface components {
       blocked: boolean
       erased: boolean
     }
-    SetComment: {
-      comment: string | null
+    UpdateVisit: {
+      /** Format: uuid */
+      mainServiceId: string
+      addonServiceIds: string[]
+      finalAmount: number
+      amountNote: string | null
     }
     BookedServiceView: {
       /** Format: uuid */
@@ -1493,6 +1838,12 @@ export interface components {
       plannedServices: components['schemas']['BookedServiceView'][]
       actualServices: components['schemas']['BookedServiceView'][]
       finalAmount: number | null
+      prepaymentAmount: number | null
+      /** @enum {string|null} */
+      prepaymentOutcome: 'APPLIED' | 'KEPT' | 'RETURNED' | null
+      amountNote: string | null
+      /** Format: date-time */
+      clientErasedAt: string | null
     }
     EarlierTimeView: {
       /** Format: date-time */
@@ -1501,6 +1852,13 @@ export interface components {
       proposedAt: string
       /** @enum {string} */
       status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN'
+    }
+    ChoosePrepaymentOutcome: {
+      /** @enum {string} */
+      outcome: 'KEPT' | 'RETURNED'
+    }
+    SetComment: {
+      comment: string | null
     }
     UpdateActualServices: {
       /** Format: uuid */
@@ -1708,6 +2066,78 @@ export interface components {
       /** Format: date-time */
       createdAt: string
     }
+    CreateRecurringEntry: {
+      /** Format: uuid */
+      categoryId: string
+      amount: number
+      comment: string | null
+      /** Format: int32 */
+      dayOfMonth: number
+      /** Format: date */
+      startsOn: string
+      /** Format: date */
+      endsOn: string | null
+    }
+    RecurringView: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      kind: 'INCOME' | 'EXPENSE'
+      /** Format: uuid */
+      categoryId: string
+      categoryName: string
+      amount: number
+      comment: string | null
+      /** Format: int32 */
+      dayOfMonth: number
+      /** Format: date */
+      startsOn: string
+      /** Format: date */
+      endsOn: string | null
+      paused: boolean
+    }
+    AddFinanceEntry: {
+      /** Format: uuid */
+      categoryId: string
+      amount: number
+      /** Format: date */
+      occurredOn: string
+      comment: string | null
+    }
+    EntryView: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      kind: 'INCOME' | 'EXPENSE'
+      /** Format: uuid */
+      categoryId: string
+      categoryName: string
+      amount: number
+      /** Format: date */
+      occurredOn: string
+      comment: string | null
+      /** Format: uuid */
+      recurringId: string | null
+      /** Format: date-time */
+      createdAt: string
+      /** Format: date-time */
+      updatedAt: string
+    }
+    CreateFinanceCategory: {
+      /** @enum {string} */
+      kind: 'INCOME' | 'EXPENSE'
+      name: string
+    }
+    CategoryView: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      kind: 'INCOME' | 'EXPENSE'
+      name: string
+      hidden: boolean
+      /** Format: int32 */
+      position: number
+    }
     StoredFileView: {
       /** Format: uuid */
       id: string
@@ -1797,9 +2227,20 @@ export interface components {
       /** Format: date-time */
       createdAt: string
     }
+    ReceivePrepayment: {
+      amount: number | null
+    }
     ProposeEarlierTime: {
       /** Format: date-time */
       proposedStart: string
+    }
+    CompleteBookingsAsPlanned: {
+      bookingIds: string[]
+    }
+    MarkResult: {
+      /** Format: uuid */
+      bookingId: string
+      errorCode: string | null
     }
     CreateBookingByMaster: {
       /** Format: uuid */
@@ -1903,6 +2344,29 @@ export interface components {
       /** Format: uuid */
       bookingId: string | null
     }
+    ChangeRecurringEntry: {
+      /** Format: uuid */
+      categoryId: string
+      amount: number
+      comment: string | null
+      /** Format: int32 */
+      dayOfMonth: number
+      /** Format: date */
+      startsOn: string
+      /** Format: date */
+      endsOn: string | null
+    }
+    ChangeFinanceEntry: {
+      /** Format: uuid */
+      categoryId: string
+      amount: number
+      /** Format: date */
+      occurredOn: string
+      comment: string | null
+    }
+    RenameFinanceCategory: {
+      name: string
+    }
     UpdateClient: {
       firstName: string
       lastName: string | null
@@ -1968,6 +2432,131 @@ export interface components {
       width: number
       /** Format: int32 */
       height: number
+    }
+    CategoryTotal: {
+      /** Format: uuid */
+      categoryId: string
+      name: string
+      hidden: boolean
+      amount: number
+    }
+    KeptPrepayments: {
+      /** Format: int32 */
+      count: number
+      amount: number
+    }
+    Summary: {
+      /** Format: date */
+      from: string
+      /** Format: date */
+      to: string
+      visits: components['schemas']['VisitTotals']
+      keptPrepayments: components['schemas']['KeptPrepayments']
+      incomeByCategory: components['schemas']['CategoryTotal'][]
+      expenseByCategory: components['schemas']['CategoryTotal'][]
+      income: number
+      expenses: number
+      profit: number
+    }
+    VisitTotals: {
+      /** Format: int32 */
+      count: number
+      priceSum: number
+      discounts: number
+      surcharges: number
+      received: number
+      averageCheck: number
+    }
+    ServiceTotal: {
+      /** Format: uuid */
+      serviceId: string
+      /** @enum {string} */
+      kind: 'MAIN' | 'ADDON'
+      title: string
+      /** Format: int32 */
+      count: number
+      priceSum: number
+    }
+    ServicesReport: {
+      /** Format: date */
+      from: string
+      /** Format: date */
+      to: string
+      /** Format: int32 */
+      visits: number
+      averageCheck: number
+      services: components['schemas']['ServiceTotal'][]
+    }
+    MonthTotals: {
+      month: string
+      income: number
+      expenses: number
+      profit: number
+    }
+    JournalItem: {
+      /** @enum {string} */
+      type: 'VISIT' | 'KEPT_PREPAYMENT' | 'INCOME' | 'EXPENSE'
+      /** Format: date */
+      day: string
+      amount: number
+      title: string
+      /** Format: uuid */
+      categoryId: string | null
+      /** Format: uuid */
+      bookingId: string | null
+      /** Format: uuid */
+      entryId: string | null
+    }
+    PagedJournalItem: {
+      items: components['schemas']['JournalItem'][]
+      /** Format: int32 */
+      page: number
+      /** Format: int32 */
+      size: number
+      /** Format: int64 */
+      total: number
+    }
+    PagedEntryView: {
+      items: components['schemas']['EntryView'][]
+      /** Format: int32 */
+      page: number
+      /** Format: int32 */
+      size: number
+      /** Format: int64 */
+      total: number
+    }
+    EntryChangeView: {
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      entryId: string
+      /** @enum {string} */
+      action: 'CREATE' | 'UPDATE' | 'DELETE'
+      before: components['schemas']['EntrySnapshot'] | null
+      after: components['schemas']['EntrySnapshot'] | null
+      /** Format: uuid */
+      accountId: string | null
+      /** Format: date-time */
+      changedAt: string
+    }
+    EntrySnapshot: {
+      /** @enum {string} */
+      kind: 'INCOME' | 'EXPENSE'
+      /** Format: uuid */
+      categoryId: string
+      categoryName: string
+      amount: number
+      /** Format: date */
+      occurredOn: string
+      comment: string | null
+      /** Format: uuid */
+      recurringId: string | null
+    }
+    QuickCombo: {
+      /** Format: uuid */
+      categoryId: string
+      categoryName: string
+      amount: number
     }
     DocumentVersionText: {
       version: components['schemas']['DocumentVersionView']
@@ -2285,6 +2874,37 @@ export interface operations {
       }
     }
   }
+  financeCategories_reorder: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReorderFinanceCategories']
+      }
+    }
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   clients_setPrepaymentRequired: {
     parameters: {
       query?: never
@@ -2373,6 +2993,76 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['ClientView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  bookingActions_updateVisit: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateVisit']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BookingView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  bookingActions_choosePrepaymentOutcome: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChoosePrepaymentOutcome']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BookingView']
         }
       }
       /** @description Problem (RFC 9457) */
@@ -3229,6 +3919,317 @@ export interface operations {
       }
     }
   }
+  financeRecurring_list: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecurringView'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeRecurring_create: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateRecurringEntry']
+      }
+    }
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecurringView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeRecurring_resume: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeRecurring_pause: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeEntries_list: {
+    parameters: {
+      query: {
+        from: string
+        to: string
+        entryKind?: 'income' | 'expense'
+        categoryId?: string
+        page?: number
+        size?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PagedEntryView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeEntries_add: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AddFinanceEntry']
+      }
+    }
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EntryView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeCategories_list: {
+    parameters: {
+      query: {
+        entryKind: 'income' | 'expense'
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CategoryView'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeCategories_create: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateFinanceCategory']
+      }
+    }
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CategoryView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeCategories_show: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeCategories_hide: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   files_upload: {
     parameters: {
       query: {
@@ -3805,7 +4806,11 @@ export interface operations {
       }
       cookie?: never
     }
-    requestBody?: never
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['ReceivePrepayment']
+      }
+    }
     responses: {
       /** @description OK */
       200: {
@@ -4066,6 +5071,39 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['BookingView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  bookings_completeAsPlanned: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CompleteBookingsAsPlanned']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MarkResult'][]
         }
       }
       /** @description Problem (RFC 9457) */
@@ -4711,6 +5749,200 @@ export interface operations {
       }
     }
   }
+  financeRecurring_delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeRecurring_update: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeRecurringEntry']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecurringView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeEntries_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EntryView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeEntries_delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeEntries_update: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeFinanceEntry']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EntryView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeCategories_rename: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RenameFinanceCategory']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CategoryView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   clients_details: {
     parameters: {
       query?: never
@@ -5112,6 +6344,199 @@ export interface operations {
       }
     }
   }
+  financeReports_summary: {
+    parameters: {
+      query: {
+        from: string
+        to: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Summary']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeReports_services: {
+    parameters: {
+      query: {
+        from: string
+        to: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ServicesReport']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeReports_monthly: {
+    parameters: {
+      query: {
+        year: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MonthTotals'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeReports_journal: {
+    parameters: {
+      query: {
+        from: string
+        to: string
+        type?: ('visit' | 'kept-prepayment' | 'income' | 'expense')[]
+        categoryId?: string
+        page?: number
+        size?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PagedJournalItem']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeEntries_history: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EntryChangeView'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  financeEntries_recent: {
+    parameters: {
+      query: {
+        entryKind: 'income' | 'expense'
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['QuickCombo'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   documents_current: {
     parameters: {
       query?: never
@@ -5287,6 +6712,35 @@ export interface operations {
         }
         content: {
           'image/jpeg': string
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  bookings_underReview: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BookingView'][]
         }
       }
       /** @description Problem (RFC 9457) */

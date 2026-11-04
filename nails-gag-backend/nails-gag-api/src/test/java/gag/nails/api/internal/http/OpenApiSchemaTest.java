@@ -205,6 +205,59 @@ class OpenApiSchemaTest extends ApiTestSupport {
     }
 
     /**
+     * Вид записи финансов в параметре запроса ({@code ?entryKind=income}) и виды операций журнала
+     * ({@code ?type=visit&type=kept-prepayment}, список) — через дефис, как их принимает адрес. В JSON те же
+     * перечисления остаются именами Java (спецификация API, §4.2): дефис — только в адресе.
+     */
+    @Test
+    void financeQueryEnumsAreKebabCase() {
+        var schema = openApi();
+        var operations = operations(schema);
+
+        var kinds = parameters(operations, "entryKind");
+        assertThat(kinds).hasSize(3);
+        kinds.forEach(kind -> {
+            assertThat(kind.path("in").asString()).isEqualTo("query");
+            assertThat(enumValues(kind)).containsExactly("income", "expense");
+        });
+        var journalTypes = parameters(operations, "type");
+        assertThat(journalTypes).hasSize(1);
+        var type = journalTypes.getFirst();
+        assertThat(type.path("in").asString()).isEqualTo("query");
+        assertThat(types(type.path("schema"))).containsExactly("array");
+        assertThat(type.path("schema").path("items").path("enum").values().stream()
+                        .map(JsonNode::asString)
+                        .toList())
+                .containsExactly("visit", "kept-prepayment", "income", "expense");
+
+        var schemas = schema.path("components").path("schemas");
+        assertThat(jsonEnum(schemas.path("JournalItem").path("properties").path("type")))
+                .containsExactly("VISIT", "KEPT_PREPAYMENT", "INCOME", "EXPENSE");
+        assertThat(jsonEnum(schemas.path("ReorderFinanceCategories")
+                        .path("properties")
+                        .path("kind")))
+                .containsExactly("INCOME", "EXPENSE");
+    }
+
+    /** Длины текстов финансов проверяет модуль в символах; схема всё равно сообщает их фронту. */
+    @Test
+    void financeTextLengthsAreInSchema() {
+        var schemas = openApi().path("components").path("schemas");
+
+        for (var body : List.of("CreateFinanceCategory", "RenameFinanceCategory")) {
+            var name = schemas.path(body).path("properties").path("name");
+            assertThat(name.path("minLength").asInt()).as(body).isEqualTo(1);
+            assertThat(name.path("maxLength").asInt()).as(body).isEqualTo(60);
+        }
+        for (var body :
+                List.of("AddFinanceEntry", "ChangeFinanceEntry", "CreateRecurringEntry", "ChangeRecurringEntry")) {
+            var comment = schemas.path(body).path("properties").path("comment");
+            assertThat(comment.path("maxLength").asInt()).as(body).isEqualTo(500);
+            assertThat(types(comment)).as(body).containsExactlyInAnyOrder("string", "null");
+        }
+    }
+
+    /**
      * Схема полная: в ней каждый адрес контроллеров приложения ({@link #controllerOperations()}) с его методом и ничего
      * сверх них — фронт не останется без типа для адреса.
      */
@@ -436,6 +489,11 @@ class OpenApiSchemaTest extends ApiTestSupport {
     private static List<String> types(JsonNode schema) {
         var type = schema.path("type");
         return type.isArray() ? type.values().stream().map(JsonNode::asString).toList() : List.of(type.asString());
+    }
+
+    /** Значения {@code enum} свойства схемы. */
+    private static List<String> jsonEnum(JsonNode property) {
+        return property.path("enum").values().stream().map(JsonNode::asString).toList();
     }
 
     private static List<String> enumValues(JsonNode parameter) {

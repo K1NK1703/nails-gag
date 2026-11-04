@@ -8,7 +8,13 @@ import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.CancelReason;
 import gag.nails.booking.model.EarlierTimeStatus;
 import gag.nails.booking.model.EarlierTimeView;
+import gag.nails.booking.model.KeptPrepaymentFact;
+import gag.nails.booking.model.PrepaymentOutcome;
+import gag.nails.booking.model.VisitFact;
+import gag.nails.booking.model.VisitServiceFact;
 import gag.nails.catalog.model.ServiceView;
+import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
 import gag.nails.common.error.InternalException;
 import gag.nails.schedule.model.SlotView;
 import jakarta.persistence.CascadeType;
@@ -21,8 +27,11 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.BatchSize;
@@ -72,6 +81,16 @@ public class BookingEntity {
 
     @Column(precision = 12, scale = 2)
     private @Nullable BigDecimal finalAmount;
+
+    private @Nullable String amountNote;
+
+    @Column(precision = 12, scale = 2)
+    private @Nullable BigDecimal prepaymentAmount;
+
+    @Enumerated(EnumType.STRING)
+    private @Nullable PrepaymentOverride prepaymentOutcomeOverride;
+
+    private @Nullable Instant clientErasedAt;
 
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder")
@@ -130,16 +149,31 @@ public class BookingEntity {
         withdrawPendingOffer();
     }
 
-    /** Запись, ждавшая предоплату, становится подтверждённой — с предоплатой или без неё. */
-    public void confirm(Instant now, boolean prepaymentReceived) {
+    /** Подтвердить (с предоплатой или без) можно только запись, ждущую предоплату. */
+    public void requireAwaitingPrepayment() {
         if (status != BookingStatus.AWAITING_PREPAYMENT) {
             throw new InvalidTransitionException(id, status, "confirm");
         }
-        status = BookingStatus.CONFIRMED;
-        prepaymentDeadline = null;
-        if (prepaymentReceived) {
-            prepaymentReceivedAt = now;
+    }
+
+    /**
+     * Предоплата получена: запись, ждавшая её, подтверждена.
+     *
+     * @param amount сумма предоплаты, больше нуля
+     * @throws InternalException если сумма не больше нуля — её проверяет вызывающий код
+     */
+    public void confirmWithPrepayment(Instant now, BigDecimal amount) {
+        if (amount.signum() <= 0) {
+            throw new InternalException("prepayment amount must be positive: " + amount);
         }
+        confirm();
+        prepaymentReceivedAt = now;
+        prepaymentAmount = amount;
+    }
+
+    /** Запись, ждавшая предоплату, подтверждена без неё. */
+    public void confirmWithoutPrepayment() {
+        confirm();
     }
 
     /**
@@ -218,7 +252,8 @@ public class BookingEntity {
      * Визит выполнен: из активной записи либо исправлением отметки «не пришла». Фактический состав
      * копируется из выбранного при записи, итог — сумма его цен; дальше мастер правит их отдельно.
      * Отметка разрешена и записи, ждавшей предоплату (мастер решает на месте): срок предоплаты при
-     * этом снимается.
+     * этом снимается. Исход предоплаты выполненного визита — в счёт визита, поэтому переопределение,
+     * поставленное неявке, снимается.
      */
     public void complete(Instant now) {
         if (status == BookingStatus.COMPLETED || status == BookingStatus.CANCELLED) {
@@ -228,6 +263,8 @@ public class BookingEntity {
         completedAt = now;
         noShowAt = null;
         prepaymentDeadline = null;
+        prepaymentOutcomeOverride = null;
+        amountNote = null;
         expirePendingOffer();
         var actual = services.stream()
                 .filter(service -> service.phase() == ServicePhase.PLANNED)
@@ -240,6 +277,7 @@ public class BookingEntity {
     /**
      * Клиент не пришёл: из активной записи либо исправлением отметки «выполнена». Отметка разрешена
      * и записи, ждавшей предоплату (мастер решает на месте): срок предоплаты при этом снимается.
+     * Фактический состав, итог и причина суммы стираются.
      */
     public void markNoShow(Instant now) {
         if (status == BookingStatus.NO_SHOW || status == BookingStatus.CANCELLED) {
@@ -252,29 +290,171 @@ public class BookingEntity {
         expirePendingOffer();
         services.removeIf(service -> service.phase() == ServicePhase.ACTUAL);
         finalAmount = null;
+        amountNote = null;
     }
 
-    /** Фактический состав и итог выполненного визита. {@code actual} — основная услуга первой. */
+    /**
+     * Фактический состав и итог выполненного визита. {@code actual} — основная услуга первой; итог — не больше двух
+     * знаков после запятой (проверено командой), хранится с двумя.
+     */
     public void replaceActualServices(List<ServiceView> actual, BigDecimal finalAmount) {
         if (status != BookingStatus.COMPLETED) {
             throw new InvalidTransitionException(id, status, "update actual services");
         }
         services.removeIf(service -> service.phase() == ServicePhase.ACTUAL);
         addServices(actual, ServicePhase.ACTUAL);
-        this.finalAmount = finalAmount;
+        this.finalAmount = finalAmount.setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    /**
+     * Фактический состав, итог и причина суммы выполненного визита. {@code actual} — основная услуга первой.
+     *
+     * @param amountNote причина суммы, уже без пробелов по краям и проверенная по длине; пусто — причины нет
+     */
+    public void replaceVisit(List<ServiceView> actual, BigDecimal finalAmount, @Nullable String amountNote) {
+        replaceActualServices(actual, finalAmount);
+        this.amountNote = amountNote;
+    }
+
+    /**
+     * Исход предоплаты можно переопределить: она получена, а запись отменена или отмечена неявкой.
+     *
+     * @return момент отмены или неявки — от него считается срок переопределения
+     * @throws InvalidTransitionException если предоплата не получена или запись не отменена и не отмечена неявкой —
+     *     исход тогда в счёт визита, переопределять нечего
+     */
+    public Instant requirePrepaymentSettled() {
+        var settledAt = settledAtOrNull();
+        if (prepaymentReceivedAt == null || settledAt == null) {
+            throw new InvalidTransitionException(id, status, "set prepayment outcome");
+        }
+        return settledAt;
+    }
+
+    /**
+     * Момент отмены или неявки — для записи, о которой это уже известно (например, из выборки отменённых и неявок).
+     *
+     * @throws InternalException если запись не отменена и не отмечена неявкой — ошибка вызывающего кода
+     */
+    public Instant settledAt() {
+        var settledAt = settledAtOrNull();
+        if (settledAt == null) {
+            throw new InternalException("booking " + id + " in status " + status + " is neither cancelled nor no-show");
+        }
+        return settledAt;
+    }
+
+    private @Nullable Instant settledAtOrNull() {
+        return switch (status) {
+            case CANCELLED -> cancelledAt;
+            case NO_SHOW -> noShowAt;
+            case AWAITING_PREPAYMENT, CONFIRMED, COMPLETED -> null;
+        };
+    }
+
+    /**
+     * Переопределяет исход полученной предоплаты отменённой записи или неявки; значение, совпадающее с правилом,
+     * снимает переопределение. Срок проверяет вызывающий код по {@link #requirePrepaymentSettled}.
+     *
+     * @throws InvalidTransitionException если переопределять нечего ({@link #requirePrepaymentSettled})
+     */
+    public void overridePrepaymentOutcome(PrepaymentOverride override) {
+        requirePrepaymentSettled();
+        var byRule = PrepaymentOutcomes.byRule(status, cancelReason);
+        prepaymentOutcomeOverride = override.outcome() == byRule ? null : override;
+    }
+
+    /**
+     * Денежный факт выполненного визита: фактический состав, его прайс, итог и причина суммы; клиента в нём нет.
+     *
+     * @param day день визита в поясе салона — его считает вызывающий по {@link #visitStart}
+     * @throws InternalException если визит не выполнен
+     */
+    public VisitFact toVisitFact(LocalDate day) {
+        var amount = finalAmount;
+        if (status != BookingStatus.COMPLETED || amount == null) {
+            throw new InternalException("visit fact of booking " + id + " in status " + status);
+        }
+        // Явно по порядку в составе: не полагаться на @OrderBy при выборке с присоединением.
+        var actual = services.stream()
+                .filter(service -> service.phase() == ServicePhase.ACTUAL)
+                .sorted(Comparator.comparingInt(BookedServiceEntity::sortOrder))
+                .map(BookedServiceEntity::toFact)
+                .toList();
+        var priceSum = actual.stream().map(VisitServiceFact::price).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new VisitFact(id, day, actual, priceSum, amount, amountNote);
+    }
+
+    /**
+     * Удержанная предоплата: исход по правилу с учётом переопределения — {@link PrepaymentOutcome#KEPT}.
+     *
+     * @param day день отмены или неявки в поясе салона — его считает вызывающий по {@link #settledAt}
+     * @throws InternalException если предоплата не удержана
+     */
+    public KeptPrepaymentFact toKeptPrepaymentFact(LocalDate day) {
+        var amount = prepaymentAmount;
+        if (prepaymentOutcome() != PrepaymentOutcome.KEPT || amount == null) {
+            throw new InternalException("prepayment of booking " + id + " is not kept");
+        }
+        return new KeptPrepaymentFact(id, day, amount);
+    }
+
+    /** Прайс выбранного при записи состава. */
+    public BigDecimal plannedPrice() {
+        return services.stream()
+                .filter(service -> service.phase() == ServicePhase.PLANNED)
+                .map(BookedServiceEntity::price)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** Исход полученной предоплаты с учётом переопределения ({@link PrepaymentOutcomes#of}); пусто — её не было. */
+    public @Nullable PrepaymentOutcome prepaymentOutcome() {
+        return PrepaymentOutcomes.of(status, cancelReason, prepaymentReceivedAt != null, prepaymentOutcomeOverride);
     }
 
     void setComment(@Nullable String comment) {
         this.comment = blankToNull(comment);
     }
 
-    /** Обезличивание клиента: его комментарий стирается у записи в любом состоянии. */
-    public void wipeComment() {
+    /**
+     * Обезличивание клиента: свободные тексты записи, где может оказаться имя, — комментарий клиента и причина
+     * итоговой суммы — стираются в любом состоянии. Суммы остаются: это не персональные данные.
+     */
+    public void wipeFreeTexts() {
         this.comment = null;
+        this.amountNote = null;
     }
 
     void setMasterNote(@Nullable String masterNote) {
         this.masterNote = blankToNull(masterNote);
+    }
+
+    /**
+     * Клиент удалил аккаунт, а визит по активной записи ещё не начался: запись не отменяется — клиентка может прийти, —
+     * а ждёт решения мастера. Ждущее ответа предложение приехать раньше отзывается: ответить некому. Отметка остаётся
+     * и после отмены или отметки визита; повторное обезличивание её не сдвигает.
+     */
+    public void markClientErased(Instant now) {
+        if (clientErasedAt == null) {
+            clientErasedAt = now;
+        }
+        withdrawPendingOffer();
+    }
+
+    /**
+     * Действие, о котором надо сообщить клиенту или которое пишет его текст, — перенос, предложение приехать раньше,
+     * комментарий клиента, — невозможно для записи с отметкой обезличивания ({@link #markClientErased}), то есть
+     * записи, которая была на рассмотрении у мастера: сообщить некому, а свободный текст обезличенной клиентки заново
+     * не пишется. Мастеру остаётся оставить запись или отменить её. Проверяется отметка записи, а не карточка клиента:
+     * записи, визит по которым уже начался в момент обезличивания, отметки не получают и под правило осознанно не
+     * попадают — с ними дальше только отметка визита.
+     *
+     * @throws InvalidTransitionException если у записи есть отметка обезличивания клиента
+     */
+    public void requireNotMarkedClientErased(String action) {
+        if (clientErasedAt != null) {
+            throw new InvalidTransitionException(id, status, action);
+        }
     }
 
     /** Объединение клиентов: запись переходит к тому, кто остался. */
@@ -331,6 +511,12 @@ public class BookingEntity {
         return agreedStart;
     }
 
+    /** Момент обезличивания клиента, если запись ждала решения мастера ({@link #markClientErased}). */
+    @Nullable
+    public Instant clientErasedAt() {
+        return clientErasedAt;
+    }
+
     @Nullable
     CancelReason cancelReason() {
         return cancelReason;
@@ -341,7 +527,13 @@ public class BookingEntity {
         return masterNote;
     }
 
-    public BookingView toView() {
+    /**
+     * Представление для {@code viewer}. Деньги — итог визита, его причина, сумма и исход предоплаты — видит только
+     * сотрудник с чтением раздела «Записи»; клиенту, в том числе в его собственной записи, они не отдаются: на сайте
+     * клиент видит только прайс.
+     */
+    public BookingView toView(Actor viewer) {
+        var staff = viewer.canRead(Section.BOOKINGS);
         return new BookingView(
                 id,
                 clientId,
@@ -362,7 +554,11 @@ public class BookingEntity {
                 noShowAt,
                 servicesOf(ServicePhase.PLANNED),
                 servicesOf(ServicePhase.ACTUAL),
-                finalAmount);
+                staff ? finalAmount : null,
+                staff ? prepaymentAmount : null,
+                staff ? prepaymentOutcome() : null,
+                staff ? amountNote : null,
+                clientErasedAt);
     }
 
     private @Nullable EarlierTimeView earlierTime() {
@@ -383,6 +579,12 @@ public class BookingEntity {
         for (var order = 0; order < views.size(); order++) {
             services.add(new BookedServiceEntity(this, views.get(order), phase, order));
         }
+    }
+
+    private void confirm() {
+        requireAwaitingPrepayment();
+        status = BookingStatus.CONFIRMED;
+        prepaymentDeadline = null;
     }
 
     private void requirePendingOffer(String action) {

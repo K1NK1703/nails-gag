@@ -6,6 +6,8 @@ import gag.nails.clients.model.DocumentKind;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.ValidationException;
 import gag.nails.files.model.FilePurpose;
+import gag.nails.finance.model.EntryKind;
+import gag.nails.finance.model.JournalType;
 import gag.nails.identity.model.Provider;
 import java.beans.PropertyEditorSupport;
 import java.util.Arrays;
@@ -16,6 +18,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.format.FormatterRegistry;
 import org.springframework.http.converter.HttpMessageConverters;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
@@ -26,7 +29,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * перечисления в пути и параметрах запроса — провайдер входа ({@code /api/auth/yandex/…}), документ
  * ({@code /api/documents/policy/…}), раздел админки ({@code …/overrides/booking-settings}), записи клиента
  * ({@code ?scope=history}), вид согласия ({@code …/consents/photo-publication}), назначение файла
- * ({@code ?purpose=reference}) — по имени в нижнем регистре через дефис.
+ * ({@code ?purpose=reference}), вид записи финансов ({@code ?entryKind=income}), виды операций журнала финансов
+ * ({@code ?type=visit&type=kept-prepayment}) — по имени в нижнем регистре через дефис.
  */
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
@@ -38,7 +42,9 @@ class WebConfiguration implements WebMvcConfigurer {
             KebabCaseEnum.of(Section.class),
             KebabCaseEnum.of(BookingScope.class),
             KebabCaseEnum.of(ConsentKind.class),
-            KebabCaseEnum.of(FilePurpose.class));
+            KebabCaseEnum.of(FilePurpose.class),
+            KebabCaseEnum.of(EntryKind.class),
+            KebabCaseEnum.of(JournalType.class));
 
     /** Типы из {@link #KEBAB_CASE_ENUMS}; по ним же схема OpenAPI показывает значения через дефис. */
     static final Set<Class<?>> KEBAB_CASE_TYPES =
@@ -50,6 +56,24 @@ class WebConfiguration implements WebMvcConfigurer {
         builder.addCustomConverter(new ImageBodyConverter());
     }
 
+    /**
+     * Строгие конвертеры перечислений из {@link #KEBAB_CASE_ENUMS} в службе преобразований — для коллекций в параметрах
+     * запроса ({@code List<JournalType>}, {@code Set<JournalType>}). Коллекцию Spring разбирает службой первой, и её
+     * общий разбор перечислений ({@code Enum.valueOf}) принял бы имя константы Java ({@code VISIT}); свой конвертер
+     * принимает только написание через дефис. Его отказ Spring проглатывает и разбирает элементы редакторами
+     * ({@link #registerKebabCaseEditors}): неверный элемент — тот же {@code 400} с именем параметра, что и у одиночного
+     * значения.
+     *
+     * <p>Коллекция задаётся повтором параметра ({@code ?type=visit&type=income}) или одним значением через запятую
+     * ({@code ?type=visit,income}); в форме через запятую пробелы вокруг элементов Spring срезает. Смешивать обе формы
+     * нельзя: элемент повтора с запятой ({@code ?type=visit,income&type=expense}) — неверное значение, {@code 400}.
+     * Пустое значение ({@code ?type=}) — пустая коллекция.
+     */
+    @Override
+    public void addFormatters(FormatterRegistry registry) {
+        KEBAB_CASE_ENUMS.forEach(kebabCaseEnum -> kebabCaseEnum.registerConverter(registry));
+    }
+
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(new CurrentActorResolver());
@@ -57,12 +81,13 @@ class WebConfiguration implements WebMvcConfigurer {
     }
 
     /**
-     * Перечисления из {@link #KEBAB_CASE_ENUMS} для аргументов контроллеров: редактор на каждый тип — единственный путь
-     * разбора, конвертеров в службе преобразований у них нет. Конвертер не подошёл бы: его отказ Spring проглатывает и
-     * пробует {@code Enum.valueOf}, так что имя константы Java ({@code BOOKING_SETTINGS}) прошло бы; при редакторе
-     * службу преобразований Spring не вызывает. Неверное значение — {@link ValidationException}, поле — имя объекта
-     * привязки: у {@code @PathVariable} и {@code @RequestParam} это имя параметра ({@code @ModelAttribute} слой не
-     * использует). Списки перечислений через запятую ({@code List<Section>}) не поддерживаются и не используются.
+     * Перечисления из {@link #KEBAB_CASE_ENUMS} для аргументов контроллеров. Одиночное значение разбирает только
+     * редактор: когда для типа найден редактор, службу преобразований Spring не вызывает. Коллекцию служба разбирает
+     * первой — для неё строгий конвертер ({@link #addFormatters}), а при его отказе элементы разбирают эти же
+     * редакторы. Одного конвертера мало: без редактора его отказ Spring проглатывает и пробует
+     * {@code Enum.valueOf}, так что имя константы Java ({@code BOOKING_SETTINGS}) прошло бы. Неверное значение —
+     * {@link ValidationException}, поле — имя объекта привязки: у {@code @PathVariable} и {@code @RequestParam} это имя
+     * параметра ({@code @ModelAttribute} слой не использует).
      *
      * <p>Аргументы разбираются по порядку, {@code Actor} — последний: неверное перечисление в пути даёт {@code 400} ещё
      * до проверки сессии, как и тело с {@code @Valid}.
@@ -104,6 +129,15 @@ class WebConfiguration implements WebMvcConfigurer {
                     setValue(parse(text, field));
                 }
             });
+        }
+
+        /**
+         * Конвертер службы преобразований для элементов коллекции: только написание через дефис; значение через запятую
+         * служба делит сама и пробелы у элементов срезает. Отказ — без поля: Spring его не показывает, а разбирает
+         * значение редакторами, у которых поле есть.
+         */
+        void registerConverter(FormatterRegistry registry) {
+            registry.addConverter(String.class, type, source -> parse(source, ""));
         }
 
         private E parse(String source, String field) {

@@ -5,8 +5,10 @@ import gag.nails.api.internal.http.PeriodParams;
 import gag.nails.api.internal.http.SetMasterNote;
 import gag.nails.booking.BookingQueries;
 import gag.nails.booking.BookingService;
+import gag.nails.booking.VisitMarks;
 import gag.nails.booking.command.CreateBooking;
 import gag.nails.booking.model.BookingView;
+import gag.nails.booking.model.MarkResult;
 import gag.nails.common.actor.Actor;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -25,10 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Записи (спецификация API, §7.6): чтение и очереди, создание, отмена, отказ опоздавшему, перенос, комментарий и
- * заметка мастера; остальные переходы — в {@link BookingActionsController}. Сотруднику — по уровню раздела «Записи»,
- * клиенту — свои записи; права и правила записи проверяет модуль. Чужая запись клиенту — как несуществующая,
- * {@code 404 common.not_found}; конфликт с состоянием записи или правилами — {@code 409}. Даты — в поясе салона,
- * период {@code from}/{@code to} — включительно и не длиннее {@value PeriodParams#MAX_DAYS} дней.
+ * заметка мастера, пакетная отметка визитов (спецификация финансов, §5); остальные переходы — в
+ * {@link BookingActionsController}. Сотруднику — по уровню раздела «Записи», клиенту — свои записи; права и правила
+ * записи проверяет модуль. Чужая запись клиенту — как несуществующая, {@code 404 common.not_found}; конфликт с
+ * состоянием записи или правилами — {@code 409}. Даты — в поясе салона, период {@code from}/{@code to} — включительно
+ * и не длиннее {@value PeriodParams#MAX_DAYS} дней.
  */
 @RestController
 @RequestMapping("/api/bookings")
@@ -36,10 +39,12 @@ class BookingsController {
 
     private final BookingQueries queries;
     private final BookingService bookings;
+    private final VisitMarks marks;
 
-    BookingsController(BookingQueries queries, BookingService bookings) {
+    BookingsController(BookingQueries queries, BookingService bookings, VisitMarks marks) {
         this.queries = queries;
         this.bookings = bookings;
+        this.marks = marks;
     }
 
     /** Все записи периода по времени начала, включая отменённые; нужен уровень чтения раздела «Записи». */
@@ -61,6 +66,34 @@ class BookingsController {
     @GetMapping("/awaiting-prepayment")
     List<BookingView> awaitingPrepayment(Actor actor) {
         return queries.awaitingPrepayment(actor);
+    }
+
+    /**
+     * На рассмотрении: активные записи клиентов, удаливших аккаунт, визит по которым ещё не начался, по началу визита
+     * (спецификация финансов, §3.3а). Мастер оставляет запись — после начала визита она ждёт отметки, как обычно, —
+     * или отменяет её. Нужен уровень чтения раздела «Записи».
+     */
+    @GetMapping("/under-review")
+    List<BookingView> underReview(Actor actor) {
+        return queries.underReview(actor);
+    }
+
+    /**
+     * Пакетная отметка «все выполнены по прайсу» для списка «ждут отметки»; нужен уровень изменения раздела «Записи».
+     * Каждая запись отмечается отдельно: сбой одной не мешает остальным, поэтому ответ — {@code 200} с результатом по
+     * каждой различной записи в порядке первого появления: {@code errorCode} пуст — отмечена, иначе код, как у
+     * отдельной отметки ({@code booking.visit_not_started}, {@code booking.invalid_transition}, {@code
+     * booking.correction_window_closed}, {@code booking.booking_not_found}; {@code common.busy} — запись занята
+     * другой операцией; {@code common.internal} — непредвиденный сбой). Больше {@value VisitMarks#MAX_BATCH}
+     * идентификаторов — {@code 400}.
+     *
+     * <p>Отказ базы посреди пакета (соединение потеряно, транзакцию не начать) прерывает его: ответ —
+     * {@code 500 common.internal}, а записи, отмеченные до сбоя, остаются отмеченными. Результатов по ним в ответе нет,
+     * поэтому фронт после такого ответа перечитывает «ждут отметки».
+     */
+    @PostMapping("/complete-as-planned")
+    List<MarkResult> completeAsPlanned(@Valid @RequestBody CompleteBookingsAsPlanned body, Actor actor) {
+        return marks.completeAsPlanned(body.bookingIds(), actor);
     }
 
     /** Запись без заметки мастера; сотруднику с чтением «Записей» — любая, клиенту — своя. */

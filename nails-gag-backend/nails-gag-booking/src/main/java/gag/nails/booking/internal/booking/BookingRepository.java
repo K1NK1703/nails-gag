@@ -50,7 +50,38 @@ public interface BookingRepository extends JpaRepository<BookingEntity, UUID> {
             + " order by b.slotStartsAt, b.id")
     List<BookingEntity> startedBy(Collection<BookingStatus> statuses, Instant now);
 
+    /**
+     * Активные записи с отметкой обезличивания клиента, визит по которым ещё не начался (начало визита позже {@code
+     * now}, как {@code BookingRules.visitStarted}), по началу визита ({@link BookingEntity#visitStart}). Условие на
+     * начало слота избыточно (согласованное время раньше слота), но позволяет пользоваться индексом по слоту.
+     */
+    @Query("select b from BookingEntity b where b.status in :statuses and b.clientErasedAt is not null"
+            + " and coalesce(b.agreedStart, b.slotStartsAt) > :now and b.slotStartsAt > :now"
+            + " order by coalesce(b.agreedStart, b.slotStartsAt), b.id")
+    List<BookingEntity> underReview(Collection<BookingStatus> statuses, Instant now);
+
     List<BookingEntity> findAllByStatusOrderByPrepaymentDeadlineAscIdAsc(BookingStatus status);
+
+    /**
+     * Записи в состоянии {@code status}, начало визита которых (согласованное более раннее время или начало слота) в
+     * полуинтервале {@code [from, to)}, вместе с составом — одним запросом; по началу визита, при равенстве — по id
+     * записи. Условие на начало слота избыточно (согласованное время раньше слота, {@code
+     * booking_agreed_start_before_slot_check}), но даёт нижнюю границу по индексу слота.
+     */
+    @Query("select b from BookingEntity b left join fetch b.services where b.status = :status"
+            + " and coalesce(b.agreedStart, b.slotStartsAt) >= :from and coalesce(b.agreedStart, b.slotStartsAt) < :to"
+            + " and b.slotStartsAt >= :from"
+            + " order by coalesce(b.agreedStart, b.slotStartsAt), b.id")
+    List<BookingEntity> completedVisitsWithServices(BookingStatus status, Instant from, Instant to);
+
+    /**
+     * Отменённые записи и неявки ({@code statuses}) с полученной предоплатой, момент отмены или неявки которых в
+     * полуинтервале {@code [from, to)}; по этому моменту. Только кандидаты: удержана ли предоплата, решает правило.
+     */
+    @Query("select b from BookingEntity b where b.status in :statuses and b.prepaymentReceivedAt is not null"
+            + " and coalesce(b.cancelledAt, b.noShowAt) >= :from and coalesce(b.cancelledAt, b.noShowAt) < :to"
+            + " order by coalesce(b.cancelledAt, b.noShowAt), b.id")
+    List<BookingEntity> settledWithReceivedPrepayment(Collection<BookingStatus> statuses, Instant from, Instant to);
 
     @Query("select b.id from BookingEntity b where b.status = :status and b.prepaymentDeadline < :now")
     List<UUID> idsWithPrepaymentDeadlineBefore(BookingStatus status, Instant now);
