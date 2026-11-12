@@ -3,6 +3,7 @@ package gag.nails.analytics.internal.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
 
 import gag.nails.analytics.AnalyticsModuleTest;
@@ -31,7 +32,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * транзакцию только для чтения с уровнем по умолчанию — {@code READ COMMITTED}, — и читает в ней ровно один запрос.
  * Состояние снимает шпион {@link PeriodCounts} в момент запроса: и по Spring, и по самому соединению PostgreSQL. Шпион
  * оборачивает сам объект внутри транзакционного прокси, поэтому видит ту транзакцию, в которой запрос идёт на деле.
- * Периоды пусты, данных тест не пишет. Контекст со шпионом после теста закрывается.
+ * Данных тест не пишет и на пустоту дней не опирается. Контекст со шпионом после теста закрывается.
  */
 @AnalyticsModuleTest
 @DirtiesContext
@@ -72,7 +73,7 @@ class ReportsTransactionTest {
         clock.set(salonTimeZone.at(TO, LocalTime.NOON));
         // Заглушки — на самом шпионе: через транзакционный прокси их установка шла бы как вызов вне транзакции.
         PeriodCounts spy = AopTestUtils.getUltimateTargetObject(counts);
-        doAnswer(this::recordTransaction).when(spy).keySums(any(), any());
+        doAnswer(this::recordTransaction).when(spy).keySums(any(), any(), any(), anyInt());
         doAnswer(this::recordTransaction).when(spy).daySums(any(), any(), any());
     }
 
@@ -81,7 +82,7 @@ class ReportsTransactionTest {
         assertThat(TransactionSynchronizationManager.isActualTransactionActive())
                 .isFalse();
 
-        assertThat(reports.summary(FROM, TO, Actor.developer()).visitors()).isZero();
+        assertThat(reports.summary(FROM, TO, Actor.developer())).isNotNull();
         assertThat(reports.daily(FROM, TO, Actor.developer())).hasSize(7);
 
         // Уровень не задан ни в Spring (null — умолчание), ни в базе: там умолчание PostgreSQL.
@@ -93,7 +94,8 @@ class ReportsTransactionTest {
 
     @Test
     void periodCountsNeedReportTransaction() {
-        assertThatThrownBy(() -> counts.keySums(FROM, TO)).isInstanceOf(IllegalTransactionStateException.class);
+        assertThatThrownBy(() -> counts.keySums(FROM, TO, List.of(Metric.PAGE_VIEW), 100))
+                .isInstanceOf(IllegalTransactionStateException.class);
         assertThatThrownBy(() -> counts.daySums(FROM, TO, List.of(Metric.PAGE_VIEW)))
                 .isInstanceOf(IllegalTransactionStateException.class);
     }

@@ -15,10 +15,12 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 class AnalyticsReportsTest extends AnalyticsTestSupport {
 
     private static final Actor DEVELOPER = Actor.developer();
+
+    private static final String FAQ_KEYS = """
+            insert into analytics.daily_count (day, metric, key, count)
+            select :day, 'faq_open', 'k-' || lpad(i::text, 3, '0'), :count
+            from generate_series(:first, :last) i""";
 
     @Autowired
     AnalyticsReports reports;
@@ -167,6 +174,37 @@ class AnalyticsReportsTest extends AnalyticsTestSupport {
     }
 
     /**
+     * У метрики больше 100 ключей за период: сводка отдаёт 100 самых частых, итог — по всем. Самые частые ключи —
+     * последние по алфавиту, и отсечение проходит внутри равных: так видно, что отбор идёт сначала по числу, потом по
+     * ключу. Строки кладутся прямо в счётчики дней теста: приём пускает не больше 50 новых ключей у метрики за день, а
+     * проверяется здесь отбор отчёта, не приём.
+     */
+    @Test
+    void summaryKeepsHundredMostFrequentKeysAndTotalsAll() {
+        var first = take(LocalDate.of(2314, 7, 1));
+        var second = take(first.plusDays(1));
+        at(second, LocalTime.NOON);
+        // k-000…k-119 по разу в первый день; во второй k-060…k-089 ещё по разу, k-090…k-119 ещё по два.
+        faqKeys(first, 0, 119, 1);
+        faqKeys(second, 60, 89, 1);
+        faqKeys(second, 90, 119, 2);
+        ingest.record(map(), IP, BROWSER);
+
+        var expected = new ArrayList<KeyCount>();
+        IntStream.range(90, 120).forEach(i -> expected.add(key("k-%03d".formatted(i), 3)));
+        IntStream.range(60, 90).forEach(i -> expected.add(key("k-%03d".formatted(i), 2)));
+        IntStream.range(0, 40).forEach(i -> expected.add(key("k-%03d".formatted(i), 1)));
+        var metrics = reports.summary(first, second, DEVELOPER).metrics();
+        assertThat(metrics)
+                .filteredOn(metric -> metric.metric() == Metric.FAQ_OPEN)
+                .containsExactly(new MetricTotal(Metric.FAQ_OPEN, 210, expected));
+        // У других метрик свой отбор.
+        assertThat(metrics)
+                .filteredOn(metric -> metric.metric() == Metric.MAP_OPEN)
+                .containsExactly(total(Metric.MAP_OPEN, 1, key("map", 1)));
+    }
+
+    /**
      * Правила {@code ReportPeriod}: не длиннее 366 дней, {@code from} не раньше 2000 года, {@code to} не раньше
      * {@code from} и не дальше «сегодня» плюс 366 дней; пустые границы — ошибка по своему полю.
      */
@@ -227,7 +265,21 @@ class AnalyticsReportsTest extends AnalyticsTestSupport {
             assertThatThrownBy(() -> reports.daily(day, day, stranger)).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(() -> reports.summary(day, day.minusDays(1), stranger))
                     .isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(() -> reports.daily(day, day.minusDays(1), stranger))
+                    .isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(() -> reports.summary(null, day, stranger)).isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(() -> reports.daily(null, day, stranger)).isInstanceOf(AccessDeniedException.class);
         }
+    }
+
+    /** Ключи {@code k-<first>}…{@code k-<last>} метрики {@code faq_open} дня, у каждого — {@code count}. */
+    private void faqKeys(LocalDate day, int first, int last, long count) {
+        jdbc.sql(FAQ_KEYS)
+                .param("day", day)
+                .param("first", first)
+                .param("last", last)
+                .param("count", count)
+                .update();
     }
 
     private static MetricTotal total(Metric metric, long total, KeyCount... keys) {

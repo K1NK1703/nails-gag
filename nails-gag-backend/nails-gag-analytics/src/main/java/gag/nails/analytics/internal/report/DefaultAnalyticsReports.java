@@ -28,9 +28,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Отчёты по дневным счётчикам: каждый отчёт — один запрос ({@link PeriodCounts}), раскладка по метрикам и дням — в
- * памяти. Объём ответа ограничен защитой приёма: у метрики не больше {@code max-keys-per-metric} ключей за день (плюс
- * {@code other}), то есть за год под постоянной атакой — тысячи ключей у метрики, обычно — десятки; ключи сводки
- * отдаются все, без усечения.
+ * памяти.
+ *
+ * <p>Объём. Приём оставляет у метрики около {@code max-keys-per-metric} ключей за день (предел мягкий) плюс
+ * {@code other}. Ключи, которые присылает клиент, — вопросы и источники — под постоянной атакой набираются до
+ * ~18 тыс. у метрики за год, поэтому сводка отдаёт у метрики только {@value #SUMMARY_KEYS_PER_METRIC} самых частых
+ * ключей; итог метрики — по всем. Остальные метрики — словари в десятки ключей.
  *
  * <p>Транзакция только для чтения с уровнем изоляции по умолчанию ({@code READ COMMITTED} в PostgreSQL), а не
  * {@code REPEATABLE READ}, как у отчётов финансов: там отчёт читает несколько запросов, и им нужен общий снимок, а
@@ -42,17 +45,24 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 class DefaultAnalyticsReports implements AnalyticsReports {
 
+    /** Сколько самых частых ключей метрики отдаёт сводка. */
+    static final int SUMMARY_KEYS_PER_METRIC = 100;
+
     /** Метрики сводки — все, кроме посетителей: те отдаются отдельным полем. Порядок — порядок {@link Metric}. */
     private static final List<Metric> SUMMARY_METRICS = Arrays.stream(Metric.values())
             .filter(metric -> metric != Metric.VISITORS)
             .toList();
 
+    /** Метрики запроса сводки: метрики сводки и посетители. */
+    private static final Set<Metric> SUMMARY_QUERY_METRICS = Set.copyOf(EnumSet.allOf(Metric.class));
+
     private static final Set<Metric> DAILY_METRICS =
-            EnumSet.of(Metric.VISITORS, Metric.PAGE_VIEW, Metric.CTA_CLICK, Metric.CONTACT_CLICK);
+            Set.copyOf(EnumSet.of(Metric.VISITORS, Metric.PAGE_VIEW, Metric.CTA_CLICK, Metric.CONTACT_CLICK));
 
     /**
      * Ключи — по убыванию числа, при равенстве — по ключу ({@link String#compareTo}): порядок не зависит от правил
-     * сравнения строк в базе; ключи — ASCII, и это просто порядок байтов.
+     * сравнения строк в базе. Ключи метрик — ASCII, для них это порядок байтов, тот же, по которому запрос отсекает
+     * самые частые ({@code collate "C"}): отсечение и порядок списка согласованы.
      */
     private static final Comparator<KeyCount> KEY_ORDER =
             Comparator.comparingLong(KeyCount::count).reversed().thenComparing(KeyCount::key);
@@ -73,7 +83,7 @@ class DefaultAnalyticsReports implements AnalyticsReports {
         var period = period(from, to);
         var totals = new EnumMap<Metric, Long>(Metric.class);
         var keys = new EnumMap<Metric, List<KeyCount>>(Metric.class);
-        for (var sum : counts.keySums(period.from(), period.to())) {
+        for (var sum : counts.keySums(period.from(), period.to(), SUMMARY_QUERY_METRICS, SUMMARY_KEYS_PER_METRIC)) {
             totals.put(sum.metric(), sum.total());
             keys.computeIfAbsent(sum.metric(), metric -> new ArrayList<>()).add(new KeyCount(sum.key(), sum.count()));
         }
