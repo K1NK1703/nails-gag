@@ -7,6 +7,7 @@ import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.InternalException;
 import gag.nails.common.error.ValidationException;
 import gag.nails.identity.model.ClientInfo;
+import jakarta.persistence.PersistenceException;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -14,6 +15,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -114,6 +116,15 @@ class ProblemTestController {
             case "access-denied" -> throw new AccessDeniedException();
             case "unavailable" -> throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, SECRET);
             case "lock" -> throw new PessimisticLockingFailureException("deadlock detected: " + SECRET);
+            // Так Hibernate отдаёт запрос, отменённый PostgreSQL по пределу времени: общий PersistenceException.
+            case "query-cancelled" ->
+                throw new PersistenceException(
+                        "could not execute query: " + SECRET,
+                        new SQLException("ERROR: canceling statement due to user request " + SECRET, "57014"));
+            case "sql-error" ->
+                throw new PersistenceException(
+                        "could not execute query: " + SECRET,
+                        new SQLException("ERROR: relation does not exist " + SECRET, "42P01"));
             default -> throw new InternalException(SECRET);
         }
     }

@@ -63,8 +63,9 @@ import tools.jackson.databind.exc.UnrecognizedPropertyException;
  * видит точный код и параметры.
  *
  * <p>Логи: ошибки модулей и формы запроса — WARN без стека и без значений {@code params} (в них бывают телефоны),
- * только код и имена параметров (у ошибки проверки модуля — имя поля); недоступность БД из-за блокировки — WARN с
- * классом исключения и SQLState, без сообщения драйвера; непредусмотренное — ERROR со стеком.
+ * только код и имена параметров (у ошибки проверки модуля — имя поля); недоступность БД из-за блокировки или отмены
+ * запроса по времени — WARN с классом исключения и SQLState, без сообщения драйвера; непредусмотренное — ERROR со
+ * стеком.
  * Отказы самого Spring MVC (нет адреса, не тот метод) и оборванные клиентом соединения — DEBUG: в WARN они бы
  * заглушили полезное.
  */
@@ -91,6 +92,9 @@ class ProblemHandler {
 
     /** Через сколько секунд повторить запрос, упавший на блокировке в БД или на занятой обработке картинок. */
     static final String BUSY_RETRY_AFTER_SECONDS = "1";
+
+    /** SQLState PostgreSQL {@code query_canceled}: запрос отменён, в том числе по пределу времени. */
+    static final String QUERY_CANCELED = "57014";
 
     private final ProblemWriter writer;
     private final ObjectProvider<MultipartConfigElement> multipart;
@@ -291,12 +295,20 @@ class ProblemHandler {
      */
     @ExceptionHandler(PessimisticLockingFailureException.class)
     ResponseEntity<Problem> busy(PessimisticLockingFailureException exception, HttpServletRequest request) {
-        // Сообщение драйвера не пишется: в нём бывает текст запроса и значения строк. Класс и SQLState достаточно.
+        return busy(exception, request, "database lock failure");
+    }
+
+    /**
+     * {@code 503 common.busy} с {@code Retry-After}. Сообщение драйвера не пишется: в нём бывает текст запроса и
+     * значения строк. Класс и SQLState достаточно.
+     */
+    private ResponseEntity<Problem> busy(Exception exception, HttpServletRequest request, String reason) {
         var cause = NestedExceptionUtils.getMostSpecificCause(exception);
         log.warn(
-                "{} {} -> 503 database lock failure: {}{}",
+                "{} {} -> 503 {}: {}{}",
                 request.getMethod(),
                 request.getRequestURI(),
+                reason,
                 exception.getClass().getSimpleName(),
                 cause instanceof SQLException sql ? " SQLState " + sql.getSQLState() : "");
         var headers = new HttpHeaders();
@@ -308,6 +320,12 @@ class ProblemHandler {
      * Прочие исключения Spring MVC со статусом ({@code 404}, {@code 405}, {@code 415}, {@code 503}…) — их статус и
      * код слоя по нему; всё непредусмотренное — {@code 500}. Клиент оборвал соединение — отвечать некому: только
      * DEBUG, ответ считается обработанным.
+     *
+     * <p>Запрос, отменённый PostgreSQL по пределу времени (SQLState {@value #QUERY_CANCELED}: {@code statement_timeout}
+     * или предел времени запроса, как у отчётов счётчика посещений), — {@code 503 common.busy} с {@code Retry-After},
+     * как блокировка: база перегружена, повтор позже может пройти. Признак — только SQLState корневой причины:
+     * Hibernate отдаёт такую отмену общим {@code PersistenceException}, а не {@code QueryTimeoutException} Spring,
+     * поэтому отдельного типа исключения для неё нет.
      */
     @ExceptionHandler(Exception.class)
     @Nullable
@@ -319,6 +337,10 @@ class ProblemHandler {
                     request.getRequestURI(),
                     exception.toString());
             return null;
+        }
+        if (NestedExceptionUtils.getMostSpecificCause(exception) instanceof SQLException sql
+                && QUERY_CANCELED.equals(sql.getSQLState())) {
+            return busy(exception, request, "query cancelled");
         }
         if (exception instanceof ErrorResponse response) {
             HttpStatusCode status = response.getStatusCode();

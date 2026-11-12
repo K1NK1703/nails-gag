@@ -1,6 +1,7 @@
 package gag.nails.api.internal.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import gag.nails.analytics.AnalyticsReports;
 import gag.nails.analytics.model.AnalyticsSummary;
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,7 +26,10 @@ import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -155,6 +160,54 @@ class AnalyticsApiTest extends ApiTestSupport {
         assertThat(pageViews()).isEqualTo(before + 1);
     }
 
+    /**
+     * Другие написания адреса приёма ({@code //}, {@code .}, {@code ..} в пути) не доходят до приёма: фильтры видят
+     * путь, нормализованный Tomcat-ом, а Spring сопоставляет адрес по исходному — такие запросы получают {@code 404} и
+     * ничего не считают. Если правила сопоставления Spring сменятся, исключение CSRF не откроется для другого
+     * обработчика незаметно: этот тест покраснеет.
+     */
+    @Test
+    void otherSpellingsOfEventsAddressAreNotFound() throws IOException {
+        var before = summary();
+        var body = PAGE_VIEW.getBytes(StandardCharsets.UTF_8);
+
+        for (var path : List.of(
+                "//api/analytics/events",
+                "/api//analytics/events",
+                "/api/analytics/./events",
+                "/api/x/../analytics/events")) {
+            var response = raw(head(path, nextIp(), "Content-Length: " + body.length), body);
+
+            assertThat(response.status()).as(path).startsWith("HTTP/1.1 404");
+        }
+
+        assertThat(summary()).isEqualTo(before);
+    }
+
+    /**
+     * Отказ CSRF на публичном адресе приёма — обычный шум ботов: в лог не идёт WARN (только DEBUG, по умолчанию
+     * выключенный). На остальных адресах отказ — по-прежнему WARN.
+     */
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void rejectedEventIsNotWarned(CapturedOutput output) {
+        for (var uri : List.of(EVENTS, "/api/test/echo")) {
+            expectCsrf(client.post()
+                    .uri(uri)
+                    .header(HttpHeaders.ORIGIN, "https://evil.example")
+                    .header("X-Requested-With", REQUESTED_WITH)
+                    .header("X-Forwarded-For", nextIp())
+                    .header(HttpHeaders.USER_AGENT, userAgent)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(PAGE_VIEW));
+        }
+
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() ->
+                        assertThat(output.getAll()).containsPattern("WARN.*POST /api/test/echo -> 403 common\\.csrf"));
+        assertThat(output.getAll()).doesNotContain("POST " + EVENTS + " -> 403 common.csrf");
+    }
+
     /** Без {@code X-Requested-With} проходит только сам адрес приёма и только {@code POST}. */
     @Test
     void requestedWithIsWaivedOnlyForEvents() {
@@ -251,23 +304,29 @@ class AnalyticsApiTest extends ApiTestSupport {
     }
 
     /**
-     * Заявленный {@code Content-Length} больше 1 КБ — ответ сразу, не дожидаясь тела: здесь клиент отправил лишь часть
-     * и ждёт, сокет с таймаутом в 5 секунд не дождался бы ответа, если бы сервер читал тело целиком.
+     * Заявленный {@code Content-Length} больше 1 КБ — ответ сразу, тело не читается вовсе. Клиент отправил всего
+     * 10 байт и ждёт: если бы сервер начал читать тело (хотя бы до предела в 1 КБ и байт), он ждал бы недостающих байт
+     * до таймаута соединения, и сокет с таймаутом в 5 секунд не дождался бы ответа.
      */
     @Test
-    void declaredLargeBodyIsNotAwaited() throws IOException {
+    void declaredLargeBodyIsNotRead() throws IOException {
         var before = pageViews();
 
         var response = raw(
                 head(nextIp(), "Content-Length: 5000000"),
-                padded(PAGE_VIEW, 2 * MAX_BODY_BYTES).getBytes(StandardCharsets.UTF_8));
+                PAGE_VIEW.substring(0, 10).getBytes(StandardCharsets.UTF_8));
 
         assertThat(response.status()).startsWith("HTTP/1.1 204");
         assertThat(response.headers()).anyMatch(header -> header.equalsIgnoreCase("Connection: close"));
         assertThat(pageViews()).isEqualTo(before);
     }
 
-    /** Не JSON, не тот JSON, неизвестное событие, неверное значение поля — {@code 204}, счётчики не меняются. */
+    /**
+     * Не JSON, не тот JSON, неизвестное событие, неверное значение поля, значение не того вида JSON (без приведений
+     * {@code "7"} → {@code 7}, {@code 7.9} → {@code 7}, {@code 1} → {@code true}), повтор поля — {@code 204},
+     * счётчики не меняются. Без строгого разбора просмотры с {@code path} числом и {@code entry} строкой или числом
+     * засчитались бы.
+     */
     @Test
     void malformedBodiesAreIgnoredSilently() {
         var before = summary();
@@ -284,7 +343,18 @@ class AnalyticsApiTest extends ApiTestSupport {
                 "{\"name\":\"gallery_open\",\"index\":\"first\"}",
                 "{\"name\":\"gallery_open\",\"index\":100}",
                 "{\"name\":\"page_view\",\"path\":{\"nested\":true}}",
-                "{\"name\":\"page_view\",\"place\":\"hero\",\"path\":\"/\"}")) {
+                "{\"name\":\"page_view\",\"place\":\"hero\",\"path\":\"/\"}",
+                "{\"name\":\"gallery_open\",\"index\":\"7\"}",
+                "{\"name\":\"gallery_open\",\"index\":7.9}",
+                "{\"name\":\"gallery_open\",\"index\":7.0}",
+                "{\"name\":\"gallery_open\",\"index\":\"\"}",
+                "{\"name\":\"gallery_open\",\"index\":true}",
+                "{\"name\":\"page_view\",\"path\":123}",
+                "{\"name\":\"page_view\",\"path\":true}",
+                "{\"name\":\"page_view\",\"path\":\"/\",\"entry\":\"true\"}",
+                "{\"name\":\"page_view\",\"path\":\"/\",\"entry\":1}",
+                "{\"name\":\"page_view\",\"path\":\"/\",\"path\":\"/booking\"}",
+                "{\"name\":\"page_view\",\"name\":\"page_view\",\"path\":\"/\"}")) {
             beacon(nextIp())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
@@ -558,7 +628,12 @@ class AnalyticsApiTest extends ApiTestSupport {
 
     /** Начало запроса приёма для отправки по сокету как есть: заголовки сайта и {@code extra}, пустая строка. */
     private String head(String ip, String extra) {
-        return "POST " + EVENTS + " HTTP/1.1\r\n"
+        return head(EVENTS, ip, extra);
+    }
+
+    /** То же для произвольного пути запроса — как он записан в строке запроса, без нормализации клиентом. */
+    private String head(String path, String ip, String extra) {
+        return "POST " + path + " HTTP/1.1\r\n"
                 + "Host: localhost:" + port + "\r\n"
                 + "Origin: " + SITE + "\r\n"
                 + "X-Forwarded-For: " + ip + "\r\n"

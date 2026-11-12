@@ -26,7 +26,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * шлёт {@code navigator.sendBeacon}, который не умеет ставить свои заголовки, поэтому первого барьера у этого адреса
  * нет, а второй остаётся — чужой сайт не накрутит счётчики из браузеров посетителей. Сессию адрес не использует и
  * ничего, кроме счётчиков, не меняет. Исключение — только сам адрес и только {@code POST}
- * ({@link RateLimitFilter#isAnalyticsEvent}).
+ * ({@link RateLimitFilter#isAnalyticsEvent}). Отказ на этом адресе пишется в лог на уровне DEBUG, на остальных — WARN.
  */
 class CsrfFilter extends OncePerRequestFilter {
 
@@ -55,9 +55,15 @@ class CsrfFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        var violation = violation(request);
+        var analyticsEvent = RateLimitFilter.isAnalyticsEvent(request);
+        var violation = violation(request, analyticsEvent);
         if (violation != null) {
-            log.warn("{} {} -> 403 {}: {}", request.getMethod(), request.getRequestURI(), CODE, violation);
+            // Приём событий — публичный адрес: чужие отправки на него — обычный шум ботов, не повод для WARN.
+            if (analyticsEvent) {
+                log.debug("{} {} -> 403 {}: {}", request.getMethod(), request.getRequestURI(), CODE, violation);
+            } else {
+                log.warn("{} {} -> 403 {}: {}", request.getMethod(), request.getRequestURI(), CODE, violation);
+            }
             problems.write(request, response, HttpStatus.FORBIDDEN, CODE);
             return;
         }
@@ -65,9 +71,8 @@ class CsrfFilter extends OncePerRequestFilter {
     }
 
     /** Что не так с запросом, или {@code null}, если он с сайта. Значения заголовков в причину не попадают. */
-    private @Nullable String violation(HttpServletRequest request) {
-        if (!RateLimitFilter.isAnalyticsEvent(request)
-                && !REQUESTED_WITH.equals(request.getHeader(REQUESTED_WITH_HEADER))) {
+    private @Nullable String violation(HttpServletRequest request, boolean analyticsEvent) {
+        if (!analyticsEvent && !REQUESTED_WITH.equals(request.getHeader(REQUESTED_WITH_HEADER))) {
             return "no " + REQUESTED_WITH_HEADER;
         }
         var fetchSite = request.getHeader(FETCH_SITE_HEADER);
