@@ -31,7 +31,9 @@ final class RateLimits {
     /** Период корзины загрузок фото. */
     static final Duration UPLOAD_PERIOD = Duration.ofHours(1);
 
-    /** Потолок ключей корзин по IP (вход, анонимы, картинки): с запасом больше живых клиентов салона за минуту. */
+    /**
+     * Потолок ключей корзин по IP (вход, анонимы, картинки, счётчик): с запасом больше живых клиентов салона за минуту.
+     */
     static final long IP_KEYS = 100_000;
 
     /** Потолок ключей корзин по аккаунту: аккаунтов заведомо меньше, чем адресов. */
@@ -51,7 +53,9 @@ final class RateLimits {
         /** Загрузки фото ({@code POST /api/files}) — по аккаунту, вдобавок к {@link #ACCOUNT}. */
         UPLOAD,
         /** Картинки портфолио ({@code /api/portfolio/images/**}) — по IP, вместо остальных корзин. */
-        IMAGE;
+        IMAGE,
+        /** События счётчика посещений ({@code POST /api/analytics/events}) — по IP, вместо остальных корзин. */
+        ANALYTICS;
 
         /** За сколько корзина пополняется целиком; столько же ключ живёт без обращений. */
         Duration period() {
@@ -135,6 +139,7 @@ final class RateLimits {
             case ACCOUNT -> limits.authenticatedPerMinute();
             case UPLOAD -> limits.uploadsPerHour();
             case IMAGE -> limits.imagesPerMinute();
+            case ANALYTICS -> limits.analyticsPerMinute();
         };
     }
 

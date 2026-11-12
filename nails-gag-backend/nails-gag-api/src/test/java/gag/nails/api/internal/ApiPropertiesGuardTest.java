@@ -63,6 +63,20 @@ class ApiPropertiesGuardTest {
     }
 
     @Test
+    void rejectsNonPositiveAnalyticsLimit() {
+        assertStopsTheApplication("nails-gag.api.rate-limits.analytics-per-minute=0");
+        assertStopsTheApplication("nails-gag.api.rate-limits.analytics-per-minute=-1");
+    }
+
+    /** Спецификация счётчика, §4: 120 событий в минуту с одного IP, если в настройках не задано иное. */
+    @Test
+    void analyticsLimitDefaultsTo120() {
+        runner.run(context -> assertThat(
+                        context.getBean(ApiProperties.class).rateLimits().analyticsPerMinute())
+                .isEqualTo(120));
+    }
+
+    @Test
     void rejectsUnsafeRedirectPaths() {
         // Путь склеивается с site-origin: «//evil.example» или «/\evil.example» браузер понял бы как другой сайт.
         List.of("signed-in", "registration", "link-confirm", "linked", "failure")

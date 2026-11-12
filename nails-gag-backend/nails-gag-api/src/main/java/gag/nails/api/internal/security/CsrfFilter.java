@@ -21,6 +21,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * {@code Origin} равен {@code site-origin}, а если {@code Origin} нет — {@code Referer} начинается с
  * {@code site-origin + "/"}; нет ни того ни другого — отказ. {@code Sec-Fetch-Site}, если прислан, должен быть
  * {@code same-origin}. Отказ — {@code 403 common.csrf}.
+ *
+ * <p>Исключение — приём событий счётчика посещений ({@code POST /api/analytics/events}, спецификация счётчика, §4): их
+ * шлёт {@code navigator.sendBeacon}, который не умеет ставить свои заголовки, поэтому первого барьера у этого адреса
+ * нет, а второй остаётся — чужой сайт не накрутит счётчики из браузеров посетителей. Сессию адрес не использует и
+ * ничего, кроме счётчиков, не меняет. Исключение — только сам адрес и только {@code POST}
+ * ({@link RateLimitFilter#isAnalyticsEvent}).
  */
 class CsrfFilter extends OncePerRequestFilter {
 
@@ -60,7 +66,8 @@ class CsrfFilter extends OncePerRequestFilter {
 
     /** Что не так с запросом, или {@code null}, если он с сайта. Значения заголовков в причину не попадают. */
     private @Nullable String violation(HttpServletRequest request) {
-        if (!REQUESTED_WITH.equals(request.getHeader(REQUESTED_WITH_HEADER))) {
+        if (!RateLimitFilter.isAnalyticsEvent(request)
+                && !REQUESTED_WITH.equals(request.getHeader(REQUESTED_WITH_HEADER))) {
             return "no " + REQUESTED_WITH_HEADER;
         }
         var fetchSite = request.getHeader(FETCH_SITE_HEADER);
