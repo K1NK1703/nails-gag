@@ -56,7 +56,10 @@ describe('routes', () => {
 
   it('tracks page_view with the current path', () => {
     renderAt('/privacy')
-    expect(track).toHaveBeenCalledWith({ name: 'page_view', path: '/privacy' })
+    // Первый просмотр за загрузку ещё и с entry/referrer (см. usePageViews.test.tsx).
+    expect(track).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'page_view', path: '/privacy' }),
+    )
   })
 
   it('renders 404 for cabinet when flag is "false"', () => {
