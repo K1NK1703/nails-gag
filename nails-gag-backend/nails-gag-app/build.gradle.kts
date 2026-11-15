@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":nails-gag-booking"))
     implementation(project(":nails-gag-portfolio"))
     implementation(project(":nails-gag-finance"))
+    implementation(project(":nails-gag-analytics"))
     implementation(project(":nails-gag-identity"))
     implementation(project(":nails-gag-api"))
 

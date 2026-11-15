@@ -1,10 +1,9 @@
-import { useEffect } from 'react'
-import { Route, Routes, useLocation } from 'react-router'
+import { Route, Routes } from 'react-router'
 import { Cursor } from './components/Cursor/Cursor'
 import { Footer } from './components/Footer/Footer'
 import { Header } from './components/Header/Header'
-import { track } from './lib/analytics'
 import { isCabinetEnabled } from './lib/features'
+import { usePageViews } from './lib/usePageViews'
 import { useScrollToTop } from './lib/useScrollToTop'
 import { Booking } from './pages/Booking'
 import { Cabinet } from './pages/Cabinet'
@@ -14,13 +13,8 @@ import { Privacy } from './pages/Privacy'
 import { Terms } from './pages/Terms'
 
 export function AppRoutes() {
-  const { pathname } = useLocation()
-
   useScrollToTop()
-
-  useEffect(() => {
-    track({ name: 'page_view', path: pathname })
-  }, [pathname])
+  usePageViews()
 
   return (
     <>

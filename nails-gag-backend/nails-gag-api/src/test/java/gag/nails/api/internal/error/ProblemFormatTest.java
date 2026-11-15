@@ -311,6 +311,34 @@ class ProblemFormatTest extends ApiTestSupport {
         assertThat(body).contains("\"code\":\"common.busy\"").doesNotContain(ProblemTestController.SECRET);
     }
 
+    /**
+     * Запрос, отменённый PostgreSQL по пределу времени (SQLState {@code 57014}), — как блокировка:
+     * {@code 503 common.busy}, без подробностей, с {@code Retry-After: 10}: запрос уже шёл до предела времени, и повтор
+     * через секунду упёрся бы в него снова. Так отвечают отчёты счётчика посещений, когда их запрос упёрся в предел.
+     */
+    @Test
+    void cancelledQueryIsBusyWithRetryAfter() {
+        var body = client.get()
+                .uri("/api/test/throw/query-cancelled")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+                .expectHeader()
+                .valueEquals("Retry-After", "10")
+                .expectBody(String.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertThat(body).contains("\"code\":\"common.busy\"").doesNotContain(ProblemTestController.SECRET);
+    }
+
+    /** Другая ошибка SQL — по-прежнему {@code 500 common.internal}: занятой считается только отмена запроса. */
+    @Test
+    void otherSqlErrorIsInternal() {
+        expectProblem(
+                client.get().uri("/api/test/throw/sql-error"), HttpStatus.INTERNAL_SERVER_ERROR, "common.internal");
+    }
+
     @Test
     void problemContentType() {
         client.get()

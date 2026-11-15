@@ -1012,6 +1012,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/analytics/events': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['analyticsEvents_record']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/access/roles': {
     parameters: {
       query?: never
@@ -1580,6 +1596,38 @@ export interface paths {
       cookie?: never
     }
     get: operations['auth_callback']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/analytics/summary': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['analyticsReports_summary']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/analytics/daily': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['analyticsReports_daily']
     put?: never
     post?: never
     delete?: never
@@ -2621,6 +2669,48 @@ export interface components {
       phone: string | null
       phoneVerified: boolean
     }
+    AnalyticsSummary: {
+      /** Format: date */
+      from: string
+      /** Format: date */
+      to: string
+      /** Format: int64 */
+      visitors: number
+      metrics: components['schemas']['MetricTotal'][]
+    }
+    KeyCount: {
+      key: string
+      /** Format: int64 */
+      count: number
+    }
+    MetricTotal: {
+      /** @enum {string} */
+      metric:
+        | 'PAGE_VIEW'
+        | 'CTA_CLICK'
+        | 'CONTACT_CLICK'
+        | 'GALLERY_OPEN'
+        | 'FAQ_OPEN'
+        | 'MAP_OPEN'
+        | 'SOURCE'
+        | 'DEVICE'
+        | 'VISITORS'
+      /** Format: int64 */
+      total: number
+      keys: components['schemas']['KeyCount'][]
+    }
+    DayTotals: {
+      /** Format: date */
+      day: string
+      /** Format: int64 */
+      visitors: number
+      /** Format: int64 */
+      pageViews: number
+      /** Format: int64 */
+      ctaClicks: number
+      /** Format: int64 */
+      contactClicks: number
+    }
     LoginEventView: {
       /** Format: uuid */
       id: string
@@ -2674,6 +2764,7 @@ export interface components {
         | 'PORTFOLIO'
         | 'DOCUMENTS'
         | 'ACCESS'
+        | 'ANALYTICS'
         | null
       /** @enum {string|null} */
       oldLevel: 'NONE' | 'READ' | 'WRITE' | null
@@ -3288,6 +3379,7 @@ export interface operations {
           | 'portfolio'
           | 'documents'
           | 'access'
+          | 'analytics'
       }
       cookie?: never
     }
@@ -3333,6 +3425,7 @@ export interface operations {
           | 'portfolio'
           | 'documents'
           | 'access'
+          | 'analytics'
       }
       cookie?: never
     }
@@ -5363,6 +5456,33 @@ export interface operations {
       }
     }
   }
+  analyticsEvents_record: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   roles_roles: {
     parameters: {
       query?: never
@@ -6864,6 +6984,70 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  analyticsReports_summary: {
+    parameters: {
+      query: {
+        from: string
+        to: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AnalyticsSummary']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  analyticsReports_daily: {
+    parameters: {
+      query: {
+        from: string
+        to: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DayTotals'][]
+        }
       }
       /** @description Problem (RFC 9457) */
       default: {

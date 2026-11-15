@@ -33,6 +33,9 @@ public record ApiProperties(
     /** Картинок портфолио в минуту по умолчанию: единственное место значения. */
     public static final String DEFAULT_IMAGES_PER_MINUTE = "600";
 
+    /** Событий счётчика посещений в минуту по умолчанию (спецификация счётчика, §4): единственное место значения. */
+    public static final String DEFAULT_ANALYTICS_PER_MINUTE = "120";
+
     /** Длина ключа {@code login-state-key} в байтах: AES-256. */
     public static final int LOGIN_STATE_KEY_BYTES = 32;
 
@@ -73,21 +76,25 @@ public record ApiProperties(
      *     {@code authenticatedPerMinute}: обработка картинки дорога, а места на диске конечны
      * @param imagesPerMinute картинки портфолио ({@code /api/portfolio/images/**}) с одного IP — своя корзина вместо
      *     общей: лендинг запрашивает их десятками
+     * @param analyticsPerMinute события счётчика посещений ({@code POST /api/analytics/events}) с одного IP — своя
+     *     корзина вместо остальных: просмотры сайта не расходуют корзину анонима или аккаунта
      */
     public record RateLimits(
             @DefaultValue("10") int authPerMinute,
             @DefaultValue("60") int anonymousPerMinute,
             @DefaultValue("600") int authenticatedPerMinute,
             @DefaultValue(DEFAULT_UPLOADS_PER_HOUR) int uploadsPerHour,
-            @DefaultValue(DEFAULT_IMAGES_PER_MINUTE) int imagesPerMinute) {
+            @DefaultValue(DEFAULT_IMAGES_PER_MINUTE) int imagesPerMinute,
+            @DefaultValue(DEFAULT_ANALYTICS_PER_MINUTE) int analyticsPerMinute) {
 
         /** Привязка настроек — только через этот конструктор. */
         @ConstructorBinding
         public RateLimits {}
 
         /**
-         * Лимиты в минуту, загрузки ({@value ApiProperties#DEFAULT_UPLOADS_PER_HOUR} в час) и картинки
-         * ({@value ApiProperties#DEFAULT_IMAGES_PER_MINUTE} в минуту) — по умолчанию.
+         * Лимиты в минуту, загрузки ({@value ApiProperties#DEFAULT_UPLOADS_PER_HOUR} в час), картинки
+         * ({@value ApiProperties#DEFAULT_IMAGES_PER_MINUTE} в минуту) и события счётчика
+         * ({@value ApiProperties#DEFAULT_ANALYTICS_PER_MINUTE} в минуту) — по умолчанию.
          */
         public RateLimits(int authPerMinute, int anonymousPerMinute, int authenticatedPerMinute) {
             this(
@@ -95,7 +102,8 @@ public record ApiProperties(
                     anonymousPerMinute,
                     authenticatedPerMinute,
                     Integer.parseInt(DEFAULT_UPLOADS_PER_HOUR),
-                    Integer.parseInt(DEFAULT_IMAGES_PER_MINUTE));
+                    Integer.parseInt(DEFAULT_IMAGES_PER_MINUTE),
+                    Integer.parseInt(DEFAULT_ANALYTICS_PER_MINUTE));
         }
     }
 

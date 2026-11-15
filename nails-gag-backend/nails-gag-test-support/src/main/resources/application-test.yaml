@@ -30,6 +30,12 @@ nails-gag:
     jobs:
       # Записи повторяющихся шаблонов в тестах не создаются по расписанию: тесты вызывают FinanceMaintenance сами.
       enabled: false
+  analytics:
+    # Как в application.yaml приложения: тесты источника переходов сверяются с этим доменом.
+    site-host: nails-gag.ru
+    jobs:
+      # Уборка солей и отпечатков в тестах не запускается сама: тесты вызывают AnalyticsMaintenance сами.
+      enabled: false
   identity:
     jobs:
       # Обслуживание входа в тестах не работает: тесты вызывают IdentityMaintenance сами.

@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @param displayName имя из последнего использованного способа входа
  * @param overrides личные переопределения, включая явный {@link AccessLevel#NONE}
- * @param effective итог по всем девяти разделам: переопределение, иначе максимум по ролям, иначе
+ * @param effective итог по всем разделам: переопределение, иначе максимум по ролям, иначе
  *     {@link AccessLevel#NONE}
  * @param blocked карточка клиента заблокирована
  */

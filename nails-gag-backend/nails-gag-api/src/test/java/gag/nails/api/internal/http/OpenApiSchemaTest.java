@@ -388,6 +388,36 @@ class OpenApiSchemaTest extends ApiTestSupport {
     }
 
     /**
+     * Приём событий счётчика читает тело сам и при любом теле отвечает {@code 204}: в схеме у него нет тела запроса и
+     * ответа. Метрики отчётов в JSON — имена Java (спецификация счётчика, §4).
+     */
+    @Test
+    void analyticsInSchema() {
+        var schema = openApi();
+
+        var events = schema.path("paths").path("/api/analytics/events").path("post");
+        assertThat(events.path("requestBody").isMissingNode()).isTrue();
+        assertThat(events.path("parameters").isEmpty()).isTrue();
+        assertThat(events.path("responses").propertyNames()).containsExactlyInAnyOrder("204", "default");
+        var schemas = schema.path("components").path("schemas");
+        assertThat(jsonEnum(schemas.path("MetricTotal").path("properties").path("metric")))
+                .containsExactly(
+                        "PAGE_VIEW",
+                        "CTA_CLICK",
+                        "CONTACT_CLICK",
+                        "GALLERY_OPEN",
+                        "FAQ_OPEN",
+                        "MAP_OPEN",
+                        "SOURCE",
+                        "DEVICE",
+                        "VISITORS");
+        assertThat(required(schemas.path("AnalyticsSummary")))
+                .containsExactlyInAnyOrder("from", "to", "visitors", "metrics");
+        assertThat(required(schemas.path("DayTotals")))
+                .containsExactlyInAnyOrder("day", "visitors", "pageViews", "ctaClicks", "contactClicks");
+    }
+
+    /**
      * Адреса {@code /api/**} контроллеров приложения: «метод адрес» в виде ключа схемы → метод контроллера. Тестовые
      * адреса ({@code /api/test/**}) и {@code /error} в счёт не идут, адреса springdoc ({@code /api/openapi.json}) —
      * тоже: их контроллеры не из приложения.

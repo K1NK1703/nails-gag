@@ -15,5 +15,11 @@ public final class ApiPaths {
     /** Картинки портфолио (спецификация файлов и портфолио, §6.2): своя корзина лимита частоты по IP. */
     public static final String PORTFOLIO_IMAGES = "/api/portfolio/images";
 
+    /**
+     * Приём событий счётчика посещений (спецификация счётчика, §4): у {@code POST} своя корзина лимита частоты по IP и
+     * защита от CSRF только по источнику, без служебного заголовка.
+     */
+    public static final String ANALYTICS_EVENTS = "/api/analytics/events";
+
     private ApiPaths() {}
 }

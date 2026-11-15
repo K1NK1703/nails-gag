@@ -16,7 +16,7 @@ class ActorTest {
     private static final UUID CLIENT_ID = UUID.fromString("019a0000-0000-7000-8000-000000000001");
 
     @Test
-    void masterWritesEverythingExceptDocumentsAndAccess() {
+    void masterWritesEverythingExceptDocumentsAccessAndAnalytics() {
         var master = Actor.master();
 
         for (var section : new Section[] {
@@ -32,16 +32,28 @@ class ActorTest {
         }
         assertThat(master.level(Section.DOCUMENTS)).isEqualTo(AccessLevel.READ);
         assertThat(master.level(Section.ACCESS)).isEqualTo(AccessLevel.NONE);
+        assertThat(master.level(Section.ANALYTICS)).isEqualTo(AccessLevel.NONE);
     }
 
     @Test
-    void developerWritesEverythingExceptFinance() {
+    void developerWritesEverythingExceptFinanceAndAnalytics() {
         var developer = Actor.developer();
 
         for (var section : Section.values()) {
-            var expected = section == Section.FINANCE ? AccessLevel.READ : AccessLevel.WRITE;
+            var readOnly = section == Section.FINANCE || section == Section.ANALYTICS;
+            var expected = readOnly ? AccessLevel.READ : AccessLevel.WRITE;
             assertThat(developer.level(section)).as(section.name()).isEqualTo(expected);
         }
+    }
+
+    @Test
+    void analyticsIsReadByDeveloperAndHiddenFromMaster() {
+        assertThat(Actor.developer().level(Section.ANALYTICS)).isEqualTo(AccessLevel.READ);
+        assertThat(Actor.developerAccess()).containsEntry(Section.ANALYTICS, AccessLevel.READ);
+
+        assertThat(Actor.master().level(Section.ANALYTICS)).isEqualTo(AccessLevel.NONE);
+        assertThat(Actor.master().canRead(Section.ANALYTICS)).isFalse();
+        assertThat(Actor.masterAccess()).doesNotContainKey(Section.ANALYTICS);
     }
 
     @Test

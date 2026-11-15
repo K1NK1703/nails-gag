@@ -23,7 +23,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * заблокирована), жетон загрузок возвращает — повтор, о котором просит {@code Retry-After}, не упирается в корзину.
  * Чтение картинок портфолио ({@code GET}/{@code HEAD /api/portfolio/images/**}) — в своей корзине по IP, и у
  * вошедшего тоже: лендинг запрашивает их десятками, общая анонимная корзина на них не тратится; другие методы на этих
- * адресах — в обычных корзинах. IP — уже разобранный Tomcat-ом адрес клиента, IPv6 — с точностью до сети /64.
+ * адресах — в обычных корзинах. Приём событий счётчика посещений ({@code POST /api/analytics/events}) — так же, в своей
+ * корзине по IP вместо остальных: события летят с каждой страницы сайта и не расходуют ни корзину анонима (вход,
+ * запись), ни корзину аккаунта. IP — уже разобранный Tomcat-ом адрес клиента, IPv6 — с точностью до сети /64.
  * Превышение — {@code 429 common.rate_limited} с {@code Retry-After} в целых секундах до пополнения, округлённых
  * вверх. В лог — только вид корзины: ни IP, ни аккаунта.
  */
@@ -35,6 +37,7 @@ class RateLimitFilter extends OncePerRequestFilter {
     static final String AUTH_PATH = ApiPaths.AUTH;
     static final String FILES_PATH = ApiPaths.FILES;
     static final String IMAGES_PATH = ApiPaths.PORTFOLIO_IMAGES;
+    static final String ANALYTICS_EVENTS_PATH = ApiPaths.ANALYTICS_EVENTS;
 
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
 
@@ -57,6 +60,9 @@ class RateLimitFilter extends OncePerRequestFilter {
             id = ip(request);
         } else if (isImageRead(request)) {
             kind = RateLimits.Kind.IMAGE;
+            id = ip(request);
+        } else if (isAnalyticsEvent(request)) {
+            kind = RateLimits.Kind.ANALYTICS;
             id = ip(request);
         } else if (authenticated.isPresent()) {
             kind = RateLimits.Kind.ACCOUNT;
@@ -111,6 +117,14 @@ class RateLimitFilter extends OncePerRequestFilter {
     /** {@code POST /api/files} — в нормализованном пути, как и вход; по нему же работает {@link UploadGuardFilter}. */
     static boolean isUpload(HttpServletRequest request) {
         return "POST".equals(request.getMethod()) && path(request).equals(FILES_PATH);
+    }
+
+    /**
+     * {@code POST /api/analytics/events} — в нормализованном пути, как и вход; по нему же {@link CsrfFilter} не ждёт
+     * служебного заголовка. Только сам адрес: {@code /api/analytics/events/x} и другие методы — обычные запросы.
+     */
+    static boolean isAnalyticsEvent(HttpServletRequest request) {
+        return "POST".equals(request.getMethod()) && path(request).equals(ANALYTICS_EVENTS_PATH);
     }
 
     private static String path(HttpServletRequest request) {

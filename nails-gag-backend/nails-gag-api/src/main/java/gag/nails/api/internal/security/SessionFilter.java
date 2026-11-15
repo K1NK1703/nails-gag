@@ -22,6 +22,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * анонимным: нужна ли сессия, решает контроллер сигнатурой ({@link CurrentActorResolver}). Токен не логируется. У
  * вошедшего запрос до конца цепочки размечен аккаунтом ({@link RequestTelemetry#tagAccount}): {@code accountId} в
  * MDC и атрибут span-а запроса.
+ *
+ * <p>Исключение — приём событий счётчика посещений ({@code POST /api/analytics/events},
+ * {@link RateLimitFilter#isAnalyticsEvent}): {@code sendBeacon} шлёт cookie сайта, но здесь она не читается совсем —
+ * ни проверки сессии (и продления её срока), ни снятия негодной cookie, ни разметки аккаунтом. Запрос идёт анонимным:
+ * политика конфиденциальности обещает события «без cookie и без связи с личностью», и строка журнала запроса, трасса
+ * и SQL приёма не должны указывать на аккаунт. Корзина лимита и защита от CSRF у этого адреса от сессии не зависят.
  */
 class SessionFilter extends OncePerRequestFilter {
 
@@ -53,7 +59,9 @@ class SessionFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         MDC.@Nullable MDCCloseable tagged = null;
-        if (cookie.sent(request)) {
+        // Приём событий счётчика cookie не читает вовсе: событие не должно связываться с аккаунтом ни в логе, ни в
+        // трассе, а сессия — продлеваться или сниматься от фоновых отправок sendBeacon.
+        if (!RateLimitFilter.isAnalyticsEvent(request) && cookie.sent(request)) {
             var authenticated = authenticate(request);
             if (authenticated.isPresent()) {
                 var accountId = authenticated.get().account().id();
