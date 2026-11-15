@@ -55,6 +55,7 @@ describe('routes', () => {
   })
 
   it('tracks page_view with the current path', () => {
+    vi.mocked(track).mockClear()
     renderAt('/privacy')
     // Первый просмотр за загрузку ещё и с entry/referrer (см. usePageViews.test.tsx).
     expect(track).toHaveBeenCalledWith(

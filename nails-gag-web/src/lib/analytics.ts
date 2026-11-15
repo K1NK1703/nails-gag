@@ -3,8 +3,15 @@ export type CtaPlace = 'header' | 'hero' | 'price'
 export type ContactChannel = 'telegram' | 'channel'
 
 export type AnalyticsEvent =
-  /** `entry` и `referrer` (только хост) — у первого просмотра после загрузки сайта. */
-  | { name: 'page_view'; path: string; entry?: boolean; referrer?: string }
+  | { name: 'page_view'; path: string; entry?: never; referrer?: never }
+  | {
+      name: 'page_view'
+      path: string
+      /** Первый просмотр после загрузки сайта: по нему бэкенд считает источник и устройство. */
+      entry: true
+      /** Только хост, с которого пришли; '' — источника нет. */
+      referrer: string
+    }
   | { name: 'cta_click'; place: CtaPlace }
   | { name: 'contact_click'; channel: ContactChannel }
   | { name: 'gallery_open'; index: number }

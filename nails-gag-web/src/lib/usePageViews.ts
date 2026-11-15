@@ -25,7 +25,10 @@ export function createPageViewTracker(): PageViewTracker {
   }
 }
 
-/** Один на загрузку страницы: SPA-переходы его не сбрасывают. */
+/**
+ * Один на загрузку страницы: SPA-переходы его не сбрасывают. В dev HMR этого модуля создаёт
+ * новый счётчик — следующий просмотр снова уйдёт как вход.
+ */
 const pageViews = createPageViewTracker()
 
 /** Отправляет `page_view` при каждой смене пути. */
