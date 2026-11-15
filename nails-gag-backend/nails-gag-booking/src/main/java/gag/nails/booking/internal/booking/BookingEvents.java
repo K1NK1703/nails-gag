@@ -10,6 +10,7 @@ import gag.nails.booking.event.EarlierTimeAccepted;
 import gag.nails.booking.event.EarlierTimeDeclined;
 import gag.nails.booking.event.EarlierTimeProposed;
 import gag.nails.booking.event.PrepaymentRequested;
+import gag.nails.booking.model.RescheduleInitiator;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
@@ -47,9 +48,10 @@ public class BookingEvents {
         publisher.publishEvent(new BookingCancelled(b.id(), b.clientId(), b.slotStartsAt(), b.cancelReason(), now));
     }
 
-    void rescheduled(BookingEntity b, UUID oldSlotId, Instant oldSlotStartsAt, Instant now) {
+    void rescheduled(
+            BookingEntity b, UUID oldSlotId, Instant oldSlotStartsAt, RescheduleInitiator initiator, Instant now) {
         publisher.publishEvent(new BookingRescheduled(
-                b.id(), b.clientId(), oldSlotId, oldSlotStartsAt, b.slotId(), b.slotStartsAt(), now));
+                b.id(), b.clientId(), oldSlotId, oldSlotStartsAt, b.slotId(), b.slotStartsAt(), now, initiator));
     }
 
     public void completed(BookingEntity b, Instant now) {

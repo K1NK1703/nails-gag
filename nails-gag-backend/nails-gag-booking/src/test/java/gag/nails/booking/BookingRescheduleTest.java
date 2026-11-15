@@ -8,6 +8,7 @@ import gag.nails.booking.error.LateRescheduleNotAllowedException;
 import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.event.BookingRescheduled;
 import gag.nails.booking.model.BookingStatus;
+import gag.nails.booking.model.RescheduleInitiator;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
@@ -17,6 +18,7 @@ import gag.nails.testsupport.ModuleTest;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.test.PublishedEvents;
 
@@ -155,6 +157,43 @@ class BookingRescheduleTest extends BookingTestSupport {
                                 && e.newSlotId().equals(to.id())
                                 && e.slotStartsAt().equals(to.startsAt())))
                 .hasSize(1);
+    }
+
+    @Test
+    void rescheduleByClientPublishesClientInitiator(PublishedEvents events) {
+        var anna = client("Анна");
+        var booking = book(anna, slot(MONDAY, "12:00"));
+        var to = slot(TUESDAY, "15:00");
+
+        bookings.reschedule(booking.id(), to.id(), Actor.client(anna));
+
+        assertThat(events.ofType(BookingRescheduled.class)
+                        .matching(e -> e.bookingId().equals(booking.id())))
+                .extracting(BookingRescheduled::initiator)
+                .containsExactly(RescheduleInitiator.CLIENT);
+    }
+
+    @Test
+    void rescheduleByMasterPublishesMasterInitiator(PublishedEvents events) {
+        var booking = book(client("Анна"), slot(MONDAY, "12:00"));
+        var to = slot(TUESDAY, "15:00");
+
+        bookings.reschedule(booking.id(), to.id(), master);
+
+        assertThat(events.ofType(BookingRescheduled.class)
+                        .matching(e -> e.bookingId().equals(booking.id())))
+                .extracting(BookingRescheduled::initiator)
+                .containsExactly(RescheduleInitiator.MASTER);
+    }
+
+    @Test
+    void legacyConstructorHasNullInitiator() {
+        var at = Instant.parse("2026-10-01T10:00:00Z");
+
+        var event = new BookingRescheduled(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), at, UUID.randomUUID(), at, at);
+
+        assertThat(event.initiator()).isNull();
     }
 
     @Test
