@@ -63,7 +63,7 @@ class IngestWritesTest {
         }
     }
 
-    /** Все места записи заняты — событие отбрасывается сразу, без ожидания и без исключения. */
+    /** Все места записи заняты — событие после короткого ожидания места отбрасывается, без исключения. */
     @Test
     void eventIsDroppedWhenAllWritesAreBusy() {
         var writes = ((DefaultAnalyticsIngest) ingest).writes;

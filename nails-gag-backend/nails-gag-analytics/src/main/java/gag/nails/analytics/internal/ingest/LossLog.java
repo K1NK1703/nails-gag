@@ -37,7 +37,10 @@ final class LossLog {
         report(what, failure);
     }
 
-    /** Событие отброшено: все места записи заняты ({@code nails-gag.analytics.max-concurrent-writes}). */
+    /**
+     * Событие отброшено: все места записи ({@code nails-gag.analytics.max-concurrent-writes}) заняты и не освободились
+     * за время ожидания ({@value DefaultAnalyticsIngest#WRITE_WAIT_MILLIS} мс), или ожидание прервано.
+     */
     synchronized void busy() {
         busy++;
         report("dropped, too many concurrent writes", null);
