@@ -18,7 +18,6 @@ import gag.nails.testsupport.ModuleTest;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.test.PublishedEvents;
 
@@ -187,13 +186,16 @@ class BookingRescheduleTest extends BookingTestSupport {
     }
 
     @Test
-    void legacyConstructorHasNullInitiator() {
-        var at = Instant.parse("2026-10-01T10:00:00Z");
+    void rescheduleByDeveloperPublishesMasterInitiator(PublishedEvents events) {
+        var booking = book(client("Анна"), slot(MONDAY, "12:00"));
+        var to = slot(TUESDAY, "15:00");
 
-        var event = new BookingRescheduled(
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), at, UUID.randomUUID(), at, at);
+        bookings.reschedule(booking.id(), to.id(), Actor.developer());
 
-        assertThat(event.initiator()).isNull();
+        assertThat(events.ofType(BookingRescheduled.class)
+                        .matching(e -> e.bookingId().equals(booking.id())))
+                .extracting(BookingRescheduled::initiator)
+                .containsExactly(RescheduleInitiator.MASTER);
     }
 
     @Test
