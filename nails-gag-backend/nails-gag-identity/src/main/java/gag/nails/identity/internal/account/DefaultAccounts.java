@@ -9,6 +9,7 @@ import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.Accounts;
 import gag.nails.identity.error.AccountNotFoundException;
+import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.internal.access.AccessGuard;
 import gag.nails.identity.internal.access.AccessOverrideRepository;
 import gag.nails.identity.internal.access.AccessResolver;
@@ -16,7 +17,9 @@ import gag.nails.identity.internal.access.AccountRoleRepository;
 import gag.nails.identity.internal.session.ActorAssembly;
 import gag.nails.identity.internal.session.SessionRepository;
 import gag.nails.identity.model.AccountView;
+import java.time.Clock;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,10 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Свой аккаунт (спецификация 4.6). Удаление в одной транзакции: обезличивание карточки в {@code
  * clients}, затем удаление способов входа, сессий, ролей, переопределений и самого аккаунта (строки
  * журнала входов теряют ссылку, {@code ON DELETE SET NULL}); правило последнего администратора —
- * последним, уже без уходящего. Проверка нужна только уходящему администратору: у остального клиента
- * терять системе нечего, и блокировка роли {@code DEVELOPER} не берётся — пока в системе нет ни одного
- * администратора, клиент всё равно вправе удалить аккаунт. Порядок блокировок строк — карточка →
- * аккаунт → роль, как у блокировки клиента мастером, поэтому взаимной блокировки с ней нет.
+ * последним, уже без уходящего; после неё — событие {@link AccountDeleted} в той же транзакции. Проверка
+ * нужна только уходящему администратору: у остального клиента терять системе нечего, и блокировка роли
+ * {@code DEVELOPER} не берётся — пока в системе нет ни одного администратора, клиент всё равно вправе
+ * удалить аккаунт. Порядок блокировок строк — карточка → аккаунт → роль, как у блокировки клиента
+ * мастером, поэтому взаимной блокировки с ней нет.
  *
  * <p>Известное ограничение: вход при фиксации обновляет строки аккаунта ({@code last_login_at}) и, если
  * записывает подтверждённый номер, карточки — в порядке аккаунт → клиент. Совпав по времени с удалением
@@ -48,6 +52,8 @@ class DefaultAccounts implements Accounts {
     private final AccessGuard guard;
     private final ClientService clientService;
     private final ClientQueries clientQueries;
+    private final ApplicationEventPublisher events;
+    private final Clock clock;
 
     DefaultAccounts(
             AccountRepository accounts,
@@ -59,7 +65,9 @@ class DefaultAccounts implements Accounts {
             AccessResolver resolver,
             AccessGuard guard,
             ClientService clientService,
-            ClientQueries clientQueries) {
+            ClientQueries clientQueries,
+            ApplicationEventPublisher events,
+            Clock clock) {
         this.accounts = accounts;
         this.loginMethods = loginMethods;
         this.sessions = sessions;
@@ -70,6 +78,8 @@ class DefaultAccounts implements Accounts {
         this.guard = guard;
         this.clientService = clientService;
         this.clientQueries = clientQueries;
+        this.events = events;
+        this.clock = clock;
     }
 
     @Override
@@ -96,6 +106,7 @@ class DefaultAccounts implements Accounts {
         if (leavingAdmin) {
             guard.requireAdminRemains();
         }
+        events.publishEvent(new AccountDeleted(accountId, clock.instant()));
     }
 
     private AccountEntity require(Actor actor) {

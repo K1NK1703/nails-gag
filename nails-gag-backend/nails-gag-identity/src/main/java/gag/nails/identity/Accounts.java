@@ -4,6 +4,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.error.LastAccessAdminException;
+import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.model.AccountView;
 
 /** Свой аккаунт: профиль и удаление. Имя и номер для связи клиент меняет через {@code clients}. */
@@ -23,7 +24,7 @@ public interface Accounts {
      * удаляются способы входа, сессии, роли, переопределения и сам аккаунт. Правило последнего
      * администратора проверяется последним, уже без уходящего, и только если уходящий — администратор;
      * отказ откатывает всё удаление. Клиент без доступа к админке удаляет аккаунт всегда, даже пока в
-     * системе нет ни одного администратора.
+     * системе нет ни одного администратора. В конце, в той же транзакции, публикуется {@link AccountDeleted}.
      *
      * @throws LastAccessAdminException уходящий — последний активный администратор
      * @throws AccessDeniedException у актора нет аккаунта

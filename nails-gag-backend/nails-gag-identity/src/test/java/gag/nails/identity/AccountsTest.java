@@ -10,6 +10,7 @@ import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.command.CompleteRegistration;
 import gag.nails.identity.error.AccountNotFoundException;
+import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.model.AccountAccessView;
 import gag.nails.identity.model.LoginMethodView;
 import gag.nails.identity.model.LoginOutcome;
@@ -25,6 +26,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.modulith.test.PublishedEvents;
 
 @ModuleTest
 class AccountsTest extends IdentityTestSupport {
@@ -120,5 +122,17 @@ class AccountsTest extends IdentityTestSupport {
 
         assertThat(sessions.authenticate(signedIn.sessionToken())).isEmpty();
         assertThat(clientQueries.byId(clientId).orElseThrow().erased()).isTrue();
+    }
+
+    @Test
+    void accountDeletionPublishesAccountDeleted(PublishedEvents events) {
+        var signedIn = signInFirstTime(profile("u1", "+79211234567"));
+        clock.advance(Duration.ofMinutes(5));
+
+        accounts.delete(actor(signedIn));
+
+        assertThat(events.ofType(AccountDeleted.class))
+                .containsExactly(new AccountDeleted(
+                        signedIn.accountId(), TestTimeConfiguration.START.plus(Duration.ofMinutes(5))));
     }
 }
