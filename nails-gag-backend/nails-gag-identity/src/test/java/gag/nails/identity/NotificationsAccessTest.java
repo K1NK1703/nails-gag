@@ -1,15 +1,19 @@
 package gag.nails.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
+import gag.nails.common.error.InternalException;
 import gag.nails.identity.model.SignedIn;
 import gag.nails.identity.model.StaffRecipient;
 import gag.nails.testsupport.ModuleTest;
+import java.sql.Timestamp;
 import java.util.Comparator;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,5 +84,25 @@ class NotificationsAccessTest extends IdentityTestSupport {
                 .extracting(StaffRecipient::accountId)
                 .contains(staff.accountId(), developer.accountId())
                 .doesNotContain(reader.accountId());
+    }
+
+    @Test
+    void staffDirectoryListsStaffWithoutClientCard() {
+        // Аккаунт без карточки входом не создаётся (регистрация заводит карточку), поэтому строка — напрямую.
+        var accountId = UUID.randomUUID();
+        jdbc.sql("insert into identity.account (id, created_at, last_login_at) values (?, ?, ?)")
+                .params(accountId, Timestamp.from(clock.instant()), Timestamp.from(clock.instant()))
+                .update();
+        access.assignRole(accountId, role("MASTER").id(), admin);
+
+        assertThat(clientQueries.byAccountId(accountId)).isEmpty();
+        assertThat(staffDirectory.recipients(Section.BOOKINGS, AccessLevel.READ))
+                .contains(new StaffRecipient(accountId, Set.of("MASTER")));
+    }
+
+    @Test
+    void staffDirectoryRejectsLevelNone() {
+        assertThatThrownBy(() -> staffDirectory.recipients(Section.BOOKINGS, AccessLevel.NONE))
+                .isInstanceOf(InternalException.class);
     }
 }

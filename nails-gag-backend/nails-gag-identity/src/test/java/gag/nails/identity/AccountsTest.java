@@ -10,6 +10,7 @@ import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.command.CompleteRegistration;
 import gag.nails.identity.error.AccountNotFoundException;
+import gag.nails.identity.error.LastAccessAdminException;
 import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.model.AccountAccessView;
 import gag.nails.identity.model.LoginMethodView;
@@ -134,5 +135,14 @@ class AccountsTest extends IdentityTestSupport {
         assertThat(events.ofType(AccountDeleted.class))
                 .containsExactly(new AccountDeleted(
                         signedIn.accountId(), TestTimeConfiguration.START.plus(Duration.ofMinutes(5))));
+    }
+
+    @Test
+    void rejectedDeletionPublishesNoAccountDeleted(PublishedEvents events) {
+        var developer = developer();
+
+        assertThatThrownBy(() -> accounts.delete(actor(developer))).isInstanceOf(LastAccessAdminException.class);
+
+        assertThat(events.ofType(AccountDeleted.class)).isEmpty();
     }
 }

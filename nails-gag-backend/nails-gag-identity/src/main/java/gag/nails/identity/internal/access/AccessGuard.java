@@ -1,6 +1,5 @@
 package gag.nails.identity.internal.access;
 
-import gag.nails.clients.ClientQueries;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.InternalException;
@@ -34,17 +33,17 @@ public class AccessGuard {
     private final RoleRepository roles;
     private final AccountRoleRepository accountRoles;
     private final AccessOverrideRepository overrides;
-    private final ClientQueries clients;
+    private final ActiveAccounts active;
 
     AccessGuard(
             RoleRepository roles,
             AccountRoleRepository accountRoles,
             AccessOverrideRepository overrides,
-            ClientQueries clients) {
+            ActiveAccounts active) {
         this.roles = roles;
         this.accountRoles = accountRoles;
         this.overrides = overrides;
-        this.clients = clients;
+        this.active = active;
     }
 
     /**
@@ -74,7 +73,7 @@ public class AccessGuard {
         if (!strict && candidates.isEmpty()) {
             return;
         }
-        if (candidates.stream().noneMatch(this::isActive)) {
+        if (candidates.stream().noneMatch(active::isActive)) {
             throw new LastAccessAdminException();
         }
     }
@@ -100,11 +99,5 @@ public class AccessGuard {
                     .forEach(candidates::add);
         }
         return List.copyOf(candidates);
-    }
-
-    private boolean isActive(UUID accountId) {
-        return clients.byAccountId(accountId)
-                .map(card -> !card.blocked() && !card.erased())
-                .orElse(true);
     }
 }

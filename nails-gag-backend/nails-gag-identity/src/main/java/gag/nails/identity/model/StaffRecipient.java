@@ -7,7 +7,7 @@ import java.util.UUID;
  * Аккаунт сотрудника из {@code StaffDirectory}.
  *
  * @param roleCodes коды назначенных ролей, например {@code "MASTER"}; пусто, если уровень дан только личным
- *     переопределением
+ *     переопределением. Порядок не задан: для показа вызывающий сортирует сам
  */
 public record StaffRecipient(UUID accountId, Set<String> roleCodes) {
 

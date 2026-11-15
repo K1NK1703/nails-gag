@@ -62,14 +62,20 @@ public class AccessResolver {
      * То же, что {@link #resolve(UUID)}, для всех аккаунтов хотя бы с одной ролью или переопределением,
      * по id: назначения, роли и переопределения читаются целиком несколькими запросами, а не по аккаунту.
      * У остальных аккаунтов итог по всем разделам — {@link AccessLevel#NONE}.
+     *
+     * <p>Не снимок: при READ COMMITTED запросы видят разные моменты, как и {@code Actor}, собранный на запрос.
+     * Назначение роли, которой при чтении ролей не было (её создали между запросами), пропускается.
      */
     SortedMap<UUID, Resolved> resolveStaff() {
         var rolesById = roles.findAll().stream().collect(Collectors.toMap(RoleEntity::id, Function.identity()));
         var assigned = new HashMap<UUID, List<RoleEntity>>();
-        accountRoles
-                .findAll()
-                .forEach(link -> assigned.computeIfAbsent(link.accountId(), id -> new ArrayList<>())
-                        .add(rolesById.get(link.roleId())));
+        accountRoles.findAll().forEach(link -> {
+            var role = rolesById.get(link.roleId());
+            if (role != null) {
+                assigned.computeIfAbsent(link.accountId(), id -> new ArrayList<>())
+                        .add(role);
+            }
+        });
         var own = new HashMap<UUID, Map<Section, AccessLevel>>();
         overrides
                 .findAll()
