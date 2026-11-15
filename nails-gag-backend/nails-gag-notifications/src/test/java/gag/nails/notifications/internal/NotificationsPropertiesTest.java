@@ -2,7 +2,7 @@ package gag.nails.notifications.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import gag.nails.notifications.internal.NotificationsProperties.QuietHours;
+import gag.nails.notifications.internal.NotificationsProperties.QuietHoursWindow;
 import java.time.Duration;
 import java.time.LocalTime;
 import org.junit.jupiter.api.Test;
@@ -31,7 +31,8 @@ class NotificationsPropertiesTest {
             assertThat(properties.jobs().dispatchDelay()).isEqualTo(Duration.ofMinutes(1));
             assertThat(properties.jobs().purgeCron()).isEqualTo("0 15 4 * * *");
             assertThat(properties.retentionDays()).isEqualTo(90);
-            assertThat(properties.quietHours()).isEqualTo(new QuietHours(LocalTime.of(22, 0), LocalTime.of(9, 0)));
+            assertThat(properties.quietHours())
+                    .isEqualTo(new QuietHoursWindow(LocalTime.of(22, 0), LocalTime.of(9, 0)));
             assertThat(properties.email().from()).isEmpty();
             assertThat(properties.telegram().configured()).isFalse();
             assertThat(properties.telegram().pollTimeout()).isEqualTo(Duration.ofSeconds(50));
@@ -43,7 +44,7 @@ class NotificationsPropertiesTest {
         context.withPropertyValues(PREFIX + "quiet-hours.from=23:30", PREFIX + "quiet-hours.to=07:15")
                 .run(started -> assertThat(
                                 started.getBean(NotificationsProperties.class).quietHours())
-                        .isEqualTo(new QuietHours(LocalTime.of(23, 30), LocalTime.of(7, 15))));
+                        .isEqualTo(new QuietHoursWindow(LocalTime.of(23, 30), LocalTime.of(7, 15))));
     }
 
     @Test
@@ -96,10 +97,35 @@ class NotificationsPropertiesTest {
     }
 
     @Test
+    void purgeCronMustBeValid() {
+        context.withPropertyValues(PREFIX + "jobs.purge-cron=0 15 4 * *")
+                .run(started -> assertRejected(started, "jobs.purgeCronValid"));
+        context.withPropertyValues(PREFIX + "jobs.purge-cron=каждую ночь")
+                .run(started -> assertRejected(started, "jobs.purgeCronValid"));
+        context.withPropertyValues(PREFIX + "jobs.purge-cron=0 0 3 * * MON")
+                .run(started -> assertThat(started).hasNotFailed());
+    }
+
+    @Test
+    void emailFromMustBeAnAddress() {
+        context.withPropertyValues(PREFIX + "email.from=noreply")
+                .run(started -> assertRejected(started, "email.fromValid"));
+        context.withPropertyValues(PREFIX + "email.from=a@b.ru, c@d.ru")
+                .run(started -> assertRejected(started, "email.fromValid"));
+        context.withPropertyValues(PREFIX + "email.from=nails.gag <noreply@nails-gag.ru>")
+                .run(started -> assertThat(started.getBean(NotificationsProperties.class)
+                                .email()
+                                .from())
+                        .isEqualTo("nails.gag <noreply@nails-gag.ru>"));
+        context.withPropertyValues(PREFIX + "email.from=noreply@nails-gag.ru")
+                .run(started -> assertThat(started).hasNotFailed());
+    }
+
+    @Test
     void quietHoursMayWrapMidnight() {
-        var night = new QuietHours(LocalTime.of(22, 0), LocalTime.of(9, 0));
-        var day = new QuietHours(LocalTime.of(13, 0), LocalTime.of(14, 0));
-        var none = new QuietHours(LocalTime.of(22, 0), LocalTime.of(22, 0));
+        var night = new QuietHoursWindow(LocalTime.of(22, 0), LocalTime.of(9, 0));
+        var day = new QuietHoursWindow(LocalTime.of(13, 0), LocalTime.of(14, 0));
+        var none = new QuietHoursWindow(LocalTime.of(22, 0), LocalTime.of(22, 0));
 
         assertThat(night.contains(LocalTime.of(21, 59))).isFalse();
         assertThat(night.contains(LocalTime.of(22, 0))).isTrue();

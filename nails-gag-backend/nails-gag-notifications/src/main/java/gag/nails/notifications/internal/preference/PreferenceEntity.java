@@ -20,8 +20,4 @@ class PreferenceEntity {
     private Instant updatedAt;
 
     protected PreferenceEntity() {}
-
-    ChannelSwitches switches() {
-        return new ChannelSwitches(emailEnabled, telegramEnabled);
-    }
 }

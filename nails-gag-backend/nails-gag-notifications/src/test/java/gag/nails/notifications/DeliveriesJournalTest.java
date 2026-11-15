@@ -104,6 +104,41 @@ class DeliveriesJournalTest {
         assertThat(secondPage.size()).isEqualTo(1);
     }
 
+    @Test
+    void pageStartsAtItsOffset() {
+        var bookingId = UUID.randomUUID();
+        var clientId = UUID.randomUUID();
+        var oldest = message(bookingId, clientId, null, MessageKind.BOOKING_RECEIVED, DUE);
+        var middle = message(bookingId, clientId, null, MessageKind.CONFIRMED, DUE.plusSeconds(60));
+        var newest = message(bookingId, clientId, null, MessageKind.RESCHEDULED, DUE.plusSeconds(120));
+        var oldestDelivery = delivery(oldest, Channel.EMAIL, DeliveryStatus.SENT, 1, null, DUE);
+        delivery(middle, Channel.EMAIL, DeliveryStatus.PENDING, 0, null, null);
+        delivery(newest, Channel.EMAIL, DeliveryStatus.PENDING, 0, null, null);
+
+        var page = settings.deliveries(new DeliveryFilter(null, bookingId), new Paging(1, 2), Actor.master());
+
+        assertThat(page.total()).isEqualTo(3);
+        assertThat(page.items()).extracting(DeliveryView::deliveryId).containsExactly(oldestDelivery);
+    }
+
+    @Test
+    void totalWithoutBookingFilterCountsAllDeliveries() {
+        var all = new DeliveryFilter(null, null);
+        var failed = new DeliveryFilter(DeliveryStatus.FAILED, null);
+        var allBefore =
+                settings.deliveries(all, new Paging(0, 1), Actor.master()).total();
+        var failedBefore =
+                settings.deliveries(failed, new Paging(0, 1), Actor.master()).total();
+        var messageId = message(UUID.randomUUID(), UUID.randomUUID(), null, MessageKind.CANCELLED, DUE);
+        delivery(messageId, Channel.EMAIL, DeliveryStatus.FAILED, 5, "email_rejected", null);
+        delivery(messageId, Channel.TELEGRAM, DeliveryStatus.SENT, 1, null, DUE);
+
+        assertThat(settings.deliveries(all, new Paging(0, 1), Actor.master()).total())
+                .isEqualTo(allBefore + 2);
+        assertThat(settings.deliveries(failed, new Paging(0, 1), Actor.master()).total())
+                .isEqualTo(failedBefore + 1);
+    }
+
     private UUID message(UUID bookingId, UUID clientId, UUID accountId, MessageKind kind, Instant dueAt) {
         var id = UUID.randomUUID();
         jdbc.sql("""

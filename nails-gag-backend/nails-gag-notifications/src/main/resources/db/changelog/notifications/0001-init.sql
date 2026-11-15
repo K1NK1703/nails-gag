@@ -89,18 +89,20 @@ CREATE TABLE notifications.message (
     created_at    timestamptz  NOT NULL,
     dispatched_at timestamptz,
     CONSTRAINT message_recipient_check CHECK ((client_id IS NULL) <> (account_id IS NULL)),
+    -- Мастерские виды (STAFF_*) — аккаунту, остальные — карточке клиента.
+    CONSTRAINT message_kind_recipient_check CHECK (starts_with(kind, 'STAFF_') = (account_id IS NOT NULL)),
     CONSTRAINT message_expires_at_check CHECK (expires_at > due_at),
     CONSTRAINT message_dispatched_at_check CHECK ((status = 'DISPATCHED') = (dispatched_at IS NOT NULL))
 );
 
--- Созревшие сообщения для отправки.
-CREATE INDEX message_pending_due_at_idx ON notifications.message (due_at) WHERE status = 'PENDING';
+-- Созревшие сообщения для отправки в порядке due_at, created_at.
+CREATE INDEX message_pending_due_at_idx ON notifications.message (due_at, created_at) WHERE status = 'PENDING';
 -- Перепланирование и отмена напоминаний записи, журнал доставок по записи.
 CREATE INDEX message_booking_id_idx ON notifications.message (booking_id);
--- Обезличивание и объединение карточек.
-CREATE INDEX message_client_id_idx ON notifications.message (client_id);
--- Удаление аккаунта: отмена его мастерских сообщений.
-CREATE INDEX message_account_id_idx ON notifications.message (account_id);
+-- Обезличивание и объединение карточек трогают только неотправленные сообщения.
+CREATE INDEX message_client_id_idx ON notifications.message (client_id) WHERE status = 'PENDING';
+-- Удаление аккаунта: отмена его неотправленных мастерских сообщений.
+CREATE INDEX message_account_id_idx ON notifications.message (account_id) WHERE status = 'PENDING';
 
 --changeset nails-gag:notifications-0001-delivery
 --comment: доставка сообщения по одному каналу с повторами; адрес и chat_id не хранятся
@@ -119,8 +121,11 @@ CREATE TABLE notifications.delivery (
     -- Код последней ошибки (expired, telegram_blocked…); набор задают каналы, поэтому без перечня — только форма.
     error_code      varchar(32) CONSTRAINT delivery_error_code_check CHECK (error_code ~ '^[a-z][a-z0-9_]*$'),
     CONSTRAINT delivery_message_id_channel_key UNIQUE (message_id, channel),
-    CONSTRAINT delivery_sent_at_check CHECK ((status = 'SENT') = (sent_at IS NOT NULL))
+    CONSTRAINT delivery_sent_at_check CHECK ((status = 'SENT') = (sent_at IS NOT NULL)),
+    -- Неудача всегда объясняется кодом.
+    CONSTRAINT delivery_error_code_failed_check CHECK (status <> 'FAILED' OR error_code IS NOT NULL)
 );
 
 -- Созревшие доставки для отправки.
-CREATE INDEX delivery_pending_next_attempt_at_idx ON notifications.delivery (next_attempt_at) WHERE status = 'PENDING';
+CREATE INDEX delivery_pending_next_attempt_at_idx ON notifications.delivery (next_attempt_at)
+    WHERE status = 'PENDING';

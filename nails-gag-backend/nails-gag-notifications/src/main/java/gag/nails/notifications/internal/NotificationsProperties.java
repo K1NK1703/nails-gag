@@ -1,5 +1,7 @@
 package gag.nails.notifications.internal;
 
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
@@ -12,6 +14,7 @@ import org.hibernate.validator.constraints.time.DurationMax;
 import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.validation.annotation.Validated;
 
 /**
@@ -35,7 +38,7 @@ public record NotificationsProperties(
 
         @DefaultValue(DEFAULT_RETENTION_DAYS) @Positive int retentionDays,
 
-        @DefaultValue @Valid QuietHours quietHours,
+        @DefaultValue @Valid QuietHoursWindow quietHours,
         @NotNull @Pattern(regexp = SITE_URL) String siteUrl,
         @NotNull @Pattern(regexp = TELEGRAM_HANDLE) String masterTelegram,
         @NotBlank String salonAddress,
@@ -70,13 +73,22 @@ public record NotificationsProperties(
             @DefaultValue(DEFAULT_DISPATCH_DELAY) @NotNull @DurationMin(seconds = 1)
             Duration dispatchDelay,
 
-            @DefaultValue(DEFAULT_PURGE_CRON) @NotNull String purgeCron) {}
+            @DefaultValue(DEFAULT_PURGE_CRON) @NotNull String purgeCron) {
+
+        /** Проверка при старте: выражение cron Spring из шести полей. */
+        @AssertTrue(message = "purge-cron must be a valid cron expression")
+        public boolean isPurgeCronValid() {
+            return purgeCron != null && CronExpression.isValidExpression(purgeCron);
+        }
+    }
 
     /**
-     * Тихие часы: с {@code from} включительно до {@code to} не включительно, через полночь, если {@code from} позже
-     * {@code to}. Равные границы — тихих часов нет.
+     * Окно тихих часов: с {@code from} включительно до {@code to} не включительно, через полночь, если {@code from}
+     * позже {@code to}. Равные границы — тихих часов нет. Здесь только время суток; перенос момента из тихих часов на
+     * их конец в поясе салона — отдельная чистая функция очереди, ей и оставлено имя {@code QuietHours}: она берёт
+     * это окно из настроек.
      */
-    public record QuietHours(
+    public record QuietHoursWindow(
             @DefaultValue(DEFAULT_QUIET_FROM) @NotNull LocalTime from,
 
             @DefaultValue(DEFAULT_QUIET_TO) @NotNull LocalTime to) {
@@ -99,7 +111,22 @@ public record NotificationsProperties(
      * @param from отправитель писем ({@code nails.gag <noreply@nails-gag.ru>}); пусто вместе с
      *     {@code spring.mail.host} — почта выключена
      */
-    public record Email(@DefaultValue("") @NotNull String from) {}
+    public record Email(@DefaultValue("") @NotNull String from) {
+
+        /** Проверка при старте: непустой отправитель — один адрес по RFC 822, можно с именем. */
+        @AssertTrue(message = "from must be a valid email address")
+        public boolean isFromValid() {
+            if (from == null || from.isBlank()) {
+                return true;
+            }
+            try {
+                new InternetAddress(from, true);
+                return true;
+            } catch (AddressException e) {
+                return false;
+            }
+        }
+    }
 
     /**
      * Бот. Токен — секрет: {@link #toString()} его не показывает.

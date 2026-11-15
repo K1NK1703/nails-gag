@@ -12,7 +12,9 @@ spring:
         schema: modulith
         schema-initialization:
           enabled: false
-      republish-outstanding-events-on-restart: true
+      # Не как в приложении: старт тестового контекста не повторяет незавершённые публикации в фоне посреди чужих
+      # проверок (например, оставшиеся в базе от прежнего контекста); тест повторной доставки вызывает её явно.
+      republish-outstanding-events-on-restart: false
       completion-mode: delete
   servlet:
     multipart:

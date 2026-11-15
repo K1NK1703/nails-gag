@@ -25,10 +25,9 @@ import org.springframework.stereotype.Component;
 @Component
 class DeliveryJournal {
 
-    private static final String FROM = """
-             from notifications.delivery d
-             join notifications.message m on m.id = d.message_id
-            """;
+    private static final String DELIVERIES = " from notifications.delivery d";
+
+    private static final String WITH_MESSAGES = DELIVERIES + " join notifications.message m on m.id = d.message_id";
 
     private final JdbcClient jdbc;
 
@@ -48,14 +47,16 @@ class DeliveryJournal {
             params.put("bookingId", filter.bookingId());
         }
         var where = conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
-        var total = jdbc.sql("select count(*)" + FROM + where)
+        // Счёт без отбора по записи обходится без сообщений: доставка всегда ссылается на существующее сообщение.
+        var counted = filter.bookingId() == null ? DELIVERIES : WITH_MESSAGES;
+        var total = jdbc.sql("select count(*)" + counted + where)
                 .params(params)
                 .query(Long.class)
                 .single();
         var items = jdbc.sql("""
                         select d.id, d.message_id, m.kind, m.booking_id, m.client_id, m.account_id, d.channel,
                                d.status, d.attempts, d.error_code, m.due_at, d.sent_at
-                        """ + FROM + where + """
+                        """ + WITH_MESSAGES + where + """
                          order by m.due_at desc, d.id desc
                          limit :limit offset :offset
                         """)

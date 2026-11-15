@@ -87,6 +87,18 @@ class ReminderSettingsTest {
     }
 
     @Test
+    void historyWithEqualTimesIsOrderedById() {
+        var master = staff(Actor.masterAccess());
+        settings.update(new UpdateReminderSettings(NOON, 3), master);
+        settings.update(new UpdateReminderSettings(NOON, 5), master);
+
+        assertThat(journalOf(master))
+                .allSatisfy(change -> assertThat(change.changedAt()).isEqualTo(clock.instant()))
+                .extracting(ReminderSettingsChange::newValue)
+                .containsExactly("5", "3");
+    }
+
+    @Test
     void nullsTurnRemindersOff() {
         var master = staff(Actor.masterAccess());
 
@@ -121,9 +133,10 @@ class ReminderSettingsTest {
         assertThat(updated.dayBeforeAt()).isEqualTo(LocalTime.parse(time));
     }
 
-    @Test
-    void dayBeforeAtMustBeWholeMinutes() {
-        var command = new UpdateReminderSettings(LocalTime.of(12, 0, 30), 2);
+    @ParameterizedTest
+    @ValueSource(strings = {"12:00:30", "12:00:00.000000001", "12:00:00.5"})
+    void dayBeforeAtMustBeWholeMinutes(String time) {
+        var command = new UpdateReminderSettings(LocalTime.parse(time), 2);
 
         assertThatThrownBy(() -> settings.update(command, Actor.master()))
                 .isInstanceOfSatisfying(
@@ -164,6 +177,9 @@ class ReminderSettingsTest {
 
         assertThat(settings.settings(reader)).isEqualTo(new ReminderSettings(NOON, 2));
         assertThat(settings.history(reader)).isNotNull();
+        assertThat(settings.deliveries(new DeliveryFilter(null, UUID.randomUUID()), new Paging(0, 20), reader)
+                        .total())
+                .isZero();
         assertThatThrownBy(() -> settings.update(new UpdateReminderSettings(NOON, 3), reader))
                 .isInstanceOf(AccessDeniedException.class);
     }

@@ -72,10 +72,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
     }
 
     private MyChannels channels(UUID accountId) {
-        var switches = preferences
-                .findByAccountId(accountId)
-                .map(PreferenceEntity::switches)
-                .orElseGet(() -> defaults.forAccount(accountId));
+        var switches = preferences.findSwitches(accountId).orElseGet(() -> defaults.forAccount(accountId));
         var emailAvailable = clients.byAccountId(accountId)
                 .map(ClientView::email)
                 .filter(email -> !email.isBlank())

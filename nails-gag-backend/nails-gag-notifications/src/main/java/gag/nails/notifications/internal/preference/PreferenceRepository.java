@@ -7,15 +7,22 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+/**
+ * Изменения — запросами мимо контекста персистентности и без {@code clearAutomatically}: модуль вызывают и из чужих
+ * транзакций (синхронные слушатели), и их управляемые сущности не должны отсоединяться. Поэтому настройка читается
+ * проекцией, а не сущностью: проекция всегда берётся из базы, управляемая сущность могла бы остаться прежней.
+ */
 interface PreferenceRepository extends JpaRepository<PreferenceEntity, UUID> {
 
-    Optional<PreferenceEntity> findByAccountId(UUID accountId);
+    @Query("select new gag.nails.notifications.internal.preference.ChannelSwitches(p.emailEnabled, p.telegramEnabled)"
+            + " from PreferenceEntity p where p.accountId = :accountId")
+    Optional<ChannelSwitches> findSwitches(UUID accountId);
 
     /**
      * Заводит или заменяет настройку аккаунта. {@code ON CONFLICT} вместо проверки в коде: два одновременных первых
      * сохранения не прервут транзакцию нарушением ключа — второе дождётся первого и обновит строку.
      */
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Modifying(flushAutomatically = true)
     @Query(value = """
                     insert into notifications.preference (id, account_id, email_enabled, telegram_enabled, updated_at)
                     values (:id, :accountId, :emailEnabled, :telegramEnabled, :now)
