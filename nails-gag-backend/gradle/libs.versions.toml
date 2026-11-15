@@ -30,6 +30,8 @@ spring-boot-starter-restclient = { module = "org.springframework.boot:spring-boo
 spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
+# Письма уведомлений по SMTP (JavaMailSender)
+spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail" }
 # Jackson 3 без автонастройки Spring Boot: финансы пишут снимки журнала в jsonb своим JsonMapper (версия из BOM)
 jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 spring-boot-starter-liquibase = { module = "org.springframework.boot:spring-boot-starter-liquibase" }
@@ -64,6 +66,10 @@ twelvemonkeys-imageio-webp = { module = "com.twelvemonkeys.imageio:imageio-webp"
 metadata-extractor = { module = "com.drewnoakes:metadata-extractor", version.ref = "metadataExtractor" }
 
 spring-modulith-starter-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
+# Реестр публикаций событий в БД (JDBC) с сериализацией событий в JSON
+spring-modulith-starter-jdbc = { module = "org.springframework.modulith:spring-modulith-starter-jdbc" }
+# EventSerializer реестра публикаций: в стартере только runtime, тестам уведомлений нужен для компиляции
+spring-modulith-events-core = { module = "org.springframework.modulith:spring-modulith-events-core" }
 spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }
 spring-modulith-docs = { module = "org.springframework.modulith:spring-modulith-docs" }
 

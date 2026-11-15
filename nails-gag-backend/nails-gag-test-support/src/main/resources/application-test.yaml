@@ -5,6 +5,15 @@ spring:
       ddl-auto: validate
   liquibase:
     change-log: classpath:db/changelog/test-master.yaml
+  modulith:
+    events:
+      # Как в application.yaml приложения: реестр публикаций (модуль уведомлений) — в схеме modulith из Liquibase.
+      jdbc:
+        schema: modulith
+        schema-initialization:
+          enabled: false
+      republish-outstanding-events-on-restart: true
+      completion-mode: delete
   servlet:
     multipart:
       # Как в application.yaml приложения: HTTP-тесты загрузки проверяют эти пределы (у Spring Boot по умолчанию 1 МБ).
@@ -36,6 +45,17 @@ nails-gag:
     jobs:
       # Уборка солей и отпечатков в тестах не запускается сама: тесты вызывают AnalyticsMaintenance сами.
       enabled: false
+  notifications:
+    jobs:
+      # Отправка и уборка в тестах не запускаются по расписанию: тесты вызывают их напрямую.
+      enabled: false
+    # Как в application.yaml приложения: тексты сообщений сверяются с этими значениями.
+    site-url: https://nails-gag.ru
+    master-telegram: "@gagushichewa"
+    salon-address: "пр. КИМа 6, метро Приморская, 3 этаж, студия 365"
+    telegram:
+      # Бот выключен: внешние сервисы в тестах не вызываются; тесты бота включают его сами.
+      bot-token: ""
   identity:
     jobs:
       # Обслуживание входа в тестах не работает: тесты вызывают IdentityMaintenance сами.

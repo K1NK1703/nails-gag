@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":nails-gag-finance"))
     implementation(project(":nails-gag-analytics"))
     implementation(project(":nails-gag-identity"))
+    implementation(project(":nails-gag-notifications"))
     implementation(project(":nails-gag-api"))
 
     implementation(libs.spring.boot.starter.webmvc)

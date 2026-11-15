@@ -1,0 +1,4 @@
+# Реестр публикаций событий Spring Modulith: номер 01 — раньше модулей, слушатели которых им пользуются.
+databaseChangeLog:
+  - include:
+      file: db/changelog/modulith/0001-event-publication.sql

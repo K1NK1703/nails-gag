@@ -11,6 +11,17 @@ spring:
       ddl-auto: validate
   liquibase:
     change-log: classpath:db/changelog/master.yaml
+  modulith:
+    events:
+      # Реестр публикаций событий: таблица в своей схеме, её ведёт Liquibase модуля уведомлений, а не Spring Modulith.
+      jdbc:
+        schema: modulith
+        schema-initialization:
+          enabled: false
+      # Событие, не обработанное слушателем до остановки или падения, обрабатывается снова после старта.
+      republish-outstanding-events-on-restart: true
+      # Завершённые публикации удаляются сразу: в таблице только необработанные.
+      completion-mode: delete
   servlet:
     multipart:
       # Загрузка фото (POST /api/files): файл — ровно max-file-bytes модуля файлов, запрос — больше, с запасом на
@@ -73,6 +84,30 @@ nails-gag:
         client-id: ""
         client-secret: ""
         redirect-uri: ""
+  notifications:
+    jobs:
+      enabled: true
+      # Пауза между прогонами отправки созревших сообщений.
+      dispatch-delay: 1m
+      # Ночная уборка по времени салона: сообщения в конечном состоянии старше retention-days и истёкшие ссылки.
+      purge-cron: "0 15 4 * * *"
+    retention-days: 90
+    # Тихие часы клиенток по времени салона: сообщение переносится на их конец, напоминание накануне в них не ставится.
+    quiet-hours: { from: "22:00", to: "09:00" }
+    # Адрес сайта для ссылок в сообщениях (кабинет, запись в админке); без пути и завершающего слэша.
+    site-url: https://nails-gag.ru
+    master-telegram: "@gagushichewa"
+    salon-address: "пр. КИМа 6, метро Приморская, 3 этаж, студия 365"
+    email:
+      # Отправитель писем. Пустой вместе с spring.mail.host — почта выключена.
+      from: "nails.gag <noreply@nails-gag.ru>"
+    telegram:
+      # Токен бота от @BotFather — секрет, задавать через переменную окружения, не в файле. Пустой — Telegram выключен.
+      bot-token: ""
+      # Имя бота без @ для ссылки привязки t.me/<бот>; обязательно при токене.
+      bot-username: ""
+      # Сколько Telegram держит запрос getUpdates без новых сообщений.
+      poll-timeout: 50s
   api:
     # Origin сайта: с ним сверяется Origin изменяющих запросов (CSRF), от него строятся переходы после входа.
     # Абсолютный, без пути и завершающего слэша; https (http — только для localhost).
