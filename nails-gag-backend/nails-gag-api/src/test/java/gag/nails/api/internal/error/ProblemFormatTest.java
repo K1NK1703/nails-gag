@@ -313,8 +313,8 @@ class ProblemFormatTest extends ApiTestSupport {
 
     /**
      * Запрос, отменённый PostgreSQL по пределу времени (SQLState {@code 57014}), — как блокировка:
-     * {@code 503 common.busy} с {@code Retry-After}, без подробностей. Так отвечают отчёты счётчика посещений, когда их
-     * запрос упёрся в предел времени.
+     * {@code 503 common.busy}, без подробностей, с {@code Retry-After: 10}: запрос уже шёл до предела времени, и повтор
+     * через секунду упёрся бы в него снова. Так отвечают отчёты счётчика посещений, когда их запрос упёрся в предел.
      */
     @Test
     void cancelledQueryIsBusyWithRetryAfter() {
@@ -324,7 +324,7 @@ class ProblemFormatTest extends ApiTestSupport {
                 .expectStatus()
                 .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
                 .expectHeader()
-                .valueEquals("Retry-After", "1")
+                .valueEquals("Retry-After", "10")
                 .expectBody(String.class)
                 .returnResult()
                 .getResponseBody();

@@ -96,6 +96,12 @@ class ProblemHandler {
     /** SQLState PostgreSQL {@code query_canceled}: запрос отменён, в том числе по пределу времени. */
     static final String QUERY_CANCELED = "57014";
 
+    /**
+     * Через сколько секунд повторить запрос, отменённый по пределу времени: такой запрос уже шёл секунды (отчёты
+     * счётчика — до 10 с), и повтор через секунду упёрся бы в ту же нагрузку.
+     */
+    static final String QUERY_CANCELED_RETRY_AFTER_SECONDS = "10";
+
     private final ProblemWriter writer;
     private final ObjectProvider<MultipartConfigElement> multipart;
 
@@ -295,14 +301,15 @@ class ProblemHandler {
      */
     @ExceptionHandler(PessimisticLockingFailureException.class)
     ResponseEntity<Problem> busy(PessimisticLockingFailureException exception, HttpServletRequest request) {
-        return busy(exception, request, "database lock failure");
+        return busy(exception, request, "database lock failure", BUSY_RETRY_AFTER_SECONDS);
     }
 
     /**
      * {@code 503 common.busy} с {@code Retry-After}. Сообщение драйвера не пишется: в нём бывает текст запроса и
      * значения строк. Класс и SQLState достаточно.
      */
-    private ResponseEntity<Problem> busy(Exception exception, HttpServletRequest request, String reason) {
+    private ResponseEntity<Problem> busy(
+            Exception exception, HttpServletRequest request, String reason, String retryAfterSeconds) {
         var cause = NestedExceptionUtils.getMostSpecificCause(exception);
         log.warn(
                 "{} {} -> 503 {}: {}{}",
@@ -312,7 +319,7 @@ class ProblemHandler {
                 exception.getClass().getSimpleName(),
                 cause instanceof SQLException sql ? " SQLState " + sql.getSQLState() : "");
         var headers = new HttpHeaders();
-        headers.set(HttpHeaders.RETRY_AFTER, BUSY_RETRY_AFTER_SECONDS);
+        headers.set(HttpHeaders.RETRY_AFTER, retryAfterSeconds);
         return respond(writer.problem(request, HttpStatus.SERVICE_UNAVAILABLE, ProblemStatuses.BUSY), headers);
     }
 
@@ -322,10 +329,11 @@ class ProblemHandler {
      * DEBUG, ответ считается обработанным.
      *
      * <p>Запрос, отменённый PostgreSQL по пределу времени (SQLState {@value #QUERY_CANCELED}: {@code statement_timeout}
-     * или предел времени запроса, как у отчётов счётчика посещений), — {@code 503 common.busy} с {@code Retry-After},
-     * как блокировка: база перегружена, повтор позже может пройти. Признак — только SQLState корневой причины:
-     * Hibernate отдаёт такую отмену общим {@code PersistenceException}, а не {@code QueryTimeoutException} Spring,
-     * поэтому отдельного типа исключения для неё нет.
+     * или предел времени запроса, как у отчётов счётчика посещений), — {@code 503 common.busy}, как блокировка: база
+     * перегружена, повтор позже может пройти; {@code Retry-After} — {@value #QUERY_CANCELED_RETRY_AFTER_SECONDS} с, а
+     * не 1, как у блокировки. Признак — только SQLState корневой причины: Hibernate отдаёт такую отмену общим
+     * {@code PersistenceException}, а не {@code QueryTimeoutException} Spring, поэтому отдельного типа исключения для
+     * неё нет.
      */
     @ExceptionHandler(Exception.class)
     @Nullable
@@ -340,7 +348,7 @@ class ProblemHandler {
         }
         if (NestedExceptionUtils.getMostSpecificCause(exception) instanceof SQLException sql
                 && QUERY_CANCELED.equals(sql.getSQLState())) {
-            return busy(exception, request, "query cancelled");
+            return busy(exception, request, "query cancelled", QUERY_CANCELED_RETRY_AFTER_SECONDS);
         }
         if (exception instanceof ErrorResponse response) {
             HttpStatusCode status = response.getStatusCode();

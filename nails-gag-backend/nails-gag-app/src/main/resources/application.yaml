@@ -143,3 +143,7 @@ logging:
   structured:
     format:
       console: ecs
+  level:
+    # Hibernate пишет WARN с текстом драйвера на каждый сбой SQL — в обход ограничения частоты в логе приёма событий
+    # счётчика и с сообщением, где бывают значения. Класс исключения и SQLState и так пишут ProblemHandler и модули.
+    org.hibernate.orm.jdbc.error: error
