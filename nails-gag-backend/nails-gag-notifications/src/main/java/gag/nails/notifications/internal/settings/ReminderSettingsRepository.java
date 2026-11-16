@@ -23,9 +23,22 @@ interface ReminderSettingsRepository extends JpaRepository<ReminderSettingsEntit
         return lockAll().stream().findFirst().orElseThrow(ReminderSettingsRepository::missing);
     }
 
+    /**
+     * Та же строка под разделяемой блокировкой ({@code FOR SHARE}) до конца транзакции: планировщик напоминаний
+     * читает настройки, а смена настроек ждёт его фиксации (и он — её), поэтому напоминания по прежним настройкам не
+     * фиксируются после смены.
+     */
+    default ReminderSettingsEntity singleForShare() {
+        return lockAllForShare().stream().findFirst().orElseThrow(ReminderSettingsRepository::missing);
+    }
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from ReminderSettingsEntity s")
     List<ReminderSettingsEntity> lockAll();
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select s from ReminderSettingsEntity s")
+    List<ReminderSettingsEntity> lockAllForShare();
 
     private static InternalException missing() {
         return new InternalException("notifications.settings row is missing");

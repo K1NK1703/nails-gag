@@ -76,6 +76,29 @@ public class MessageQueue {
     }
 
     /**
+     * Удаляет неотправленные напоминания записи ({@code REMINDER_*}) перед их расчётом заново; возвращает их число.
+     * Удаляет, а не отменяет: ключ повтора освобождается, и напоминание на тот же срок (возврат на прежнее время,
+     * повторное включение в настройках) ставится снова, а отменённая строка заняла бы ключ навсегда.
+     */
+    public int deletePendingReminders(UUID bookingId) {
+        return jdbc.sql("""
+                        delete from notifications.message
+                        where booking_id = :bookingId and status = 'PENDING' and starts_with(kind, 'REMINDER_')
+                        """).param("bookingId", bookingId).update();
+    }
+
+    /**
+     * Отменяет неотправленные напоминания записи ({@code REMINDER_*}), когда визита уже не будет: запись отменена,
+     * выполнена или клиентка не пришла. Отменённые остаются историей; возвращает их число.
+     */
+    public int cancelPendingReminders(UUID bookingId) {
+        return jdbc.sql("""
+                        update notifications.message set status = 'CANCELLED'
+                        where booking_id = :bookingId and status = 'PENDING' and starts_with(kind, 'REMINDER_')
+                        """).param("bookingId", bookingId).update();
+    }
+
+    /**
      * Переадресует неотправленные сообщения карточки {@code removedClientId} карточке {@code survivorClientId};
      * возвращает их число. Ключ повтора не меняется: повтор события удалённой карточки дубля не создаст.
      */

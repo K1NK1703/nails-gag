@@ -10,6 +10,7 @@ import gag.nails.notifications.NotificationSettings;
 import gag.nails.notifications.command.DeliveryFilter;
 import gag.nails.notifications.command.UpdateReminderSettings;
 import gag.nails.notifications.internal.NotificationsProperties;
+import gag.nails.notifications.internal.reminder.ReminderPlanner;
 import gag.nails.notifications.model.DeliveryView;
 import gag.nails.notifications.model.ReminderSettings;
 import gag.nails.notifications.model.ReminderSettingsChange;
@@ -34,6 +35,7 @@ class DefaultNotificationSettings implements NotificationSettings {
     private final ReminderSettingsRepository settings;
     private final ReminderSettingsChangeRepository changes;
     private final DeliveryJournal deliveries;
+    private final ReminderPlanner reminders;
     private final CommandValidator validator;
     private final NotificationsProperties properties;
     private final Clock clock;
@@ -42,12 +44,14 @@ class DefaultNotificationSettings implements NotificationSettings {
             ReminderSettingsRepository settings,
             ReminderSettingsChangeRepository changes,
             DeliveryJournal deliveries,
+            ReminderPlanner reminders,
             CommandValidator validator,
             NotificationsProperties properties,
             Clock clock) {
         this.settings = settings;
         this.changes = changes;
         this.deliveries = deliveries;
+        this.reminders = reminders;
         this.validator = validator;
         this.properties = properties;
         this.clock = clock;
@@ -69,16 +73,19 @@ class DefaultNotificationSettings implements NotificationSettings {
         var before = byColumn(current.toView());
         var now = clock.instant();
         current.apply(command, now);
-        var after = byColumn(current.toView());
+        var changed = current.toView();
+        var after = byColumn(changed);
         after.forEach((field, value) -> {
             var old = before.get(field);
             if (!Objects.equals(old, value)) {
                 changes.save(new ReminderSettingsChangeEntity(field, old, value, actor.accountId(), now));
             }
         });
-        // Здесь, в этой же транзакции, напоминания будущих активных записей рассчитываются заново по новым
-        // настройкам (спека §3.4) — вызов планировщика напоминаний, когда он появится.
-        return current.toView();
+        if (!after.equals(before)) {
+            // В этой же транзакции, под строкой настроек на запись: слушатели событий записей ждут её фиксации.
+            reminders.replanUpcoming(changed);
+        }
+        return changed;
     }
 
     @Override

@@ -43,6 +43,13 @@ class DefaultBookingQueries implements BookingQueries {
     }
 
     @Override
+    public Optional<BookingView> find(UUID bookingId, Actor actor) {
+        var booking = bookings.findById(bookingId);
+        booking.ifPresent(found -> actor.requireReadOrSelf(Section.BOOKINGS, found.clientId()));
+        return booking.map(found -> found.toView(actor));
+    }
+
+    @Override
     public List<BookingView> activeOfClient(UUID clientId, Actor actor) {
         actor.requireReadOrSelf(Section.BOOKINGS, clientId);
         return views(
@@ -81,6 +88,12 @@ class DefaultBookingQueries implements BookingQueries {
     public List<BookingView> underReview(Actor actor) {
         actor.requireRead(Section.BOOKINGS);
         return views(bookings.underReview(BookingStatus.active(), clock.instant()), actor);
+    }
+
+    @Override
+    public List<BookingView> upcoming(Actor actor) {
+        actor.requireRead(Section.BOOKINGS);
+        return views(bookings.notStartedWithServices(BookingStatus.active(), clock.instant()), actor);
     }
 
     @Override

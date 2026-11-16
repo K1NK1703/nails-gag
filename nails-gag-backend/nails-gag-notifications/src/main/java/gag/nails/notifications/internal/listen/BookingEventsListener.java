@@ -1,8 +1,10 @@
 package gag.nails.notifications.internal.listen;
 
 import gag.nails.booking.event.BookingCancelled;
+import gag.nails.booking.event.BookingCompleted;
 import gag.nails.booking.event.BookingConfirmed;
 import gag.nails.booking.event.BookingCreated;
+import gag.nails.booking.event.BookingNoShow;
 import gag.nails.booking.event.BookingRescheduled;
 import gag.nails.booking.event.EarlierTimeAccepted;
 import gag.nails.booking.event.EarlierTimeDeclined;
@@ -16,6 +18,7 @@ import gag.nails.notifications.internal.queue.MessageQueue;
 import gag.nails.notifications.internal.queue.NewMessage;
 import gag.nails.notifications.internal.queue.QuietHours;
 import gag.nails.notifications.internal.queue.Recipient;
+import gag.nails.notifications.internal.reminder.ReminderPlanner;
 import gag.nails.notifications.model.MessageKind;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,9 +38,10 @@ import org.springframework.stereotype.Component;
  * при отправке. Срок отправки — {@code occurredAt} события, для клиентки — с переносом из тихих часов на их конец,
  * мастерские сообщения тихих часов не знают. Сообщение живёт сутки от срока отправки.
  *
- * <p>{@code BookingCompleted} и {@code BookingNoShow} сообщений не дают и здесь не слушаются; на них, как и на отмену,
- * планировщик напоминаний отменяет неотправленные напоминания записи. Перепланирование напоминаний на создание,
- * подтверждение, перенос и принятое «пораньше» — тоже его дело, не этого класса.
+ * <p>Напоминания о визите — в той же транзакции, до сообщений события ({@link ReminderPlanner}: его порядок
+ * блокировок начинается со строки настроек): создание, подтверждение, перенос и принятое «пораньше» перепланируют
+ * напоминания записи, отмена, выполнение и неявка — отменяют неотправленные. Сбой откатывает и сообщения события;
+ * повтор безопасен. {@code BookingCompleted} и {@code BookingNoShow} сообщений не дают — только отмену напоминаний.
  */
 @Component
 class BookingEventsListener {
@@ -48,11 +52,14 @@ class BookingEventsListener {
     private final MessageQueue queue;
     private final StaffDirectory staffDirectory;
     private final QuietHours quietHours;
+    private final ReminderPlanner reminders;
 
-    BookingEventsListener(MessageQueue queue, StaffDirectory staffDirectory, QuietHours quietHours) {
+    BookingEventsListener(
+            MessageQueue queue, StaffDirectory staffDirectory, QuietHours quietHours, ReminderPlanner reminders) {
         this.queue = queue;
         this.staffDirectory = staffDirectory;
         this.quietHours = quietHours;
+        this.reminders = reminders;
     }
 
     /**
@@ -62,6 +69,7 @@ class BookingEventsListener {
      */
     @ApplicationModuleListener
     void on(BookingCreated event) {
+        reminders.replan(event.bookingId());
         var confirmed = event.status() == BookingStatus.CONFIRMED;
         var plan = switch (event.createdBy()) {
             case CLIENT ->
@@ -80,12 +88,14 @@ class BookingEventsListener {
 
     @ApplicationModuleListener
     void on(BookingConfirmed event) {
+        reminders.replan(event.bookingId());
         enqueue(event, event.bookingId(), event.clientId(), Plan.clientOnly(MessageKind.CONFIRMED));
     }
 
     /** Новая причина отмены не скомпилируется, пока для неё не решено, кому писать. */
     @ApplicationModuleListener
     void on(BookingCancelled event) {
+        reminders.cancel(event.bookingId());
         var plan = switch (event.reason()) {
             case CLIENT, CLIENT_LATE -> Plan.both(MessageKind.CANCELLED_BY_CLIENT, MessageKind.STAFF_CLIENT_CANCELLED);
             case MASTER, LATE_ARRIVAL, ACCOUNT_DELETED -> Plan.clientOnly(MessageKind.CANCELLED);
@@ -97,6 +107,7 @@ class BookingEventsListener {
     /** Инициатор {@code null} (событие прежней формы) — перенос мастером. */
     @ApplicationModuleListener
     void on(BookingRescheduled event) {
+        reminders.replan(event.bookingId());
         var plan = switch (event.initiator()) {
             case CLIENT -> Plan.both(MessageKind.RESCHEDULED, MessageKind.STAFF_CLIENT_RESCHEDULED);
             case MASTER -> Plan.clientOnly(MessageKind.RESCHEDULED);
@@ -112,12 +123,25 @@ class BookingEventsListener {
 
     @ApplicationModuleListener
     void on(EarlierTimeAccepted event) {
+        reminders.replan(event.bookingId());
         enqueue(event, event.bookingId(), event.clientId(), Plan.staffOnly(MessageKind.STAFF_EARLIER_ACCEPTED));
     }
 
     @ApplicationModuleListener
     void on(EarlierTimeDeclined event) {
         enqueue(event, event.bookingId(), event.clientId(), Plan.staffOnly(MessageKind.STAFF_EARLIER_DECLINED));
+    }
+
+    /** Визит состоялся — напоминать не о чем; сообщений нет. */
+    @ApplicationModuleListener
+    void on(BookingCompleted event) {
+        reminders.cancel(event.bookingId());
+    }
+
+    /** Клиентка не пришла — напоминать не о чем; сообщений нет. */
+    @ApplicationModuleListener
+    void on(BookingNoShow event) {
+        reminders.cancel(event.bookingId());
     }
 
     private void enqueue(DomainEvent event, UUID bookingId, UUID clientId, Plan plan) {

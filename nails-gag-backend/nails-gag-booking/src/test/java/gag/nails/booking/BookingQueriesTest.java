@@ -23,6 +23,9 @@ class BookingQueriesTest extends BookingTestSupport {
     @Autowired
     VisitMarks marks;
 
+    @Autowired
+    EarlierTimeOffers offers;
+
     @Test
     void clientSeesOwnBookingAndMasterSeesAny() {
         var anna = client("Анна");
@@ -112,6 +115,43 @@ class BookingQueriesTest extends BookingTestSupport {
                 .extracting(BookingView::id)
                 .containsExactly(sooner.id(), later.id());
         assertThatThrownBy(() -> queries.awaitingPrepayment(Actor.client(later.clientId())))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void findIsEmptyForMissingBookingAndChecksAccessLikeGet() {
+        var anna = client("Анна");
+        var booking = book(anna, slot(MONDAY, "12:00"));
+
+        assertThat(queries.find(booking.id(), master)).contains(queries.get(booking.id(), master));
+        assertThat(queries.find(booking.id(), Actor.client(anna))).contains(queries.get(booking.id(), master));
+        assertThat(queries.find(UUID.randomUUID(), master)).isEmpty();
+        assertThatThrownBy(() -> queries.find(booking.id(), Actor.client(client("Мария"))))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void upcomingListsActiveNotStartedBookingsByVisitStartForMasterOnly() {
+        var soonSlot = slot(MONDAY, "10:00");
+        var soon = book(client("Анна"), soonSlot);
+        var noon = book(client("Мария"), slot(MONDAY, "12:00"));
+        var tuesday = book(clientOwingPrepayment("Ольга"), slot(TUESDAY, "12:00"));
+        var cancelled = book(client("Вера"), slot(MONDAY, "14:00"));
+        bookings.cancel(cancelled.id(), master);
+        // Согласованное более раннее время (11:00) ставит запись на 16:00 перед записью на 12:00.
+        var earlier = book(client("Нина"), slot(MONDAY, "16:00"));
+        offers.propose(earlier.id(), earlier.slotStartsAt().minus(Duration.ofHours(5)), master);
+        offers.respond(earlier.id(), true, Actor.client(earlier.clientId()));
+
+        assertThat(queries.upcoming(master))
+                .extracting(BookingView::id)
+                .containsExactly(soon.id(), earlier.id(), noon.id(), tuesday.id());
+
+        timeIsAfterStartOf(soonSlot, Duration.ofMinutes(1));
+        assertThat(queries.upcoming(master))
+                .extracting(BookingView::id)
+                .containsExactly(earlier.id(), noon.id(), tuesday.id());
+        assertThatThrownBy(() -> queries.upcoming(Actor.client(noon.clientId())))
                 .isInstanceOf(AccessDeniedException.class);
     }
 }
