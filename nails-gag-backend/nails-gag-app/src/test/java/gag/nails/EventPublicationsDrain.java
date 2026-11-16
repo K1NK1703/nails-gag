@@ -16,7 +16,7 @@ import org.springframework.test.context.TestExecutionListener;
  *
  * <p>Видны только зафиксированные публикации: счёт идёт на отдельном соединении пула, мимо транзакции теста.
  * Неудачные ({@code FAILED}) не ждутся — их повторяет только рестарт. Без загруженного контекста, без
- * {@link DataSource} или без таблицы реестра слушатель ничего не делает.
+ * {@link DataSource} или без таблицы реестра слушатель ничего не делает; ошибка запроса к базе — ошибка теста.
  */
 public final class EventPublicationsDrain implements TestExecutionListener, Ordered {
 
@@ -68,7 +68,7 @@ public final class EventPublicationsDrain implements TestExecutionListener, Orde
         }
     }
 
-    /** Обрабатываемые публикации; без таблицы реестра — ноль. */
+    /** Обрабатываемые публикации; без таблицы реестра — ноль, ошибка базы — ошибка теста. */
     private static long inProgress(DataSource dataSource) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.createStatement()) {
@@ -81,7 +81,8 @@ public final class EventPublicationsDrain implements TestExecutionListener, Orde
                 return count.next() ? count.getLong(1) : 0;
             }
         } catch (SQLException e) {
-            return 0;
+            // Сломанный запрос или закрытый пул не должны молча выключать ожидание.
+            throw new AssertionError("cannot count event publications: " + e.getMessage(), e);
         }
     }
 }
