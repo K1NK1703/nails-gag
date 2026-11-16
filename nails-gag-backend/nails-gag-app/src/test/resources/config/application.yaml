@@ -1,0 +1,6 @@
+# Поверх application.yaml приложения во всех тестах модуля (classpath:/config/ сильнее classpath:/).
+nails-gag:
+  notifications:
+    jobs:
+      # Отправка и уборка уведомлений не запускаются по расписанию посреди тестов других модулей.
+      enabled: false

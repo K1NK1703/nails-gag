@@ -1,0 +1,2 @@
+# Асинхронные слушатели событий не переходят границу теста: после теста ждём обработки публикаций реестра.
+org.springframework.test.context.TestExecutionListener=gag.nails.EventPublicationsDrain

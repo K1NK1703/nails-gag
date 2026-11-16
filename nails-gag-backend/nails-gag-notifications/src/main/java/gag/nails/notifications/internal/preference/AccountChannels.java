@@ -4,29 +4,36 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
-/** Всё, что модуль хранит об аккаунте для каналов: настройка, привязка Telegram и ссылка привязки. */
+/**
+ * Всё, что модуль хранит об аккаунте для каналов: ссылка привязки, привязка Telegram и настройка каналов.
+ *
+ * <p>Порядок блокировок модуля по этим таблицам — токен → чат → настройки каналов ({@code link_token} →
+ * {@code telegram_chat} → {@code preference}): привязка бота по ссылке сначала гасит токен, потом пишет чат. Кто
+ * меняет несколько из них в одной транзакции, идёт в этом порядке — иначе встречная привязка может дать взаимную
+ * блокировку или оставить чат удалённого аккаунта.
+ */
 @Component
 public class AccountChannels {
 
-    private final PreferenceRepository preferences;
-    private final TelegramChatRepository chats;
     private final JdbcClient jdbc;
 
-    AccountChannels(PreferenceRepository preferences, TelegramChatRepository chats, JdbcClient jdbc) {
-        this.preferences = preferences;
-        this.chats = chats;
+    AccountChannels(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 
     /**
-     * Удаляет настройку каналов, привязку бота и ссылку привязки аккаунта (спека §3.10); чего нет — пропускается.
-     * Вызывается из синхронного слушателя в транзакции удаления аккаунта. Ссылка привязки — запросом JDBC: своей
-     * сущности у неё пока нет (её заводят вместе с приёмом обновлений бота).
+     * Удаляет ссылку привязки, привязку бота и настройку каналов аккаунта (спека §3.10) — в порядке блокировок модуля;
+     * чего нет — пропускается. Вызывается из синхронного слушателя в транзакции удаления аккаунта, поэтому запросами
+     * JDBC: контекст персистентности источника не сбрасывается и не очищается.
      */
     public void forget(UUID accountId) {
-        chats.deleteByAccountId(accountId);
-        preferences.deleteByAccountId(accountId);
         jdbc.sql("delete from notifications.link_token where account_id = :accountId")
+                .param("accountId", accountId)
+                .update();
+        jdbc.sql("delete from notifications.telegram_chat where account_id = :accountId")
+                .param("accountId", accountId)
+                .update();
+        jdbc.sql("delete from notifications.preference where account_id = :accountId")
                 .param("accountId", accountId)
                 .update();
     }

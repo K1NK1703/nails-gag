@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gag.nails.clients.ClientService;
 import gag.nails.clients.command.CreateClient;
+import gag.nails.clients.command.RegisterClient;
 import gag.nails.common.actor.Actor;
 import gag.nails.identity.AccessAdministration;
 import gag.nails.identity.Accounts;
@@ -16,6 +17,7 @@ import gag.nails.testsupport.MutableClock;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.jspecify.annotations.Nullable;
@@ -122,6 +124,36 @@ class ClientAndAccountEventsTest {
     }
 
     /**
+     * Объединение карточек, у обеих из которых аккаунт: модуль входа удаляет аккаунт удаляемой карточки
+     * ({@code AccountDeleted}) — его каналы забываются, мастерские сообщения отменяются; сообщения клиентке переходят
+     * оставшейся карточке, каналы оставшегося аккаунта не трогаются.
+     */
+    @Test
+    void mergeOfTwoAccountsForgetsRemovedAccount() {
+        var removedAccount = account();
+        var survivorAccount = account();
+        var source = clients.register(new RegisterClient(removedAccount, "Анна", null, null))
+                .id();
+        var target = clients.register(new RegisterClient(survivorAccount, "Анна", null, null))
+                .id();
+        preferences.update(new UpdateMyChannels(true, false), Actor.of(removedAccount, source, Map.of()));
+        linkTelegram(removedAccount);
+        linkTelegram(survivorAccount);
+        var staffPending = message(MessageKind.STAFF_NEW_BOOKING, null, removedAccount, MessageStatus.PENDING);
+        var clientPending = message(MessageKind.CONFIRMED, source, null, MessageStatus.PENDING);
+
+        var result = clients.merge(source, target, Actor.master());
+
+        assertThat(result.survivorId()).isEqualTo(target);
+        assertThat(count("telegram_chat", removedAccount)).isZero();
+        assertThat(count("preference", removedAccount)).isZero();
+        assertThat(count("telegram_chat", survivorAccount)).isOne();
+        assertThat(status(staffPending)).isEqualTo(MessageStatus.CANCELLED);
+        assertThat(recipient(clientPending)).isEqualTo(target);
+        assertThat(status(clientPending)).isEqualTo(MessageStatus.PENDING);
+    }
+
+    /**
      * Слушатели работают только в транзакции источника: без неё событие отвергается, а не обрабатывается в своей
      * транзакции. Проверка — на {@link AccountDeleted}: у событий карточек есть и другие синхронные слушатели.
      */
@@ -140,15 +172,21 @@ class ClientAndAccountEventsTest {
 
     /** Аккаунт мастера без карточки клиента: строка аккаунта — напрямую, роль — через права. */
     private UUID masterAccount() {
-        var accountId = UUID.randomUUID();
-        jdbc.sql("insert into identity.account (id, created_at, last_login_at) values (?, ?, ?)")
-                .params(accountId, Timestamp.from(clock.instant()), Timestamp.from(clock.instant()))
-                .update();
+        var accountId = account();
         var masterRole = access.roles(Actor.developer()).stream()
                 .filter(role -> role.code().equals("MASTER"))
                 .findFirst()
                 .orElseThrow();
         access.assignRole(accountId, masterRole.id(), Actor.developer());
+        return accountId;
+    }
+
+    /** Аккаунт входа без способов входа: строка — напрямую (вход в тестах модуля не нужен). */
+    private UUID account() {
+        var accountId = UUID.randomUUID();
+        jdbc.sql("insert into identity.account (id, created_at, last_login_at) values (?, ?, ?)")
+                .params(accountId, Timestamp.from(clock.instant()), Timestamp.from(clock.instant()))
+                .update();
         return accountId;
     }
 

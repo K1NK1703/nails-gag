@@ -8,6 +8,7 @@ import gag.nails.testsupport.TestTimeConfiguration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,20 +24,27 @@ import org.springframework.modulith.events.IncompleteEventPublications;
 @NotificationsModuleTest
 class OutstandingEventsTest extends QueueTestSupport {
 
-    /** Имя триггера и его функции в схеме notifications: ставится тестом и снимается после него. */
-    private static final String FAILURE_TRIGGER = "outstanding_events_test_fail_insert";
-
     private static final Instant NOW = TestTimeConfiguration.START;
 
     @Autowired
     IncompleteEventPublications incompletePublications;
 
+    /**
+     * Имя триггера и его функции в схеме notifications — с id записи теста, чтобы не совпасть ни с чьим другим;
+     * ставится тестом и снимается после него.
+     */
+    private @Nullable String failureTrigger;
+
     @AfterEach
     void dropTrigger() {
-        jdbc.sql("DROP TRIGGER IF EXISTS %1$s ON notifications.message".formatted(FAILURE_TRIGGER))
+        if (failureTrigger == null) {
+            return;
+        }
+        jdbc.sql("DROP TRIGGER IF EXISTS %1$s ON notifications.message".formatted(failureTrigger))
                 .update();
-        jdbc.sql("DROP FUNCTION IF EXISTS notifications.%s()".formatted(FAILURE_TRIGGER))
+        jdbc.sql("DROP FUNCTION IF EXISTS notifications.%s()".formatted(failureTrigger))
                 .update();
+        failureTrigger = null;
     }
 
     @Test
@@ -61,6 +69,8 @@ class OutstandingEventsTest extends QueueTestSupport {
     }
 
     private void failInsertsOf(UUID bookingId) {
+        var trigger = "outstanding_events_test_" + bookingId.toString().replace("-", "");
+        failureTrigger = trigger;
         jdbc.sql("""
                 CREATE OR REPLACE FUNCTION notifications.%s() RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN
@@ -68,16 +78,16 @@ class OutstandingEventsTest extends QueueTestSupport {
                         RAISE EXCEPTION 'message rejected by test';
                     END IF;
                     RETURN NEW;
-                END $$""".formatted(FAILURE_TRIGGER, bookingId)).update();
+                END $$""".formatted(trigger, bookingId)).update();
         jdbc.sql("""
                 CREATE OR REPLACE TRIGGER %1$s BEFORE INSERT ON notifications.message
-                FOR EACH ROW EXECUTE FUNCTION notifications.%1$s()""".formatted(FAILURE_TRIGGER)).update();
+                FOR EACH ROW EXECUTE FUNCTION notifications.%1$s()""".formatted(trigger)).update();
     }
 
     /** Ждёт, пока публикация о записи не будет отмечена неудачной: слушатель упал, публикация осталась. */
     private void awaitFailed(UUID bookingId) {
         var deadline = System.nanoTime() + WAIT.toNanos();
-        while (!publicationStatuses(bookingId).equals(List.of("FAILED"))) {
+        while (!publicationStatuses(bookingId).equals(List.of(FAILED))) {
             if (System.nanoTime() > deadline) {
                 throw new AssertionError(
                         "publication of " + bookingId + " has not failed: " + publicationStatuses(bookingId));

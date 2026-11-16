@@ -66,6 +66,9 @@ abstract class QueueTestSupport {
     /** Срок жизни событийного сообщения после его {@code due_at}. */
     static final Duration EXPIRY = Duration.ofHours(24);
 
+    /** Состояние публикации, которую слушатель не обработал. */
+    static final String FAILED = "FAILED";
+
     /** Версия политики и оферты из seed модуля clients. */
     private static final String DOCUMENTS_VERSION = "2026-09-25";
 
@@ -103,6 +106,8 @@ abstract class QueueTestSupport {
     @AfterEach
     void removeCommitted() {
         if (!bookingIds.isEmpty()) {
+            // Слушатель, ещё работающий над событием теста, мог бы вставить сообщение уже после уборки.
+            awaitSettled(bookingIds);
             delete("delete from notifications.message where booking_id in (:ids)", bookingIds);
             for (var bookingId : bookingIds) {
                 jdbc.sql("delete from modulith.event_publication where serialized_event like :pattern")
@@ -206,7 +211,8 @@ abstract class QueueTestSupport {
 
     /**
      * Ждёт, пока в реестре не останется публикаций о записи: слушатели завершились успешно. Публикация, которую
-     * слушатель не обработал (например, упал), остаётся — тогда ожидание кончается ошибкой с её состоянием.
+     * слушатель не обработал (упал), остаётся в состоянии {@code FAILED} — тогда ожидание сразу кончается ошибкой с
+     * состояниями публикаций; зависшая — ошибкой по таймауту.
      */
     void awaitProcessed(UUID bookingId) {
         var deadline = System.nanoTime() + WAIT.toNanos();
@@ -215,10 +221,31 @@ abstract class QueueTestSupport {
             if (statuses.isEmpty()) {
                 return;
             }
+            if (statuses.contains(FAILED)) {
+                throw new AssertionError("publications of " + bookingId + " failed: " + statuses);
+            }
             if (System.nanoTime() > deadline) {
                 throw new AssertionError("publications of " + bookingId + " are not completed: " + statuses);
             }
             pause();
+        }
+    }
+
+    /**
+     * Для уборки: ждёт (всего не дольше {@link #WAIT}), пока у публикаций о записях теста не останется работающих
+     * слушателей — публикаций нет или все они {@code FAILED}. Не бросает: уборка идёт дальше в любом случае.
+     */
+    private void awaitSettled(Collection<UUID> bookingIds) {
+        var deadline = System.nanoTime() + WAIT.toNanos();
+        try {
+            for (var bookingId : bookingIds) {
+                while (System.nanoTime() < deadline
+                        && publicationStatuses(bookingId).stream().anyMatch(status -> !status.equals(FAILED))) {
+                    pause();
+                }
+            }
+        } catch (RuntimeException | AssertionError e) {
+            // Уборка не должна падать из-за ожидания; оставшееся удаляется ниже.
         }
     }
 

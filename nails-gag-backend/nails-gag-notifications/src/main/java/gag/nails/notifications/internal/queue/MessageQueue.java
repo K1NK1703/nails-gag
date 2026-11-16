@@ -33,8 +33,12 @@ public class MessageQueue {
      * @return поставлено ли сообщение
      */
     public boolean enqueue(NewMessage message) {
-        var clientId = message.recipient() instanceof Recipient.Client client ? client.clientId() : null;
-        var accountId = message.recipient() instanceof Recipient.Account account ? account.accountId() : null;
+        UUID clientId = null;
+        UUID accountId = null;
+        switch (message.recipient()) {
+            case Recipient.Client client -> clientId = client.clientId();
+            case Recipient.Account account -> accountId = account.accountId();
+        }
         var inserted = jdbc.sql("""
                         insert into notifications.message (id, client_id, account_id, kind, booking_id, due_at,
                             expires_at, status, dedup_key, created_at)
