@@ -16,6 +16,8 @@ dependencies {
     implementation(libs.spring.boot.starter.mail)
 
     testImplementation(project(":nails-gag-test-support"))
+    // Тесты очереди заводят слоты для настоящих записей через публичный API расписания.
+    testImplementation(project(":nails-gag-schedule"))
     // Тест событий пропускает их через EventSerializer реестра и правит JSON публикаций тем же JsonMapper.
     testImplementation(libs.spring.modulith.events.core)
     testImplementation(libs.jackson.databind)

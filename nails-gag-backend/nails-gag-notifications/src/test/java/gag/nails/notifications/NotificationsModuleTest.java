@@ -17,8 +17,10 @@ import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.test.context.TestExecutionListeners.MergeMode;
 
 /**
- * Тест модуля уведомлений — как {@link ModuleTest}, но с режимом {@code ALL_DEPENDENCIES} и без тестовой транзакции
- * с откатом. Режим: модулю записей, от которого зависят уведомления, нужны расписание, каталог, клиенты и файлы.
+ * Тест модуля уведомлений — как {@link ModuleTest}, но с режимом {@code ALL_DEPENDENCIES}, с модулем записей и без
+ * тестовой транзакции с откатом. Модуль записей и то, без чего он не работает (расписание, каталог, файлы), включены
+ * явно: уведомления только слушают его события, а такую зависимость Spring Modulith в тест не поднимает, — тесты же
+ * создают, отменяют и переносят настоящие записи.
  * Транзакция: слушатели событий ({@code @ApplicationModuleListener}) срабатывают только после фиксации, поэтому
  * класс, которому фиксация не нужна, сам ставит {@code @Transactional}, а фиксирующие тесты работают на своих записях
  * и убирают их за собой.
@@ -26,7 +28,9 @@ import org.springframework.test.context.TestExecutionListeners.MergeMode;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@ApplicationModuleTest(mode = BootstrapMode.ALL_DEPENDENCIES)
+@ApplicationModuleTest(
+        mode = BootstrapMode.ALL_DEPENDENCIES,
+        extraIncludes = {"booking", "schedule", "catalog", "files"})
 @ActiveProfiles("test")
 @Import({PostgresTestcontainers.class, TestTimeConfiguration.class})
 @TestExecutionListeners(listeners = ResetClockListener.class, mergeMode = MergeMode.MERGE_WITH_DEFAULTS)

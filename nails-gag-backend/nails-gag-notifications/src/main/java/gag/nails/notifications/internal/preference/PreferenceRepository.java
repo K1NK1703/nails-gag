@@ -32,4 +32,9 @@ interface PreferenceRepository extends JpaRepository<PreferenceEntity, UUID> {
                         updated_at = excluded.updated_at
                     """, nativeQuery = true)
     void upsert(UUID id, UUID accountId, boolean emailEnabled, boolean telegramEnabled, Instant now);
+
+    /** Удаляет настройку аккаунта; без настройки ничего не делает. */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from PreferenceEntity p where p.accountId = :accountId")
+    int deleteByAccountId(UUID accountId);
 }
