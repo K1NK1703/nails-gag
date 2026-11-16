@@ -1,8 +1,13 @@
 package gag.nails.notifications;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
+import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
+import gag.nails.common.actor.Section;
+import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.id.UuidV7;
 import gag.nails.common.paging.Paging;
 import gag.nails.notifications.command.DeliveryFilter;
@@ -13,6 +18,7 @@ import gag.nails.notifications.model.MessageKind;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -137,6 +143,57 @@ class DeliveriesJournalTest {
                 .isEqualTo(allBefore + 2);
         assertThat(settings.deliveries(failed, new Paging(0, 1), Actor.master()).total())
                 .isEqualTo(failedBefore + 1);
+    }
+
+    @Test
+    void statusAndBookingFiltersCombine() {
+        var bookingId = UUID.randomUUID();
+        var otherBookingId = UUID.randomUUID();
+        var messageId = message(bookingId, UUID.randomUUID(), null, MessageKind.CONFIRMED, DUE);
+        var otherMessageId = message(otherBookingId, UUID.randomUUID(), null, MessageKind.CONFIRMED, DUE);
+        var failed = delivery(messageId, Channel.EMAIL, DeliveryStatus.FAILED, 5, "transient_exhausted", null);
+        delivery(messageId, Channel.TELEGRAM, DeliveryStatus.SENT, 1, null, DUE);
+        delivery(otherMessageId, Channel.EMAIL, DeliveryStatus.FAILED, 1, "email_rejected", null);
+
+        var page = settings.deliveries(
+                new DeliveryFilter(DeliveryStatus.FAILED, bookingId), new Paging(0, 20), Actor.master());
+
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.items())
+                .extracting(DeliveryView::deliveryId, DeliveryView::errorCode)
+                .containsExactly(tuple(failed, "transient_exhausted"));
+    }
+
+    @Test
+    void pageBeyondTheEndIsEmptyWithTotal() {
+        var bookingId = UUID.randomUUID();
+        var messageId = message(bookingId, UUID.randomUUID(), null, MessageKind.CONFIRMED, DUE);
+        delivery(messageId, Channel.EMAIL, DeliveryStatus.SENT, 1, null, DUE);
+
+        var page = settings.deliveries(new DeliveryFilter(null, bookingId), new Paging(5, 20), Actor.master());
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.total()).isEqualTo(1);
+    }
+
+    /** Журнал — раздел «Уведомления»: клиенту и сотруднику без чтения раздела он закрыт. */
+    @Test
+    void journalNeedsNotificationsRead() {
+        var filter = new DeliveryFilter(null, null);
+
+        assertThatThrownBy(() -> settings.deliveries(filter, new Paging(0, 20), Actor.client(UUID.randomUUID())))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> settings.deliveries(
+                        filter,
+                        new Paging(0, 20),
+                        Actor.of(UUID.randomUUID(), null, Map.of(Section.BOOKINGS, AccessLevel.WRITE))))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(settings.deliveries(
+                                filter,
+                                new Paging(0, 1),
+                                Actor.of(UUID.randomUUID(), null, Map.of(Section.NOTIFICATIONS, AccessLevel.READ)))
+                        .page())
+                .isZero();
     }
 
     private UUID message(UUID bookingId, UUID clientId, UUID accountId, MessageKind kind, Instant dueAt) {

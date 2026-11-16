@@ -8,6 +8,7 @@ import gag.nails.booking.model.BookingView;
 import gag.nails.clients.ClientService;
 import gag.nails.clients.command.CreateClient;
 import gag.nails.clients.command.RecordConsent;
+import gag.nails.clients.command.RegisterClient;
 import gag.nails.clients.model.ConsentKind;
 import gag.nails.clients.model.ConsentSource;
 import gag.nails.common.actor.AccessLevel;
@@ -128,6 +129,9 @@ abstract class QueueTestSupport {
             delete("delete from schedule.slot where id in (:ids)", slotIds);
         }
         if (!accountIds.isEmpty()) {
+            delete("delete from notifications.link_token where account_id in (:ids)", accountIds);
+            delete("delete from notifications.telegram_chat where account_id in (:ids)", accountIds);
+            delete("delete from notifications.preference where account_id in (:ids)", accountIds);
             // Роли аккаунта удаляются каскадом.
             delete("delete from identity.account where id in (:ids)", accountIds);
         }
@@ -139,14 +143,46 @@ abstract class QueueTestSupport {
 
     /** Клиентка с согласиями на действующие политику и оферту — может записываться сама. */
     UUID client(String firstName) {
-        var id = clients.create(new CreateClient(firstName, null, null, null, null, null), master)
+        return client(firstName, null, null);
+    }
+
+    /** Карточка без аккаунта, заведённая мастером, — с фамилией и почтой, если заданы, и с согласиями. */
+    UUID client(String firstName, @Nullable String lastName, @Nullable String email) {
+        var id = clients.create(new CreateClient(firstName, lastName, null, null, email, null), master)
+                .id();
+        return consented(id);
+    }
+
+    /** Клиентка, зарегистрированная со своим аккаунтом входа, с почтой и согласиями. */
+    Registered registeredClient(String firstName, String email) {
+        var accountId = account();
+        var clientId = clients.register(new RegisterClient(accountId, firstName, null, email))
+                .id();
+        return new Registered(consented(clientId), accountId);
+    }
+
+    /** Карточка аккаунта сотрудника с почтой: так у сотрудника появляется почта для уведомлений. */
+    UUID cardOf(UUID accountId, String firstName, String email) {
+        var id = clients.register(new RegisterClient(accountId, firstName, null, email))
                 .id();
         clientIds.add(id);
+        return id;
+    }
+
+    /** Привязывает Telegram-бота к аккаунту — строкой напрямую, как это сделает привязка по ссылке. */
+    void linkTelegram(UUID accountId, long chatId) {
+        jdbc.sql("insert into notifications.telegram_chat (id, account_id, chat_id, linked_at) values (?, ?, ?, ?)")
+                .params(UUID.randomUUID(), accountId, chatId, Timestamp.from(clock.instant()))
+                .update();
+    }
+
+    private UUID consented(UUID clientId) {
+        clientIds.add(clientId);
         for (var kind : List.of(ConsentKind.PERSONAL_DATA, ConsentKind.OFFER)) {
             clients.recordConsent(
-                    id, new RecordConsent(kind, DOCUMENTS_VERSION, ConsentSource.ENTERED_BY_MASTER), master);
+                    clientId, new RecordConsent(kind, DOCUMENTS_VERSION, ConsentSource.ENTERED_BY_MASTER), master);
         }
-        return id;
+        return clientId;
     }
 
     /** Клиентка с признаком обязательной предоплаты: её самозапись ждёт предоплату. */
@@ -164,15 +200,21 @@ abstract class QueueTestSupport {
 
     /** Аккаунт сотрудника без карточки клиента со встроенной ролью; строки — напрямую, мимо журнала прав. */
     UUID staffAccount(String roleCode) {
+        var accountId = account();
+        jdbc.sql("""
+                        insert into identity.account_role (account_id, role_id)
+                        select ?, id from identity.role where code = ?
+                        """).params(accountId, roleCode).update();
+        return accountId;
+    }
+
+    /** Аккаунт входа без ролей и способов входа; строка — напрямую. Убирается после теста с его каналами. */
+    UUID account() {
         var accountId = UUID.randomUUID();
         accountIds.add(accountId);
         jdbc.sql("insert into identity.account (id, created_at, last_login_at) values (?, ?, ?)")
                 .params(accountId, Timestamp.from(clock.instant()), Timestamp.from(clock.instant()))
                 .update();
-        jdbc.sql("""
-                        insert into identity.account_role (account_id, role_id)
-                        select ?, id from identity.role where code = ?
-                        """).params(accountId, roleCode).update();
         return accountId;
     }
 
@@ -338,6 +380,9 @@ abstract class QueueTestSupport {
             throw new AssertionError(e);
         }
     }
+
+    /** Карточка клиентки и её аккаунт входа. */
+    record Registered(UUID clientId, UUID accountId) {}
 
     /** Строка очереди, как её видит тест. */
     record QueuedMessage(

@@ -160,7 +160,13 @@ class BookingEventsListener {
 
     private void enqueue(DomainEvent event, UUID bookingId, MessageKind kind, Recipient recipient, Instant dueAt) {
         queue.enqueue(new NewMessage(
-                kind, recipient, bookingId, dueAt, dueAt.plus(EXPIRY), dedupKey(event, bookingId, recipient)));
+                kind,
+                recipient,
+                bookingId,
+                dueAt,
+                dueAt.plus(EXPIRY),
+                dedupKey(event, bookingId, recipient),
+                event.occurredAt()));
     }
 
     /**

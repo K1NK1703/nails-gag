@@ -86,6 +86,10 @@ CREATE TABLE notifications.message (
                                         CHECK (status IN ('PENDING', 'DISPATCHED', 'CANCELLED')),
     -- Повтор события после рестарта не создаёт второе сообщение: вставка ON CONFLICT (dedup_key) DO NOTHING.
     dedup_key     varchar(255) NOT NULL CONSTRAINT message_dedup_key_key UNIQUE,
+    -- Момент события, из-за которого сообщение поставлено (у напоминания — момент расчёта): при равном due_at
+    -- сообщения уходят в порядке событий, а не постановки — слушатели событий асинхронны и идут не по порядку.
+    -- Очередь пишет его всегда; пусто — у строк, вставленных мимо очереди: они идут после остальных с тем же due_at.
+    occurred_at   timestamptz,
     created_at    timestamptz  NOT NULL,
     dispatched_at timestamptz,
     CONSTRAINT message_recipient_check CHECK ((client_id IS NULL) <> (account_id IS NULL)),
@@ -95,8 +99,8 @@ CREATE TABLE notifications.message (
     CONSTRAINT message_dispatched_at_check CHECK ((status = 'DISPATCHED') = (dispatched_at IS NOT NULL))
 );
 
--- Созревшие сообщения для отправки в порядке due_at, created_at.
-CREATE INDEX message_pending_due_at_idx ON notifications.message (due_at, created_at) WHERE status = 'PENDING';
+-- Созревшие сообщения для отправки в порядке due_at, момента события и id.
+CREATE INDEX message_pending_due_at_idx ON notifications.message (due_at, occurred_at, id) WHERE status = 'PENDING';
 -- Перепланирование и отмена напоминаний записи, журнал доставок по записи.
 CREATE INDEX message_booking_id_idx ON notifications.message (booking_id);
 -- Обезличивание и объединение карточек трогают только неотправленные сообщения.

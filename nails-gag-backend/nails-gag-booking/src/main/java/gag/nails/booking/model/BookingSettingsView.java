@@ -1,5 +1,8 @@
 package gag.nails.booking.model;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 /**
  * Правила записи, которые мастер настраивает сама.
  *
@@ -18,4 +21,20 @@ public record BookingSettingsView(
         int freeCancelWindowHours,
         int prepaymentPercent,
         int lateArrivalToleranceMinutes,
-        int markCorrectionWindowDays) {}
+        int markCorrectionWindowDays) {
+
+    private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
+
+    /**
+     * Сумма предоплаты по умолчанию: процент предоплаты от прайса выбранного при записи состава, округлённый до рубля
+     * (половина — вверх), но не меньше рубля; два знака после запятой. Её отмечает {@code BookingPrepayments}, если
+     * сотрудник не ввёл свою, и её же называют клиенту в сообщении о предоплате. Это же правило повторяет миграция
+     * {@code booking/0005-finance.sql} для предоплат, полученных до появления суммы.
+     */
+    public BigDecimal defaultPrepaymentAmount(BigDecimal plannedPrice) {
+        var amount = plannedPrice
+                .multiply(BigDecimal.valueOf(prepaymentPercent))
+                .divide(ONE_HUNDRED, 0, RoundingMode.HALF_UP);
+        return amount.max(BigDecimal.ONE).setScale(2, RoundingMode.UNNECESSARY);
+    }
+}

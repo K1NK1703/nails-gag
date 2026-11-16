@@ -51,9 +51,9 @@ public class MessageQueue {
         }
         var inserted = jdbc.sql("""
                         insert into notifications.message (id, client_id, account_id, kind, booking_id, due_at,
-                            expires_at, status, dedup_key, created_at)
+                            expires_at, status, dedup_key, occurred_at, created_at)
                         values (:id, :clientId, :accountId, :kind, :bookingId, :dueAt, :expiresAt, 'PENDING',
-                            :dedupKey, :now)
+                            :dedupKey, :occurredAt, :now)
                         on conflict (dedup_key) do nothing
                         """)
                 .param("id", UuidV7.next())
@@ -64,6 +64,7 @@ public class MessageQueue {
                 .param("dueAt", timestamp(message.dueAt()))
                 .param("expiresAt", timestamp(message.expiresAt()))
                 .param("dedupKey", message.dedupKey())
+                .param("occurredAt", timestamp(message.occurredAt()))
                 .param("now", timestamp(clock.instant()))
                 .update();
         return inserted > 0;

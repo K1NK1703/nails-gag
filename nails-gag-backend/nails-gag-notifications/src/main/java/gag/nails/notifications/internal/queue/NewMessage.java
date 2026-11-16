@@ -13,9 +13,17 @@ import java.util.UUID;
  * @param dueAt когда отправлять
  * @param expiresAt после этого момента сообщение не отправляется
  * @param dedupKey ключ повтора: второе сообщение с тем же ключом не ставится
+ * @param occurredAt момент события, из-за которого сообщение ставится (у напоминания — момент расчёта): при равном
+ *     {@code dueAt} сообщения отправляются в порядке событий
  */
 public record NewMessage(
-        MessageKind kind, Recipient recipient, UUID bookingId, Instant dueAt, Instant expiresAt, String dedupKey) {
+        MessageKind kind,
+        Recipient recipient,
+        UUID bookingId,
+        Instant dueAt,
+        Instant expiresAt,
+        String dedupKey,
+        Instant occurredAt) {
 
     /** Длина колонки {@code message.dedup_key}. */
     public static final int DEDUP_KEY_MAX_LENGTH = 255;
@@ -33,5 +41,11 @@ public record NewMessage(
         if (dedupKey.isEmpty() || dedupKey.length() > DEDUP_KEY_MAX_LENGTH) {
             throw new InternalException("message dedup key length is out of range: " + dedupKey.length());
         }
+    }
+
+    /** Прежняя форма: момент события неизвестен — им считается срок отправки. */
+    public NewMessage(
+            MessageKind kind, Recipient recipient, UUID bookingId, Instant dueAt, Instant expiresAt, String dedupKey) {
+        this(kind, recipient, bookingId, dueAt, expiresAt, dedupKey, dueAt);
     }
 }

@@ -40,6 +40,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Блокировка записи упорядочивает слушателей одной записи между собой: строку настроек на чтение они держат
  * одновременно. Смене настроек она не нужна: держа строку настроек на запись, смена исключает всех, кто берёт
  * блокировку записи, — они берут строку настроек раньше.
+ *
+ * <p>Отправка ({@code Dispatcher}) в этом порядке не участвует: она берёт только строки созревших сообщений и доставок,
+ * и то без ожидания ({@code FOR UPDATE SKIP LOCKED}), — ни строки настроек, ни блокировок записей. Неотправленное
+ * сообщение, которое она уже взяла, остальные ждут до её короткой фиксации и видят уже не {@code PENDING}.
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
@@ -108,10 +112,11 @@ public class ReminderPlanner {
             return;
         }
         var recipient = new Recipient.Client(booking.clientId());
-        for (var reminder : schedule.plan(booking.agreedStart(), booking.slotStartsAt(), current, clock.instant())) {
+        var now = clock.instant();
+        for (var reminder : schedule.plan(booking.agreedStart(), booking.slotStartsAt(), current, now)) {
             var dedupKey = "reminder:" + reminder.kind().name() + ":" + booking.id() + ":" + reminder.dueAt();
             queue.enqueue(new NewMessage(
-                    reminder.kind(), recipient, booking.id(), reminder.dueAt(), reminder.expiresAt(), dedupKey));
+                    reminder.kind(), recipient, booking.id(), reminder.dueAt(), reminder.expiresAt(), dedupKey, now));
         }
     }
 }
