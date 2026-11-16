@@ -15,10 +15,15 @@ import org.springframework.stereotype.Component;
  * событий записи или синхронного слушателя в чужой транзакции. Запросы — напрямую через JDBC: сущности сообщения в
  * контексте персистентности нет, поэтому изменения ничего не отсоединяют и не требуют сброса чужих изменений.
  *
- * <p>Изменения нескольких строк сначала блокируют их подзапросом {@code … order by id for update}: две транзакции,
- * меняющие пересекающиеся наборы (отмена сообщений карточки и перепланирование напоминаний её записи), берут общие
- * строки в одном порядке и не блокируют друг друга накрест. Порядок блокировок модуля по очереди — в
- * {@code ReminderPlanner}.
+ * <p>Изменения нескольких строк сначала блокируют их подзапросом {@code … order by id for update}: два таких
+ * запроса в разных транзакциях берут общие строки в одном порядке и не блокируют друг друга накрест. Это защищает
+ * только один запрос от другого. Транзакцию из нескольких запросов — смену настроек, перепланирующую напоминания
+ * запись за записью по началу визита, — порядок id от взаимной блокировки с отменой сообщений карточки не спасает:
+ * от неё защищает строка настроек, которую все, кто меняет неотправленные сообщения, берут первой (смена — на запись,
+ * остальные — на чтение). Порядок блокировок очереди — в {@code ReminderPlanner}.
+ *
+ * <p>Отбор по карточке или аккаунту повторён и снаружи подзапроса: при многих подходящих строках внешняя сторона тоже
+ * идёт по частичному индексу неотправленных, а не полным просмотром таблицы.
  */
 @Component
 public class MessageQueue {
@@ -68,7 +73,8 @@ public class MessageQueue {
     public int cancelPendingOfClient(UUID clientId) {
         return jdbc.sql("""
                         update notifications.message set status = 'CANCELLED'
-                        where id in (select id from notifications.message
+                        where client_id = :clientId and status = 'PENDING' and id in (select id
+                            from notifications.message
                             where client_id = :clientId and status = 'PENDING' order by id for update)
                         """).param("clientId", clientId).update();
     }
@@ -77,7 +83,8 @@ public class MessageQueue {
     public int cancelPendingOfAccount(UUID accountId) {
         return jdbc.sql("""
                         update notifications.message set status = 'CANCELLED'
-                        where id in (select id from notifications.message
+                        where account_id = :accountId and status = 'PENDING' and id in (select id
+                            from notifications.message
                             where account_id = :accountId and status = 'PENDING' order by id for update)
                         """).param("accountId", accountId).update();
     }
@@ -116,7 +123,8 @@ public class MessageQueue {
     public int movePending(UUID removedClientId, UUID survivorClientId) {
         return jdbc.sql("""
                         update notifications.message set client_id = :survivorClientId
-                        where id in (select id from notifications.message
+                        where client_id = :removedClientId and status = 'PENDING' and id in (select id
+                            from notifications.message
                             where client_id = :removedClientId and status = 'PENDING' order by id for update)
                         """)
                 .param("removedClientId", removedClientId)
