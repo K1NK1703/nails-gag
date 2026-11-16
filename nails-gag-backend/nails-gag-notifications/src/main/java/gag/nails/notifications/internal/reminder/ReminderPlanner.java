@@ -5,7 +5,6 @@ import gag.nails.booking.model.BookingView;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
-import gag.nails.common.time.SalonTimeZone;
 import gag.nails.notifications.internal.queue.MessageQueue;
 import gag.nails.notifications.internal.queue.NewMessage;
 import gag.nails.notifications.internal.queue.QuietHours;
@@ -26,15 +25,21 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Перепланирование удаляет неотправленные напоминания записи и рассчитывает их заново ({@link ReminderSchedule}) по
  * текущему {@link BookingView} — не по событию: события могут обрабатываться не по порядку и одновременно. Записи нет
  * — неотправленные напоминания удаляются; запись уже не активна (отменена, выполнена, не пришла) — отменяются, как на
- * событиях об этом; исключений нет. Получатель — карточка клиента записи; ключ повтора —
- * {@code reminder:<вид>:<запись>:<due_at>}.
+ * событиях об этом; клиентка записи обезличена — неотправленные удаляются, новые не планируются (писать некуда);
+ * исключений нет. Получатель — карточка клиента записи; ключ повтора — {@code reminder:<вид>:<запись>:<due_at>}.
  *
- * <p>Порядок блокировок: строка настроек → запись ({@link ReminderLocks}) → строки очереди. Каждый путь начинает со
- * строки настроек: слушатели — на чтение ({@code FOR SHARE}), смена настроек — на запись ({@code FOR UPDATE}). Без
- * этого слушатель, прочитавший прежние настройки до их смены, мог бы после фиксации смены перезаписать её
- * напоминания прежними; со встречным порядком (строки очереди или запись раньше настроек) — взаимная блокировка со
- * сменой настроек. Блокировка записи упорядочивает слушателей одной записи между собой: строку настроек на чтение они
- * держат одновременно.
+ * <p>Порядок блокировок очереди: строка настроек → запись ({@link ReminderLocks}) → строки очереди (в порядке id,
+ * {@link MessageQueue}). Строку настроек первой берут все, кто меняет неотправленные сообщения: слушатели событий
+ * записей и синхронные обработчики событий карточек и аккаунтов ({@code AccountEventsListener}) — на чтение
+ * ({@code FOR SHARE}), смена настроек — на запись ({@code FOR UPDATE}). Обработчики событий карточек приходят с уже
+ * взятыми строками своих модулей (карточки, записи), но смена настроек этих строк не ждёт — она только читает записи,
+ * — поэтому встречного порядка нет. Без строки настроек слушатель, прочитавший прежние настройки до их смены, после её
+ * фиксации перезаписал бы её напоминания прежними, отмена не увидела бы поставленных сменой напоминаний, а обработчик
+ * карточки и смена настроек блокировали бы строки очереди накрест (взаимная блокировка).
+ *
+ * <p>Блокировка записи упорядочивает слушателей одной записи между собой: строку настроек на чтение они держат
+ * одновременно. Смене настроек она не нужна: держа строку настроек на запись, смена исключает всех, кто берёт
+ * блокировку записи, — они берут строку настроек раньше.
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
@@ -56,13 +61,12 @@ public class ReminderPlanner {
             BookingQueries bookings,
             MessageQueue queue,
             QuietHours quietHours,
-            SalonTimeZone salonTimeZone,
             Clock clock) {
         this.settings = settings;
         this.locks = locks;
         this.bookings = bookings;
         this.queue = queue;
-        this.schedule = new ReminderSchedule(quietHours, salonTimeZone.zone());
+        this.schedule = new ReminderSchedule(quietHours);
         this.clock = clock;
     }
 
@@ -76,7 +80,7 @@ public class ReminderPlanner {
         } else if (!booking.get().status().isActive()) {
             queue.cancelPendingReminders(bookingId);
         } else {
-            replanLocked(booking.get(), current);
+            replanBooking(booking.get(), current);
         }
     }
 
@@ -89,18 +93,20 @@ public class ReminderPlanner {
 
     /**
      * Рассчитывает заново напоминания всех предстоящих записей по новым настройкам. Вызывающий уже держит строку
-     * настроек на запись ({@code FOR UPDATE}) с этими настройками: слушатели ждут фиксации, а прошедшие до смены уже
-     * зафиксированы — список записей и их состояние актуальны.
+     * настроек на запись ({@code FOR UPDATE}) с этими настройками: все прочие изменения напоминаний ждут фиксации, а
+     * прошедшие до смены уже зафиксированы — список записей и их состояние актуальны, блокировки записей не нужны.
      */
-    public void replanUpcoming(ReminderSettings changed) {
+    public void replanUpcoming(ReminderSettings updated) {
         for (var booking : bookings.upcoming(BOOKINGS_READER)) {
-            locks.booking(booking.id());
-            replanLocked(booking, changed);
+            replanBooking(booking, updated);
         }
     }
 
-    private void replanLocked(BookingView booking, ReminderSettings current) {
+    private void replanBooking(BookingView booking, ReminderSettings current) {
         queue.deletePendingReminders(booking.id());
+        if (booking.clientErasedAt() != null) {
+            return;
+        }
         var recipient = new Recipient.Client(booking.clientId());
         for (var reminder : schedule.plan(booking.agreedStart(), booking.slotStartsAt(), current, clock.instant())) {
             var dedupKey = "reminder:" + reminder.kind().name() + ":" + booking.id() + ":" + reminder.dueAt();

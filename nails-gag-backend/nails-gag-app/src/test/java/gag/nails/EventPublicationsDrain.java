@@ -1,9 +1,12 @@
 package gag.nails;
 
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import javax.sql.DataSource;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.Ordered;
@@ -18,8 +21,8 @@ import org.springframework.test.context.TestExecutionListener;
  * через {@code META-INF/spring.factories}.
  *
  * <p>Ошибка слушателя не проходит молча: неудачные ({@code FAILED}) публикации не ждутся — их повторяет только
- * рестарт, — но если за тест их стало больше, чем было перед ним, тест падает с перечнем новых (слушатель и тип
- * события).
+ * рестарт, — но если за тест появились новые (id нет среди неудачных перед тестом), тест падает с их перечнем
+ * (слушатель и тип события).
  *
  * <p>Видны только зафиксированные публикации: счёт идёт на отдельном соединении пула, мимо транзакции теста. Без
  * загруженного контекста, без {@link DataSource} или без таблицы реестра слушатель ничего не делает; ошибка запроса к
@@ -33,13 +36,10 @@ public final class EventPublicationsDrain implements TestExecutionListener, Orde
             select count(*) from modulith.event_publication
             where completion_date is null and coalesce(status, '') <> 'FAILED'""";
 
-    private static final String FAILED = "select count(*) from modulith.event_publication where status = 'FAILED'";
+    private static final String FAILED = """
+            select id, listener_id, event_type from modulith.event_publication where status = 'FAILED'""";
 
-    private static final String FAILED_AFTER = """
-            select listener_id, event_type from modulith.event_publication
-            where status = 'FAILED' order by publication_date desc, id limit ?""";
-
-    /** Атрибут контекста теста: сколько неудачных публикаций было перед тестом. */
+    /** Атрибут контекста теста: id неудачных публикаций перед тестом. */
     private static final String FAILED_BEFORE = EventPublicationsDrain.class.getName() + ".failedBefore";
 
     /** После транзакционного слушателя (4000): транзакция теста уже завершена, контекст ещё не сброшен (3000). */
@@ -53,7 +53,8 @@ public final class EventPublicationsDrain implements TestExecutionListener, Orde
     public void beforeTestMethod(TestContext testContext) {
         var dataSource = dataSource(testContext);
         if (dataSource != null) {
-            testContext.setAttribute(FAILED_BEFORE, count(dataSource, FAILED));
+            testContext.setAttribute(
+                    FAILED_BEFORE, Set.copyOf(failed(dataSource).keySet()));
         }
     }
 
@@ -71,11 +72,12 @@ public final class EventPublicationsDrain implements TestExecutionListener, Orde
     public void afterTestMethod(TestContext testContext) throws Exception {
         drain(testContext);
         var dataSource = dataSource(testContext);
-        if (dataSource != null && testContext.removeAttribute(FAILED_BEFORE) instanceof Long before) {
-            var failed = count(dataSource, FAILED);
-            if (failed > before) {
-                throw new AssertionError((failed - before) + " event publications failed during the test: "
-                        + lastFailed(dataSource, failed - before));
+        if (dataSource != null && testContext.removeAttribute(FAILED_BEFORE) instanceof Set<?> before) {
+            var failedNow = failed(dataSource);
+            failedNow.keySet().removeAll(before);
+            if (!failedNow.isEmpty()) {
+                throw new AssertionError(
+                        failedNow.size() + " event publications failed during the test: " + failedNow.values());
             }
         }
     }
@@ -87,7 +89,7 @@ public final class EventPublicationsDrain implements TestExecutionListener, Orde
         }
         var deadline = System.nanoTime() + WAIT.toNanos();
         while (true) {
-            var inProgress = count(dataSource, IN_PROGRESS);
+            var inProgress = inProgress(dataSource);
             if (inProgress == 0) {
                 return;
             }
@@ -108,38 +110,50 @@ public final class EventPublicationsDrain implements TestExecutionListener, Orde
                 .getIfUnique();
     }
 
-    /** Число публикаций по запросу {@code sql}; без таблицы реестра — ноль, ошибка базы — ошибка теста. */
-    private static long count(DataSource dataSource, String sql) {
+    /** Обрабатываемые публикации; без таблицы реестра — ноль, ошибка базы — ошибка теста. */
+    private static long inProgress(DataSource dataSource) {
+        return query(dataSource, IN_PROGRESS, rows -> rows.next() ? rows.getLong(1) : 0L, 0L);
+    }
+
+    /** Неудачные публикации: id → слушатель и тип события; без таблицы реестра — пусто. */
+    private static Map<UUID, String> failed(DataSource dataSource) {
+        return query(
+                dataSource,
+                FAILED,
+                rows -> {
+                    var failed = new LinkedHashMap<UUID, String>();
+                    while (rows.next()) {
+                        failed.put(
+                                rows.getObject("id", UUID.class),
+                                rows.getString("listener_id") + " <- " + rows.getString("event_type"));
+                    }
+                    return failed;
+                },
+                new LinkedHashMap<>());
+    }
+
+    /**
+     * Запрос к реестру на отдельном соединении; без таблицы реестра — {@code absent}. Сломанный запрос или закрытый
+     * пул не должны молча выключать ожидание и проверку: ошибка базы — ошибка теста.
+     */
+    private static <T> T query(DataSource dataSource, String sql, ResultReader<T> reader, T absent) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.createStatement()) {
             try (var exists = statement.executeQuery("select to_regclass('modulith.event_publication') is not null")) {
                 if (!exists.next() || !exists.getBoolean(1)) {
-                    return 0;
+                    return absent;
                 }
             }
-            try (var count = statement.executeQuery(sql)) {
-                return count.next() ? count.getLong(1) : 0;
+            try (var rows = statement.executeQuery(sql)) {
+                return reader.read(rows);
             }
         } catch (SQLException e) {
-            // Сломанный запрос или закрытый пул не должны молча выключать ожидание и проверку.
-            throw new AssertionError("cannot count event publications: " + e.getMessage(), e);
+            throw new AssertionError("cannot query event publications: " + e.getMessage(), e);
         }
     }
 
-    /** Последние {@code limit} неудачных публикаций: слушатель и тип события. */
-    private static List<String> lastFailed(DataSource dataSource, long limit) {
-        try (var connection = dataSource.getConnection();
-                var statement = connection.prepareStatement(FAILED_AFTER)) {
-            statement.setLong(1, limit);
-            var failed = new ArrayList<String>();
-            try (var rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    failed.add(rows.getString("listener_id") + " <- " + rows.getString("event_type"));
-                }
-            }
-            return failed;
-        } catch (SQLException e) {
-            throw new AssertionError("cannot list failed event publications: " + e.getMessage(), e);
-        }
+    @FunctionalInterface
+    private interface ResultReader<T> {
+        T read(ResultSet rows) throws SQLException;
     }
 }

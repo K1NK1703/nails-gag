@@ -73,8 +73,8 @@ class DefaultNotificationSettings implements NotificationSettings {
         var before = byColumn(current.toView());
         var now = clock.instant();
         current.apply(command, now);
-        var changed = current.toView();
-        var after = byColumn(changed);
+        var updated = current.toView();
+        var after = byColumn(updated);
         after.forEach((field, value) -> {
             var old = before.get(field);
             if (!Objects.equals(old, value)) {
@@ -83,9 +83,9 @@ class DefaultNotificationSettings implements NotificationSettings {
         });
         if (!after.equals(before)) {
             // В этой же транзакции, под строкой настроек на запись: слушатели событий записей ждут её фиксации.
-            reminders.replanUpcoming(changed);
+            reminders.replanUpcoming(updated);
         }
-        return changed;
+        return updated;
     }
 
     @Override

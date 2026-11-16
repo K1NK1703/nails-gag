@@ -30,7 +30,7 @@ class ReminderScheduleTest {
     private static final ReminderSettings DAY_BEFORE_ONLY = new ReminderSettings(LocalTime.NOON, null);
     private static final ReminderSettings TWO_HOURS_ONLY = new ReminderSettings(null, 2);
 
-    private final ReminderSchedule schedule = new ReminderSchedule(new QuietHours(NIGHT, MOSCOW), MOSCOW);
+    private final ReminderSchedule schedule = new ReminderSchedule(new QuietHours(NIGHT, MOSCOW));
 
     @Test
     void dayBeforeIsOnThePreviousSalonDayAtTheSetTime() {
@@ -48,6 +48,16 @@ class ReminderScheduleTest {
         assertThat(schedule.plan(null, tuesdayNight, DAY_BEFORE_ONLY, NOW))
                 .containsExactly(new Reminder(
                         MessageKind.REMINDER_DAY_BEFORE, Instant.parse("2026-10-05T09:00:00Z"), tuesdayNight));
+    }
+
+    @Test
+    void dayBeforeInQuietHoursMovesToTheirEnd() {
+        // Окно тихих часов сменили в конфигурации на 11:00–13:00, а накануне стоит в 12:00 → воскресенье 13:00.
+        var lunch = new QuietHours(new QuietHoursWindow(LocalTime.of(11, 0), LocalTime.of(13, 0)), MOSCOW);
+
+        assertThat(new ReminderSchedule(lunch).plan(null, MONDAY_10, DAY_BEFORE_ONLY, NOW))
+                .containsExactly(new Reminder(
+                        MessageKind.REMINDER_DAY_BEFORE, Instant.parse("2026-10-04T10:00:00Z"), MONDAY_10));
     }
 
     @Test
@@ -138,7 +148,7 @@ class ReminderScheduleTest {
         // Берлин без тихих часов: 29 марта 2026 в 2:00 CET часы переводятся на 3:00 CEST.
         var berlin = ZoneId.of("Europe/Berlin");
         var noQuietHours = new QuietHours(new QuietHoursWindow(LocalTime.MIDNIGHT, LocalTime.MIDNIGHT), berlin);
-        var inBerlin = new ReminderSchedule(noQuietHours, berlin);
+        var inBerlin = new ReminderSchedule(noQuietHours);
         var march = Instant.parse("2026-03-01T00:00:00Z");
 
         // Визит в воскресенье 29 марта, 12:00 CEST: за 12 часов — это 12 настоящих часов, суббота 23:00 CET, а не

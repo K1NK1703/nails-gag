@@ -14,6 +14,11 @@ import org.springframework.stereotype.Component;
  * Отправленные и отменённые не меняются — это история. Работает в транзакции вызывающего: асинхронного слушателя
  * событий записи или синхронного слушателя в чужой транзакции. Запросы — напрямую через JDBC: сущности сообщения в
  * контексте персистентности нет, поэтому изменения ничего не отсоединяют и не требуют сброса чужих изменений.
+ *
+ * <p>Изменения нескольких строк сначала блокируют их подзапросом {@code … order by id for update}: две транзакции,
+ * меняющие пересекающиеся наборы (отмена сообщений карточки и перепланирование напоминаний её записи), берут общие
+ * строки в одном порядке и не блокируют друг друга накрест. Порядок блокировок модуля по очереди — в
+ * {@code ReminderPlanner}.
  */
 @Component
 public class MessageQueue {
@@ -63,7 +68,8 @@ public class MessageQueue {
     public int cancelPendingOfClient(UUID clientId) {
         return jdbc.sql("""
                         update notifications.message set status = 'CANCELLED'
-                        where client_id = :clientId and status = 'PENDING'
+                        where id in (select id from notifications.message
+                            where client_id = :clientId and status = 'PENDING' order by id for update)
                         """).param("clientId", clientId).update();
     }
 
@@ -71,7 +77,8 @@ public class MessageQueue {
     public int cancelPendingOfAccount(UUID accountId) {
         return jdbc.sql("""
                         update notifications.message set status = 'CANCELLED'
-                        where account_id = :accountId and status = 'PENDING'
+                        where id in (select id from notifications.message
+                            where account_id = :accountId and status = 'PENDING' order by id for update)
                         """).param("accountId", accountId).update();
     }
 
@@ -83,7 +90,9 @@ public class MessageQueue {
     public int deletePendingReminders(UUID bookingId) {
         return jdbc.sql("""
                         delete from notifications.message
-                        where booking_id = :bookingId and status = 'PENDING' and starts_with(kind, 'REMINDER_')
+                        where id in (select id from notifications.message
+                            where booking_id = :bookingId and status = 'PENDING' and starts_with(kind, 'REMINDER_')
+                            order by id for update)
                         """).param("bookingId", bookingId).update();
     }
 
@@ -94,7 +103,9 @@ public class MessageQueue {
     public int cancelPendingReminders(UUID bookingId) {
         return jdbc.sql("""
                         update notifications.message set status = 'CANCELLED'
-                        where booking_id = :bookingId and status = 'PENDING' and starts_with(kind, 'REMINDER_')
+                        where id in (select id from notifications.message
+                            where booking_id = :bookingId and status = 'PENDING' and starts_with(kind, 'REMINDER_')
+                            order by id for update)
                         """).param("bookingId", bookingId).update();
     }
 
@@ -105,7 +116,8 @@ public class MessageQueue {
     public int movePending(UUID removedClientId, UUID survivorClientId) {
         return jdbc.sql("""
                         update notifications.message set client_id = :survivorClientId
-                        where client_id = :removedClientId and status = 'PENDING'
+                        where id in (select id from notifications.message
+                            where client_id = :removedClientId and status = 'PENDING' order by id for update)
                         """)
                 .param("removedClientId", removedClientId)
                 .param("survivorClientId", survivorClientId)

@@ -11,8 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
  * повторный захват в той же транзакции не блокирует. Строки записи в схеме уведомлений нет (запись — в чужой схеме,
  * её напоминаний может ещё не быть), поэтому {@code SELECT … FOR UPDATE} не подходит. Ключ —
  * {@code hashtextextended('notifications.reminders:<booking_id>')}: совпадение хеша двух записей лишь заставит их
- * подождать друг друга. Текст запроса начинается с {@code notifications.} — ожидание видно в
- * {@code pg_stat_activity}.
+ * подождать друг друга. Ключ начинается с {@code notifications.}, и он виден в тексте запроса — ожидание этой
+ * блокировки находится в {@code pg_stat_activity} по шаблону {@code %notifications.%}.
  *
  * <p>Только внутри транзакции ({@code MANDATORY}): вне её блокировка отпустилась бы сразу и ничего не защищала бы.
  */
@@ -29,7 +29,10 @@ class ReminderLocks {
         this.jdbc = jdbc;
     }
 
-    /** Напоминания записи: перепланирование и отмена одной записи идут по одной. */
+    /**
+     * Напоминания записи: перепланирование и отмена одной записи слушателями событий идут по одной (строку настроек
+     * на чтение они держат одновременно).
+     */
     void booking(UUID bookingId) {
         jdbc.sql(BOOKING).param("bookingId", bookingId).query().singleRow();
     }

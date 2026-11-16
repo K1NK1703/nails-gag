@@ -140,7 +140,8 @@ class BookingQueriesTest extends BookingTestSupport {
         bookings.cancel(cancelled.id(), master);
         // Согласованное более раннее время (11:00) ставит запись на 16:00 перед записью на 12:00.
         var earlier = book(client("Нина"), slot(MONDAY, "16:00"));
-        offers.propose(earlier.id(), earlier.slotStartsAt().minus(Duration.ofHours(5)), master);
+        var agreedStart = earlier.slotStartsAt().minus(Duration.ofHours(5));
+        offers.propose(earlier.id(), agreedStart, master);
         offers.respond(earlier.id(), true, Actor.client(earlier.clientId()));
 
         assertThat(queries.upcoming(master))
@@ -151,6 +152,10 @@ class BookingQueriesTest extends BookingTestSupport {
         assertThat(queries.upcoming(master))
                 .extracting(BookingView::id)
                 .containsExactly(earlier.id(), noon.id(), tuesday.id());
+
+        // Согласованное время прошло, а слот (16:00) ещё впереди: визит начался.
+        clock.set(agreedStart.plus(Duration.ofMinutes(1)));
+        assertThat(queries.upcoming(master)).extracting(BookingView::id).containsExactly(noon.id(), tuesday.id());
         assertThatThrownBy(() -> queries.upcoming(Actor.client(noon.clientId())))
                 .isInstanceOf(AccessDeniedException.class);
     }

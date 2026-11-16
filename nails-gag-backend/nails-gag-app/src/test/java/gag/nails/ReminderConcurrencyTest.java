@@ -37,11 +37,13 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Перепланирование напоминаний записи и смена настроек напоминаний встречаются на строке настроек: перепланирование
- * берёт её на чтение ({@code FOR SHARE}) до блокировки записи и строк очереди, смена — на запись. Перепланирование,
- * начатое во время смены, ждёт её фиксации и считает по новым настройкам; без разделяемой блокировки оно прочитало бы
- * прежние настройки, дождалось бы записи и перезаписало бы напоминания смены прежними. Тест возвращает настройки как
- * были (мимо журнала) и удаляет свои запись, слот, карточку, сообщения и строки журнала.
+ * Изменения очереди встречаются со сменой настроек напоминаний на строке настроек: перепланирование и отмена
+ * напоминаний записи, обезличивание карточки берут её на чтение ({@code FOR SHARE}) раньше строк очереди, смена — на
+ * запись. Начатые во время смены, они ждут её фиксации и видят её напоминания. Без разделяемой блокировки
+ * перепланирование прочитало бы прежние настройки и перезаписало бы напоминания смены прежними, а отмена и
+ * обезличивание не увидели бы напоминаний, поставленных сменой (их запрос начался до её фиксации), — те остались бы
+ * неотправленными; обезличивание к тому же могло встать во взаимную блокировку со сменой на строках очереди. Тест
+ * возвращает настройки как были (мимо журнала) и удаляет свои записи, слоты, карточки, сообщения и строки журнала.
  */
 @SpringBootTest(webEnvironment = WebEnvironment.NONE, properties = "nails-gag.booking.jobs.enabled=false")
 @Import(PostgresTestcontainers.class)
@@ -136,6 +138,33 @@ class ReminderConcurrencyTest {
                         tuple("REMINDER_HOURS_BEFORE", salonTimeZone.at(day, LocalTime.of(10, 0))));
     }
 
+    @Test
+    void cancelDuringSettingsUpdateWaitsAndCancelsItsReminders() throws Exception {
+        var day = LocalDate.now(clock.withZone(salonTimeZone.zone())).plusDays(42);
+        var bookingId = booking(day, LocalTime.of(15, 0));
+
+        var cancelled = locks.whileRowIsHeld(
+                () -> settings.update(new UpdateReminderSettings(LocalTime.of(19, 47), 5), editor),
+                () -> transaction.executeWithoutResult(status -> planner.cancel(bookingId)));
+
+        assertThat(cancelled.failure()).isNull();
+        assertThat(statuses(bookingId)).isNotEmpty().containsOnly("CANCELLED");
+    }
+
+    @Test
+    void erasureDuringSettingsUpdateWaitsAndCancelsItsReminders() throws Exception {
+        var day = LocalDate.now(clock.withZone(salonTimeZone.zone())).plusDays(43);
+        var bookingId = booking(day, LocalTime.of(15, 0));
+        var clientId = clientIds.getLast();
+
+        var erased = locks.whileRowIsHeld(
+                () -> settings.update(new UpdateReminderSettings(LocalTime.of(19, 47), 5), editor),
+                () -> clients.erase(clientId));
+
+        assertThat(erased.failure()).isNull();
+        assertThat(statuses(bookingId)).isNotEmpty().containsOnly("CANCELLED");
+    }
+
     /** Запись мастером на {@code day} в {@code time}; ждёт, пока слушатели уведомлений не обработают её создание. */
     private UUID booking(LocalDate day, LocalTime time) {
         var clientId = clients.create(new CreateClient("Анна", null, null, null, null, null), master)
@@ -189,6 +218,14 @@ class ReminderConcurrencyTest {
                 .param(bookingId)
                 .query((row, rowNumber) ->
                         tuple(row.getString("kind"), row.getTimestamp("due_at").toInstant()))
+                .list();
+    }
+
+    /** Состояния всех напоминаний записи. */
+    private List<String> statuses(UUID bookingId) {
+        return jdbc.sql("select status from notifications.message where booking_id = ? and kind like 'REMINDER\\_%'")
+                .param(bookingId)
+                .query(String.class)
                 .list();
     }
 

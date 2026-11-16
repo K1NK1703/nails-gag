@@ -18,6 +18,7 @@ import gag.nails.testsupport.TestTimeConfiguration;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
@@ -283,6 +284,45 @@ class ReminderPlannerTest extends QueueTestSupport {
                         bookingId, clientId, MONDAY_14, BookingStatus.CONFIRMED, BookingCreator.CLIENT, NOW));
 
         assertThat(reminders(bookingId)).isEmpty();
+    }
+
+    @Test
+    void eventOfMissingBookingDeletesItsPendingReminders() {
+        var bookingId = bookingId();
+        var clientId = UUID.randomUUID();
+        jdbc.sql("""
+                        insert into notifications.message (id, client_id, kind, booking_id, due_at, expires_at, status,
+                            dedup_key, created_at)
+                        values (:id, :clientId, 'REMINDER_DAY_BEFORE', :bookingId, :dueAt, :expiresAt, 'PENDING',
+                            :dedupKey, :now)
+                        """)
+                .param("id", UUID.randomUUID())
+                .param("clientId", clientId)
+                .param("bookingId", bookingId)
+                .param("dueAt", Timestamp.from(SUNDAY_NOON))
+                .param("expiresAt", Timestamp.from(MONDAY_14))
+                .param("dedupKey", "reminder:REMINDER_DAY_BEFORE:" + bookingId + ":" + SUNDAY_NOON)
+                .param("now", Timestamp.from(NOW))
+                .update();
+
+        publish(bookingId, new BookingConfirmed(bookingId, clientId, MONDAY_14, false, NOW));
+
+        assertThat(reminders(bookingId)).isEmpty();
+    }
+
+    @Test
+    void erasedClientGetsNoReminders() {
+        var anna = client("Анна");
+        var booking = bookByClient(anna, slot(MONDAY, "14:00"));
+
+        // Обезличивание отменяет неотправленные; запись остаётся активной — на рассмотрении у мастера.
+        clients.erase(anna);
+        settings.update(new UpdateReminderSettings(LocalTime.of(18, 30), 3), settingsEditor);
+        publish(booking.id(), new BookingConfirmed(booking.id(), anna, booking.slotStartsAt(), false, NOW));
+
+        assertThat(reminders(booking.id()))
+                .hasSize(2)
+                .allSatisfy(reminder -> assertThat(reminder.status()).isEqualTo(MessageStatus.CANCELLED));
     }
 
     @Test
