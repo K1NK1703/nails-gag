@@ -5,6 +5,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,8 +33,15 @@ public class EventPublicationRetries {
     /** Самая длинная пауза между повторами одной публикации. */
     public static final Duration MAX_BACKOFF = Duration.ofHours(6);
 
-    /** Сколько неудачных публикаций за один повтор. */
+    /** Сколько неудачных публикаций повторяется за один запуск. */
     static final int BATCH = 100;
+
+    /**
+     * Сколько неудачных публикаций читается за один запуск. Spring Modulith ограничивает выборку
+     * ({@code ORDER BY publication_date LIMIT}) до фильтра, поэтому окно шире пачки: иначе сотня старых публикаций,
+     * ждущих своей паузы, закрывала бы более новые, которым повтор уже пора.
+     */
+    static final int WINDOW = 1000;
 
     /** Публикация, незавершённая дольше этого, — повод для WARN: повторы с ней не справляются. */
     public static final Duration STALE_AFTER = Duration.ofDays(1);
@@ -61,21 +70,29 @@ public class EventPublicationRetries {
     }
 
     /**
-     * Повторяет до {@value #BATCH} неудачных публикаций, старые первыми: каждую — заново её слушателю (асинхронно, как
-     * обычную). Публикации в работе не трогает. Повтор — не раньше {@link #MIN_AGE} после публикации, а после
-     * повтора, который снова не удался, — с растущей паузой ({@link #backoff}), чтобы публикация, на которой слушатель
-     * падает всегда, не повторялась каждые 5 минут вечно.
+     * Повторяет до {@value #BATCH} неудачных публикаций из {@value #WINDOW} самых старых, старые первыми: каждую —
+     * заново её слушателю (асинхронно, как обычную). Публикации в работе не трогает. Повтор — не раньше
+     * {@link #MIN_AGE} после публикации, а после повтора, который снова не удался, — с растущей паузой
+     * ({@link #backoff}), чтобы публикация, на которой слушатель падает всегда, не повторялась каждые 5 минут вечно.
      *
      * <p>Возраст проверяется фильтром: в Spring Modulith 2.1.1 запрос неудачных публикаций
      * ({@code JdbcEventPublicationRepositoryV2.findFailedPublications}) склеивает условие на дату через {@code AND} с
      * {@code STATUS = 'FAILED' OR (...)} без скобок, и для {@code FAILED} минимальный возраст запроса не действует.
      */
     public void resubmitFailed() {
-        var now = clock.instant();
         failed.resubmit(ResubmissionOptions.defaults()
                 .withMinAge(MIN_AGE)
-                .withBatchSize(BATCH)
-                .withFilter(publication -> due(publication, now)));
+                .withBatchSize(WINDOW)
+                .withFilter(dueAtMost(clock.instant(), BATCH)));
+    }
+
+    /**
+     * Фильтр запуска: публикации, которым повтор пора ({@link #due}), — не больше {@code limit}, по порядку выборки;
+     * ждущие паузы не занимают места в пачке. Счётчик — на один запуск: фильтр вызывается по разу на публикацию.
+     */
+    static Predicate<EventPublication> dueAtMost(Instant now, int limit) {
+        var left = new AtomicInteger(limit);
+        return publication -> due(publication, now) && left.getAndDecrement() > 0;
     }
 
     /**

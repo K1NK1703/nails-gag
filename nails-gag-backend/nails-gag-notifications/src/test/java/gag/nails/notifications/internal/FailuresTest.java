@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.common.error.InternalException;
 import java.sql.SQLException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -28,5 +29,38 @@ class FailuresTest {
 
         assertThat(Failures.isDatabase(failure)).isFalse();
         assertThat(Failures.describe(failure)).isEqualTo("gag.nails.common.error.InternalException");
+    }
+
+    /** Обёртка вокруг ошибки базы — тоже ошибка базы; SQLState — из найденной, текста нет. */
+    @Test
+    void databaseFailureIsFoundAnywhereInTheChain() {
+        var driver = new SQLException("Key (email)=(anna@example.com) already exists", "23505");
+        var wrapped = new InternalException("listener failed: anna@example.com", new IllegalStateException(driver));
+
+        assertThat(Failures.isDatabase(wrapped)).isTrue();
+        assertThat(Failures.describe(wrapped))
+                .isEqualTo("gag.nails.common.error.InternalException caused by java.sql.SQLException (SQLState 23505)")
+                .doesNotContain("anna@example.com");
+    }
+
+    @Test
+    void databaseFailureIsFoundAmongSuppressed() {
+        var failure = new InternalException("dispatch failed");
+        failure.addSuppressed(new ConstraintViolationException(
+                "duplicate anna@example.com", new SQLException("duplicate", "23505"), "message_dedup_key_key"));
+
+        assertThat(Failures.isDatabase(failure)).isTrue();
+        assertThat(Failures.describe(failure))
+                .isEqualTo("gag.nails.common.error.InternalException caused by "
+                        + "org.hibernate.exception.ConstraintViolationException (SQLState 23505)");
+    }
+
+    @Test
+    void cyclicChainEnds() {
+        var first = new InternalException("first");
+        var second = new InternalException("second", first);
+        first.addSuppressed(second);
+
+        assertThat(Failures.isDatabase(first)).isFalse();
     }
 }

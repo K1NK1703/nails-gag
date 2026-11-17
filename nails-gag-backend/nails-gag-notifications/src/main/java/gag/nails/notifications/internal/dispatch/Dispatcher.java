@@ -148,6 +148,7 @@ public class Dispatcher {
      */
     private void dispatchDue() {
         var failed = new HashSet<UUID>();
+        var failures = new RunFailures("messages");
         var run = new DispatchRun(new Cards(clients));
         while (true) {
             var current = new AtomicReference<@Nullable DueMessage>();
@@ -161,11 +162,10 @@ public class Dispatcher {
                     throw e;
                 }
                 failed.add(message.id());
-                log.warn(
-                        "notification message {} ({}) was not dispatched, it stays pending: {}",
-                        message.id(),
-                        message.kind(),
-                        Failures.describe(e));
+                failures.failed(
+                        "notification message " + message.id() + " (" + message.kind() + ")",
+                        "not dispatched, it stays pending",
+                        e);
             }
         }
         if (run.dispatched > 0 || run.cancelled > 0 || !failed.isEmpty()) {
@@ -176,6 +176,7 @@ public class Dispatcher {
                     run.cancelled,
                     failed.size());
         }
+        failures.summarize();
     }
 
     /** Одно созревшее сообщение; {@code false} — созревших (кроме упавших в этом прогоне) нет. */
@@ -267,7 +268,7 @@ public class Dispatcher {
      */
     private void sendDue() {
         var failed = new HashSet<UUID>();
-        var failures = new SendFailures();
+        var failures = new RunFailures("deliveries");
         Map<UUID, Set<String>> staff = null;
         while (true) {
             var candidates = dueDeliveries(failed);
@@ -278,7 +279,7 @@ public class Dispatcher {
                     claim = Objects.requireNonNull(transaction.execute(status -> claim(deliveryId)));
                 } catch (RuntimeException e) {
                     failed.add(deliveryId);
-                    failures.failed("claim failed", deliveryId, e);
+                    failures.failed("notification delivery " + deliveryId, "claim failed", e);
                     continue;
                 }
                 if (claim instanceof Claim.Leased leased) {
@@ -378,13 +379,13 @@ public class Dispatcher {
      * Отправка одной арендованной доставки вне транзакции. Ошибка подготовки (чтение, адрес, текст) или записи исхода
      * оставляет доставку в аренде: по её истечении будет следующая попытка, а попытки конечны.
      */
-    private void send(Claim.Leased leased, Map<UUID, Set<String>> staff, SendFailures failures) {
+    private void send(Claim.Leased leased, Map<UUID, Set<String>> staff, RunFailures failures) {
         var delivery = leased.delivery();
         Prepared prepared;
         try {
             prepared = prepare(leased, staff);
         } catch (RuntimeException e) {
-            failures.failed("render/resolve failed", delivery.id(), e);
+            failures.failed("notification delivery " + delivery.id(), "render/resolve failed", e);
             return;
         }
         var outcome = prepared.outcome();
@@ -401,7 +402,10 @@ public class Dispatcher {
         try {
             record(leased, outcome);
         } catch (RuntimeException e) {
-            failures.failed(sent ? "result not recorded after send" : "result not recorded", delivery.id(), e);
+            failures.failed(
+                    "notification delivery " + delivery.id(),
+                    sent ? "result not recorded after send" : "result not recorded",
+                    e);
         }
     }
 
@@ -580,31 +584,43 @@ public class Dispatcher {
     }
 
     /**
-     * Сбои отправки, не связанные с каналом, за один прогон (спека §6): ошибки базы — класс и SQLState без текста;
-     * прочие (ошибки кода) — стек только у первой, остальные — строкой и итоговым числом.
+     * Сбои шага прогона, не связанные с каналом (спека §6): ошибки базы (где угодно в цепочке причин) — класс и
+     * SQLState без текста, WARN; прочие (ошибки кода) — стек только у первой, остальные — строкой и итоговым числом.
      */
-    private static final class SendFailures {
+    private static final class RunFailures {
+
+        /** Что за шаг: «messages» или «deliveries» — для итоговой строки. */
+        private final String items;
 
         private int codeFailures;
 
-        void failed(String what, UUID deliveryId, RuntimeException failure) {
+        RunFailures(String items) {
+            this.items = items;
+        }
+
+        /**
+         * @param subject о ком: «notification message <id> (<вид>)», «notification delivery <id>»
+         * @param what что не удалось
+         */
+        void failed(String subject, String what, RuntimeException failure) {
             if (Failures.isDatabase(failure)) {
-                log.warn("notification delivery {}: {}: {}", deliveryId, what, Failures.describe(failure));
+                log.warn("{}: {}: {}", subject, what, Failures.describe(failure));
                 return;
             }
             codeFailures++;
             if (codeFailures == 1) {
-                log.error("notification delivery {}: {}", deliveryId, what, failure);
+                log.error("{}: {}", subject, what, failure);
             } else {
-                log.error("notification delivery {}: {}: {}", deliveryId, what, Failures.describe(failure));
+                log.error("{}: {}: {}", subject, what, Failures.describe(failure));
             }
         }
 
         void summarize() {
             if (codeFailures > 1) {
                 log.error(
-                        "{} notification deliveries failed in this run, the stack trace is logged for the first",
-                        codeFailures);
+                        "{} notification {} failed in this run, the stack trace is logged for the first",
+                        codeFailures,
+                        items);
             }
         }
     }

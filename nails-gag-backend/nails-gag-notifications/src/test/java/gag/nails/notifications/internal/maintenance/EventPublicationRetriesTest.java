@@ -49,6 +49,38 @@ class EventPublicationRetriesTest {
                 .isTrue();
     }
 
+    /**
+     * Выборка Spring Modulith упорядочена по дате и ограничена до фильтра: окно шире пачки, а фильтр пропускает только
+     * публикации, которым повтор пора, и не больше пачки — старые, ждущие паузы, не закрывают новую.
+     */
+    @Test
+    void publicationsWaitingForBackoffDoNotTakeBatchPlaces() {
+        var now = PUBLISHED.plus(Duration.ofHours(2));
+        var waiting = publication(now.minus(Duration.ofMinutes(1)), 3);
+        var filter = EventPublicationRetries.dueAtMost(now, EventPublicationRetries.BATCH);
+
+        for (var i = 0; i < 150; i++) {
+            assertThat(filter.test(waiting)).isFalse();
+        }
+        assertThat(filter.test(publication(null, 1))).isTrue();
+        assertThat(EventPublicationRetries.WINDOW).isGreaterThan(EventPublicationRetries.BATCH);
+    }
+
+    @Test
+    void atMostOneBatchIsResubmittedPerRun() {
+        var due = publication(null, 1);
+        var filter = EventPublicationRetries.dueAtMost(PUBLISHED.plus(Duration.ofHours(1)), 100);
+
+        var passed = 0;
+        for (var i = 0; i < 150; i++) {
+            if (filter.test(due)) {
+                passed++;
+            }
+        }
+
+        assertThat(passed).isEqualTo(100);
+    }
+
     private static EventPublication publication(@Nullable Instant lastResubmission, int attempts) {
         return new EventPublication() {
 
