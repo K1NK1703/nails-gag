@@ -26,6 +26,8 @@ import java.util.Properties;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 /**
@@ -100,6 +102,33 @@ class EmailChannelTest {
 
         assertThat(result).isEqualTo(new SendResult.Fail("email_rejected", false));
         assertThat(server.getReceivedMessages()).isEmpty();
+    }
+
+    /**
+     * Отказ отправителю — ошибка настройки почты, а не получателя: повтор, пока её не исправят. 550 Angus Mail
+     * дополняет исключением об отправителе, 554 — нет: тогда отказ узнаётся по команде {@code MAIL FROM}.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"550 5.7.1 Sender not allowed", "554 5.7.1 Relay access denied"})
+    void permanentRefusalOfSenderIsRetried(String reply) {
+        var server = start(new RefusingGreenMail(Map.of("noreply@nails-gag.ru", reply), Map.of()));
+        var channel = channel(sender(server.getSmtp().getPort()));
+
+        var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+        assertThat(result).isEqualTo(new SendResult.Retry(null, "email_sender_rejected"));
+        assertThat(server.getReceivedMessages()).isEmpty();
+    }
+
+    @Test
+    void temporaryRefusalOfSenderIsDeferred() {
+        var server =
+                start(new RefusingGreenMail(Map.of("noreply@nails-gag.ru", "451 4.3.0 Try again later"), Map.of()));
+        var channel = channel(sender(server.getSmtp().getPort()));
+
+        var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+        assertThat(result).isEqualTo(new SendResult.Retry(null, "email_deferred"));
     }
 
     @Test
@@ -221,18 +250,30 @@ class EmailChannelTest {
         return ((String) letter.getContent()).replace("\r\n", "\n").stripTrailing();
     }
 
-    /** GreenMail, который на {@code RCPT TO} заданных адресов отвечает заданной строкой (кодом отказа). */
+    /**
+     * GreenMail, который на {@code MAIL FROM} и {@code RCPT TO} заданных адресов отвечает заданной строкой (кодом
+     * отказа).
+     */
     private static final class RefusingGreenMail extends GreenMail {
 
-        RefusingGreenMail(Map<String, String> replies) {
+        RefusingGreenMail(Map<String, String> recipientReplies) {
+            this(Map.of(), recipientReplies);
+        }
+
+        RefusingGreenMail(Map<String, String> senderReplies, Map<String, String> recipientReplies) {
             super(new ServerSetup[] {ServerSetupTest.SMTP.dynamicPort()});
             managers = new Managers() {
 
                 private final SmtpManager smtp = new SmtpManager(getImapHostManager(), getUserManager()) {
 
                     @Override
+                    public String checkSender(SmtpState state, MailAddress sender) {
+                        return senderReplies.get(sender.getEmail());
+                    }
+
+                    @Override
                     public String checkRecipient(SmtpState state, MailAddress recipient) {
-                        return replies.get(recipient.getEmail());
+                        return recipientReplies.get(recipient.getEmail());
                     }
                 };
 

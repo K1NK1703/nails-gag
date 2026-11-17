@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 
 /**
@@ -37,10 +38,11 @@ import org.springframework.stereotype.Component;
  * Канал доступен, если он настроен на сервере (есть бин {@link NotificationChannel} и он {@code configured()}),
  * включён у получателя (своя настройка или умолчание) и у получателя есть адрес этого канала. Реализаций канала может
  * быть несколько, но настроенной — не больше одной: так подменная реализация встаёт на место настоящей, которая не
- * настроена; две настроенные — ошибка конфигурации.
+ * настроена; две настроенные — ошибка конфигурации: приложение не стартует ({@link #afterSingletonsInstantiated}), а
+ * выбор канала при отправке проверяет это ещё раз.
  */
 @Component
-class ChannelResolver {
+class ChannelResolver implements SmartInitializingSingleton {
 
     private final StaffDirectory staffDirectory;
     private final AccountChannels accountChannels;
@@ -53,6 +55,14 @@ class ChannelResolver {
         this.channels = channels.stream()
                 .collect(Collectors.groupingBy(
                         NotificationChannel::channel, () -> new EnumMap<>(Channel.class), Collectors.toList()));
+    }
+
+    /** При старте: у каждого канала не больше одной настроенной реализации. */
+    @Override
+    public void afterSingletonsInstantiated() {
+        for (var channel : Channel.values()) {
+            channel(channel);
+        }
     }
 
     /**

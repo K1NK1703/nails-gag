@@ -40,8 +40,10 @@ import org.springframework.mail.javamail.MimeMessageHelper;
  * ними) никуда не передаётся, в отладочный лог — только классы и код ответа SMTP:
  *
  * <ul>
- *   <li>{@value #REJECTED} — сервер ответил на письмо постоянным отказом 5xx (получатель, отправитель или содержимое):
- *       доставка неудачна сразу;
+ *   <li>{@value #REJECTED} — сервер ответил постоянным отказом 5xx получателю ({@code RCPT TO}) или письму
+ *       ({@code DATA}): доставка неудачна сразу;
+ *   <li>{@value #SENDER_REJECTED} — постоянный отказ 5xx отправителю ({@code MAIL FROM}): это настройка почты, а не
+ *       получатель, — повтор, пока её не исправят;
  *   <li>{@value #INVALID_ADDRESS} — почта получателя не разбирается как адрес: доставка неудачна сразу;
  *   <li>{@value #DEFERRED} — временный отказ сервера 4xx: повтор по расписанию;
  *   <li>{@value #UNREACHABLE} — нет соединения или ответа сервера, в том числе по таймауту: повтор;
@@ -52,6 +54,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 final class EmailChannel implements NotificationChannel {
 
     static final String REJECTED = "email_rejected";
+    static final String SENDER_REJECTED = "email_sender_rejected";
     static final String INVALID_ADDRESS = "email_invalid_address";
     static final String DEFERRED = "email_deferred";
     static final String UNREACHABLE = "email_unreachable";
@@ -145,9 +148,14 @@ final class EmailChannel implements NotificationChannel {
                 .filter(code -> code >= 400 && code < 600)
                 .findFirst()
                 .orElse(-1);
-        log.debug("email not sent: {}, SMTP reply {}", error.getClass().getName(), reply);
+        var toSender = chain.stream().anyMatch(EmailChannel::refusesSender);
+        log.debug(
+                "email not sent: {}, SMTP reply {}, to sender {}",
+                error.getClass().getName(),
+                reply,
+                toSender);
         if (reply >= 500) {
-            return new SendResult.Fail(REJECTED, false);
+            return toSender ? new SendResult.Retry(null, SENDER_REJECTED) : new SendResult.Fail(REJECTED, false);
         }
         if (reply >= 400) {
             return new SendResult.Retry(null, DEFERRED);
@@ -163,6 +171,22 @@ final class EmailChannel implements NotificationChannel {
             case SMTPSenderFailedException e -> e.getReturnCode();
             case SMTPSendFailedException e -> e.getReturnCode();
             default -> -1;
+        };
+    }
+
+    /**
+     * Отказ относится к отправителю: исключение об отправителе Angus Mail (его добавляют только к части кодов) или
+     * отказ на команду {@code MAIL FROM} (530, 552, 554 — без него). Команда содержит адрес отправителя и в лог не
+     * пишется.
+     */
+    private static boolean refusesSender(Throwable error) {
+        return switch (error) {
+            case SMTPSenderFailedException e -> true;
+            case SMTPSendFailedException e -> {
+                var command = e.getCommand();
+                yield command != null && command.regionMatches(true, 0, "MAIL FROM", 0, "MAIL FROM".length());
+            }
+            default -> false;
         };
     }
 

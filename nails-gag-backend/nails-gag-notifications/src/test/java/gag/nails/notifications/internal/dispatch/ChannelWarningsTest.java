@@ -48,4 +48,19 @@ class ChannelWarningsTest {
                 .doesNotContain("notification channel TELEGRAM failed")
                 .contains("telegram_blocked");
     }
+
+    /** Неразбираемая почта карточки — дело получателя, а не почтового сервера: INFO без ограничения, не WARN. */
+    @Test
+    void invalidEmailAddressIsNotAChannelFailure(CapturedOutput output) {
+        warnings.failed(Channel.EMAIL, UUID.randomUUID(), UUID.randomUUID(), "CONFIRMED", "email_invalid_address");
+        warnings.failed(Channel.EMAIL, UUID.randomUUID(), UUID.randomUUID(), "CONFIRMED", "email_invalid_address");
+        warnings.flush();
+
+        assertThat(output.getOut())
+                .doesNotContain("notification channel EMAIL failed")
+                .doesNotContain("WARN");
+        assertThat(output.getOut().lines().filter(line -> line.contains("email_invalid_address")))
+                .hasSize(2)
+                .allMatch(line -> line.contains("INFO"));
+    }
 }

@@ -14,16 +14,19 @@ import org.slf4j.LoggerFactory;
 /**
  * Сбой канала — WARN не чаще раза в минуту на канал (спека §6): при упавшем почтовом сервере каждая доставка пишет
  * сбой, и без ограничения лог заполнился бы одинаковыми строками. Пропущенные сбои считаются: их число называет
- * следующая строка канала или {@link #flush()} в конце прогона отправки, когда минута прошла. Обычные отказы
- * получателя (бот заблокирован) — не сбой канала: INFO без ограничения. Только id, вид, канал и код ошибки — без
- * адресов и текстов.
+ * следующая строка канала или {@link #flush()} в конце прогона отправки, когда минута прошла. Исходы, которые зависят
+ * от получателя (бот заблокирован, почта карточки не разбирается как адрес), — не сбой канала: INFO без ограничения.
+ * Только id, вид, канал и код ошибки — без адресов и текстов.
  */
 final class ChannelWarnings {
 
     static final Duration INTERVAL = Duration.ofMinutes(1);
 
-    /** Отказы, которые зависят от получателя, а не от канала. */
-    private static final Set<String> ORDINARY = Set.of("telegram_blocked");
+    /**
+     * Исходы, которые зависят от получателя, а не от канала: заблокированный бот и неразбираемая почта карточки
+     * ({@code email_invalid_address} канала почты).
+     */
+    private static final Set<String> ORDINARY = Set.of("telegram_blocked", "email_invalid_address");
 
     private static final Logger log = LoggerFactory.getLogger(Dispatcher.class);
 
@@ -39,7 +42,7 @@ final class ChannelWarnings {
     synchronized void failed(Channel channel, UUID deliveryId, UUID messageId, String kind, String errorCode) {
         if (ORDINARY.contains(errorCode)) {
             log.info(
-                    "notification delivery {} of message {} ({}) via {} refused by recipient: {}",
+                    "notification delivery {} of message {} ({}) via {} not delivered because of its recipient: {}",
                     deliveryId,
                     messageId,
                     kind,
