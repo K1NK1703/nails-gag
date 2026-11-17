@@ -5,7 +5,7 @@ package gag.nails.notifications.model;
  * и доступен.
  *
  * @param emailEnabled почта включена (без своей настройки — умолчание по роли)
- * @param emailAvailable у карточки клиента аккаунта есть почта
+ * @param emailAvailable почта настроена на сервере и у карточки клиента аккаунта есть адрес
  * @param telegramEnabled Telegram включён (без своей настройки — умолчание по роли)
  * @param telegramLinked чат Telegram привязан к аккаунту
  * @param telegramAvailable бот настроен на сервере: без него привязать чат нельзя

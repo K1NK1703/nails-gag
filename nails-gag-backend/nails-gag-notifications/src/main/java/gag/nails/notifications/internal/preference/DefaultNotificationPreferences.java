@@ -8,6 +8,7 @@ import gag.nails.common.id.UuidV7;
 import gag.nails.notifications.NotificationPreferences;
 import gag.nails.notifications.command.UpdateMyChannels;
 import gag.nails.notifications.error.TelegramUnavailableException;
+import gag.nails.notifications.internal.MailServer;
 import gag.nails.notifications.internal.NotificationsProperties;
 import gag.nails.notifications.model.MyChannels;
 import gag.nails.notifications.model.TelegramLink;
@@ -25,6 +26,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
     private final ChannelDefaults defaults;
     private final ClientQueries clients;
     private final NotificationsProperties properties;
+    private final MailServer mailServer;
     private final Clock clock;
 
     DefaultNotificationPreferences(
@@ -33,12 +35,14 @@ class DefaultNotificationPreferences implements NotificationPreferences {
             ChannelDefaults defaults,
             ClientQueries clients,
             NotificationsProperties properties,
+            MailServer mailServer,
             Clock clock) {
         this.preferences = preferences;
         this.chats = chats;
         this.defaults = defaults;
         this.clients = clients;
         this.properties = properties;
+        this.mailServer = mailServer;
         this.clock = clock;
     }
 
@@ -71,12 +75,14 @@ class DefaultNotificationPreferences implements NotificationPreferences {
         chats.deleteByAccountId(requireAccount(actor));
     }
 
+    /** Почта доступна, если она настроена на сервере и у карточки аккаунта есть адрес (спека §3.2). */
     private MyChannels channels(UUID accountId) {
         var switches = preferences.findSwitches(accountId).orElseGet(() -> defaults.forAccount(accountId));
-        var emailAvailable = clients.byAccountId(accountId)
-                .map(ClientView::email)
-                .filter(email -> !email.isBlank())
-                .isPresent();
+        var emailAvailable = mailServer.configured()
+                && clients.byAccountId(accountId)
+                        .map(ClientView::email)
+                        .filter(email -> !email.isBlank())
+                        .isPresent();
         return new MyChannels(
                 switches.email(),
                 emailAvailable,

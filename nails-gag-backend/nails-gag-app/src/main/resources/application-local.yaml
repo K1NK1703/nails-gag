@@ -4,6 +4,11 @@ spring:
     compose:
       file: compose.yaml
       lifecycle-management: start-only
+  mail:
+    # Письма уведомлений — в Mailpit из compose.yaml (веб-интерфейс http://localhost:8025), наружу не уходят. Compose
+    # поднимается при bootRun, только если не запущен ни один сервис; иначе: docker compose up -d mailpit.
+    host: localhost
+    port: 1025
 
 logging:
   structured:

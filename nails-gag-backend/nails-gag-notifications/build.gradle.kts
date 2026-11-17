@@ -14,6 +14,8 @@ dependencies {
     // Реестр публикаций Spring Modulith в PostgreSQL: событие, не обработанное до падения, повторяется после рестарта.
     implementation(libs.spring.modulith.starter.jdbc)
     implementation(libs.spring.boot.starter.mail)
+    // Коды ответов SMTP из исключений Angus Mail: постоянный отказ 5xx отличается от временного 4xx.
+    implementation(libs.angus.mail)
 
     testImplementation(project(":nails-gag-test-support"))
     // Тесты очереди заводят слоты для настоящих записей через публичный API расписания.
@@ -21,4 +23,10 @@ dependencies {
     // Тест событий пропускает их через EventSerializer реестра и правит JSON публикаций тем же JsonMapper.
     testImplementation(libs.spring.modulith.events.core)
     testImplementation(libs.jackson.databind)
+    // Почтовый сервер в памяти для тестов писем. JUnit 4 (для его правила) не нужен; Jakarta Mail — та же, что у
+    // приложения (angus-mail), а не её сборка jakarta.mail, тянущая те же классы второй раз.
+    testImplementation(libs.greenmail) {
+        exclude(group = "junit", module = "junit")
+        exclude(group = "org.eclipse.angus", module = "jakarta.mail")
+    }
 }

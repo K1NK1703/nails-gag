@@ -35,26 +35,24 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * Канал доступен, если он настроен на сервере (есть бин {@link NotificationChannel} и он {@code configured()}),
- * включён у получателя (своя настройка или умолчание) и у получателя есть адрес этого канала.
+ * включён у получателя (своя настройка или умолчание) и у получателя есть адрес этого канала. Реализаций канала может
+ * быть несколько, но настроенной — не больше одной: так подменная реализация встаёт на место настоящей, которая не
+ * настроена; две настроенные — ошибка конфигурации.
  */
 @Component
 class ChannelResolver {
 
     private final StaffDirectory staffDirectory;
     private final AccountChannels accountChannels;
-    private final Map<Channel, NotificationChannel> channels;
+    private final Map<Channel, List<NotificationChannel>> channels;
 
     ChannelResolver(
             StaffDirectory staffDirectory, AccountChannels accountChannels, List<NotificationChannel> channels) {
         this.staffDirectory = staffDirectory;
         this.accountChannels = accountChannels;
-        var byChannel = new EnumMap<Channel, NotificationChannel>(Channel.class);
-        for (var channel : channels) {
-            byChannel.merge(channel.channel(), channel, (first, second) -> {
-                throw new InternalException("two implementations of channel " + first.channel());
-            });
-        }
-        this.channels = byChannel;
+        this.channels = channels.stream()
+                .collect(Collectors.groupingBy(
+                        NotificationChannel::channel, () -> new EnumMap<>(Channel.class), Collectors.toList()));
     }
 
     /**
@@ -143,7 +141,13 @@ class ChannelResolver {
 
     /** Реализация канала, если он настроен на сервере. */
     Optional<NotificationChannel> channel(Channel channel) {
-        return Optional.ofNullable(channels.get(channel)).filter(NotificationChannel::configured);
+        var configured = channels.getOrDefault(channel, List.of()).stream()
+                .filter(NotificationChannel::configured)
+                .toList();
+        if (configured.size() > 1) {
+            throw new InternalException("two configured implementations of channel " + channel);
+        }
+        return configured.stream().findFirst();
     }
 
     private boolean configured(Channel channel) {

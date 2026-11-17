@@ -22,9 +22,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -156,6 +158,32 @@ class MyChannelsTest {
                     .isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(() -> preferences.createTelegramLink(actor)).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(() -> preferences.unlinkTelegram(actor)).isInstanceOf(AccessDeniedException.class);
+        }
+    }
+
+    /**
+     * Почта не настроена на сервере (спека §3.2): здесь нет отправителя — почта недоступна, даже если у карточки она
+     * есть; включённой она остаётся. Свой контекст: зависимости — свои, не внешнего класса.
+     */
+    @Nested
+    @TestPropertySource(properties = "nails-gag.notifications.email.from=")
+    class WithoutMailServer {
+
+        @Autowired
+        NotificationPreferences withoutMail;
+
+        @Autowired
+        ClientService cards;
+
+        @Test
+        void emailIsUnavailableWithoutMailServer() {
+            var accountId = UUID.randomUUID();
+            var card = cards.register(new RegisterClient(accountId, "Анна", null, accountId + ".anna@example.com"));
+            var client = Actor.of(accountId, card.id(), Map.of());
+
+            assertThat(withoutMail.mine(client)).isEqualTo(new MyChannels(true, false, true, false, false));
+            assertThat(withoutMail.update(new UpdateMyChannels(true, false), client))
+                    .isEqualTo(new MyChannels(true, false, false, false, false));
         }
     }
 

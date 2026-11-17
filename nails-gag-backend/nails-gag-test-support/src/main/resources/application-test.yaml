@@ -4,6 +4,17 @@ spring:
       # Как в application.yaml приложения: общий applicationTaskExecutor есть и рядом со своим пулом слушателей
       # уведомлений.
       mode: force
+  mail:
+    # Почта уведомлений в тестах настроена (сервер и отправитель есть): кабинет видит её доступной, как на рабочем
+    # сервере. Писем сюда не шлют: тесты отправки работают с подменными каналами или со своим сервером GreenMail. Порт 1
+    # закрыт — случайное письмо сразу получило бы отказ в соединении, а не ушло бы наружу.
+    host: localhost
+    port: 1
+    properties:
+      # Как в application.yaml приложения: без таймаутов настроенная почта не стартует.
+      "[mail.smtp.connectiontimeout]": 10000
+      "[mail.smtp.timeout]": 20000
+      "[mail.smtp.writetimeout]": 20000
   jpa:
     open-in-view: false
     hibernate:
@@ -60,6 +71,9 @@ nails-gag:
     site-url: https://nails-gag.ru
     master-telegram: "@gagushichewa"
     salon-address: "пр. КИМа 6, метро Приморская, 3 этаж, студия 365"
+    email:
+      # Как в application.yaml приложения; вместе с spring.mail.host почта настроена.
+      from: "nails.gag <noreply@nails-gag.ru>"
     telegram:
       # Бот выключен: внешние сервисы в тестах не вызываются; тесты бота включают его сами.
       bot-token: ""

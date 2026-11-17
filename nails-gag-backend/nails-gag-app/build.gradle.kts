@@ -44,6 +44,8 @@ dependencies {
     testImplementation(libs.archunit.junit5)
     testImplementation(libs.spring.boot.micrometer.tracing.test)
     testImplementation(libs.opentelemetry.sdk.testing)
+    // Проверка, что таймауты SMTP из application.yaml доходят до сессии JavaMail (автонастройка почты Spring Boot).
+    testImplementation(libs.spring.boot.starter.mail)
 }
 
 springBoot {

@@ -17,6 +17,9 @@ datasourceMicrometer = "2.3.0"
 twelvemonkeys = "3.15.3"
 # EXIF-ориентация фото в JPEG, PNG и WebP; не входит в BOM
 metadataExtractor = "2.21.0"
+# Почтовый сервер в памяти для тестов писем уведомлений; 2.1.x собрана под Jakarta Mail 2.1 и Angus Mail 2.0, как в
+# BOM Spring Boot 4.1.1; не входит в BOM
+greenmail = "2.1.15"
 
 [libraries]
 # BOM-ы: версии всего остального из Spring Boot и Spring Modulith
@@ -32,6 +35,8 @@ spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-star
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
 # Письма уведомлений по SMTP (JavaMailSender)
 spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail" }
+# Реализация Jakarta Mail (в стартере почты только runtime): коды ответов SMTP из её исключений (версия из BOM)
+angus-mail = { module = "org.eclipse.angus:angus-mail" }
 # Jackson 3 без автонастройки Spring Boot: финансы пишут снимки журнала в jsonb своим JsonMapper (версия из BOM)
 jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 spring-boot-starter-liquibase = { module = "org.springframework.boot:spring-boot-starter-liquibase" }
@@ -75,6 +80,7 @@ spring-modulith-docs = { module = "org.springframework.modulith:spring-modulith-
 
 postgresql = { module = "org.postgresql:postgresql" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
+greenmail = { module = "com.icegreen:greenmail", version.ref = "greenmail" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 

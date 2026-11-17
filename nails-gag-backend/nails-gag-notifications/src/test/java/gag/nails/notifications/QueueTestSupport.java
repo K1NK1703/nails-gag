@@ -40,6 +40,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -52,7 +53,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>После каждого теста удаляется только своё: сообщения своих записей, оставшиеся публикации о них, записи,
  * согласия и карточки своих клиентов, свои слоты и аккаунты. Часы тестов стоят на четверге 1 октября 2026, 09:00 по
  * Москве (06:00 UTC) — вне тихих часов.
+ *
+ * <p>Настоящая почта в тестах очереди не настроена (нет отправителя): отправка в них идёт через подменные каналы
+ * ({@code FakeChannel}), а настроенная реализация канала может быть только одна. Тест настоящей почты задаёт свой
+ * сервер и отправителя сам.
  */
+@TestPropertySource(properties = "nails-gag.notifications.email.from=")
 abstract class QueueTestSupport {
 
     /** Основная услуга из seed каталога. */

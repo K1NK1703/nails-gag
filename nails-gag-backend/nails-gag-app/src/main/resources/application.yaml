@@ -14,6 +14,16 @@ spring:
       shutdown:
         await-termination: true
         await-termination-period: 20s
+  mail:
+    # Почтовый сервер писем уведомлений: host, port, username, password — при развёртывании через переменные окружения
+    # (SPRING_MAIL_HOST и т. д.), не в файле. Без host (или без nails-gag.notifications.email.from) почта выключена.
+    properties:
+      # Таймауты SMTP, мс. Обязательны и не больше 20 с (проверяются при старте): отправка держит доставку в аренде
+      # 5 минут от начала попытки, а письмо — около десятка обменов с сервером; без таймаутов JavaMail ждёт сервер
+      # бесконечно. Для SMTPS (spring.mail.protocol: smtps) — те же ключи mail.smtps.*.
+      "[mail.smtp.connectiontimeout]": 10000
+      "[mail.smtp.timeout]": 20000
+      "[mail.smtp.writetimeout]": 20000
   jpa:
     open-in-view: false
     hibernate:
@@ -168,6 +178,11 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    mail:
+      # Недоступный почтовый сервер — не болезнь приложения: письма повторяются по расписанию, сбой виден в логе. Иначе
+      # каждая проверка здоровья ходила бы на почтовый сервер.
+      enabled: false
   tracing:
     sampling:
       probability: 1.0
