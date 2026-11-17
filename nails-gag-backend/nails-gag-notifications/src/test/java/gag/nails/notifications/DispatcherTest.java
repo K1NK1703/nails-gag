@@ -33,6 +33,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -69,10 +70,20 @@ class DispatcherTest extends QueueTestSupport {
     @Autowired
     EarlierTimeOffers earlierTimes;
 
+    /** Триггер теста, отвергающий вставку доставок; снимается после теста. */
+    private @Nullable String failureTrigger;
+
     @AfterEach
     void resetChannels() {
         fakeEmail.reset();
         fakeTelegram.reset();
+        if (failureTrigger != null) {
+            jdbc.sql("DROP TRIGGER IF EXISTS %1$s ON notifications.delivery".formatted(failureTrigger))
+                    .update();
+            jdbc.sql("DROP FUNCTION IF EXISTS notifications.%s()".formatted(failureTrigger))
+                    .update();
+            failureTrigger = null;
+        }
     }
 
     @Test
@@ -503,9 +514,10 @@ class DispatcherTest extends QueueTestSupport {
     }
 
     /**
-     * Доставка в аренде: попытка засчитана и {@code next_attempt_at} сдвинут на 5 минут до вызова канала, и это
-     * зафиксировано — второй прогон, запущенный посреди отправки первого (из другого потока), взятых доставок не
-     * видит и не отправляет их повторно; одновременные прогоны делят пачку через {@code SKIP LOCKED}.
+     * Доставка берётся в аренду прямо перед своей отправкой: попытка засчитана и {@code next_attempt_at} сдвинут на 5
+     * минут до вызова канала, и это зафиксировано, а остальные доставки пачки ещё не тронуты. Второй прогон, запущенный
+     * посреди отправки первого (из другого потока), взятую доставку не видит и не отправляет повторно, а остальные
+     * отправляет сам — первый прогон их уже не берёт.
      */
     @Test
     void runDuringSendingDoesNotSendLeasedDeliveriesAgain() throws Exception {
@@ -538,7 +550,7 @@ class DispatcherTest extends QueueTestSupport {
 
         dispatcher.run();
 
-        assertThat(leasedSeen).hasValue(3);
+        assertThat(leasedSeen).hasValue(1);
         for (var email : emails) {
             assertThat(fakeEmail.toEmail(email)).hasSize(1);
         }
@@ -715,6 +727,153 @@ class DispatcherTest extends QueueTestSupport {
                         "Вы записаны на пн, 5 октября, 14:00",
                         "Запись перенесена на пн, 5 октября, 14:00",
                         "Запись подтверждена: пн, 5 октября, 14:00");
+    }
+
+    /**
+     * Сообщение, на котором постановка доставок падает (здесь — триггер на вставку его доставок), не останавливает ни
+     * остальные сообщения, ни отправку уже созревших доставок; оно остаётся {@code PENDING} и, истёкши, отменяется,
+     * не доходя до вставки доставок.
+     */
+    @Test
+    void messageThatFailsToDispatchStopsNeitherOthersNorSending() {
+        var pendingEmail = email();
+        var badEmail = email();
+        var goodEmail = email();
+        var pendingAttempts = new AtomicInteger();
+        fakeEmail.respond(
+                (recipient, text) -> pendingEmail.equals(recipient.email()) && pendingAttempts.getAndIncrement() == 0
+                        ? new SendResult.Retry(null, "smtp_down")
+                        : new SendResult.Sent());
+        var pending = bookByMaster(client("Анна", null, pendingEmail), slot(MONDAY, "14:00"), false);
+        dispatcher.run();
+        clock.advance(Duration.ofMinutes(1));
+        var bad = bookByMaster(client("Мария", null, badEmail), slot(TUESDAY, "14:00"), false);
+        var good = bookByMaster(client("Ольга", null, goodEmail), slot(TUESDAY.plusDays(1), "14:00"), false);
+        var badMessage = messageId(bad.id(), MessageKind.BOOKED_BY_MASTER);
+        failDeliveryInsertsOf(badMessage);
+
+        dispatcher.run();
+
+        assertThat(status(badMessage)).isEqualTo(MessageStatus.PENDING);
+        assertThat(deliveries(badMessage)).isEmpty();
+        assertThat(status(messageId(good.id(), MessageKind.BOOKED_BY_MASTER))).isEqualTo(MessageStatus.DISPATCHED);
+        assertThat(fakeEmail.toEmail(goodEmail)).hasSize(1);
+        assertThat(delivery(messageId(pending.id(), MessageKind.BOOKED_BY_MASTER), Channel.EMAIL))
+                .extracting(Delivery::status, Delivery::attempts)
+                .containsExactly(DeliveryStatus.SENT, 2);
+
+        clock.advance(Duration.ofHours(25));
+        dispatcher.run();
+
+        assertThat(status(badMessage)).isEqualTo(MessageStatus.CANCELLED);
+        assertThat(fakeEmail.toEmail(badEmail)).isEmpty();
+    }
+
+    /** Аренду перехватили (отправка шла дольше, доставку взял другой прогон) — исход не пишется. */
+    @Test
+    void resultOfLostLeaseIsNotRecorded() {
+        var email = email();
+        var moved = clock.instant().plus(Duration.ofHours(1));
+        var messageId = new AtomicReference<UUID>();
+        fakeEmail.respond((recipient, text) -> {
+            if (email.equals(recipient.email())) {
+                jdbc.sql("update notifications.delivery set next_attempt_at = ? where message_id = ?")
+                        .params(Timestamp.from(moved), messageId.get())
+                        .update();
+            }
+            return new SendResult.Sent();
+        });
+        var booking = bookByMaster(client("Анна", null, email), slot(MONDAY, "14:00"), false);
+        messageId.set(messageId(booking.id(), MessageKind.BOOKED_BY_MASTER));
+
+        dispatcher.run();
+
+        assertThat(delivery(messageId.get(), Channel.EMAIL))
+                .extracting(Delivery::status, Delivery::attempts, Delivery::nextAttemptAt, Delivery::sentAt)
+                .containsExactly(DeliveryStatus.PENDING, 1, moved, null);
+    }
+
+    /** Процесс упал посреди отправки: исход не записан, по истечении аренды доставка уходит снова — попытка вторая. */
+    @Test
+    void deliveryLeftByCrashIsSentAgainAfterLease() {
+        var email = email();
+        var calls = new AtomicInteger();
+        fakeEmail.respond((recipient, text) -> {
+            if (email.equals(recipient.email()) && calls.getAndIncrement() == 0) {
+                throw new AssertionError("process crashed while sending");
+            }
+            return new SendResult.Sent();
+        });
+        var booking = bookByMaster(client("Анна", null, email), slot(MONDAY, "14:00"), false);
+        var messageId = messageId(booking.id(), MessageKind.BOOKED_BY_MASTER);
+
+        assertThatThrownBy(dispatcher::run).isInstanceOf(AssertionError.class);
+
+        assertThat(delivery(messageId, Channel.EMAIL))
+                .extracting(Delivery::status, Delivery::attempts, Delivery::nextAttemptAt)
+                .containsExactly(DeliveryStatus.PENDING, 1, clock.instant().plus(Duration.ofMinutes(5)));
+
+        clock.advance(Duration.ofMinutes(4));
+        dispatcher.run();
+        assertThat(fakeEmail.toEmail(email)).isEmpty();
+
+        clock.advance(Duration.ofMinutes(1));
+        dispatcher.run();
+
+        assertThat(delivery(messageId, Channel.EMAIL))
+                .extracting(Delivery::status, Delivery::attempts)
+                .containsExactly(DeliveryStatus.SENT, 2);
+        assertThat(fakeEmail.toEmail(email)).hasSize(1);
+    }
+
+    /** Пятая попытка пропала вместе с процессом: по истечении аренды доставка неудачна, канал не вызывается. */
+    @Test
+    void deliveryWithoutAttemptsLeftFailsAtClaim() {
+        var email = email();
+        fakeEmail.respond((recipient, text) -> {
+            if (email.equals(recipient.email())) {
+                throw new AssertionError("process crashed while sending");
+            }
+            return new SendResult.Sent();
+        });
+        var booking = bookByMaster(client("Анна", null, email), slot(MONDAY, "14:00"), false);
+        var messageId = messageId(booking.id(), MessageKind.BOOKED_BY_MASTER);
+        assertThatThrownBy(dispatcher::run).isInstanceOf(AssertionError.class);
+        jdbc.sql("update notifications.delivery set attempts = 5 where message_id = ?")
+                .param(messageId)
+                .update();
+        var calls = new AtomicInteger();
+        fakeEmail.respond((recipient, text) -> {
+            if (email.equals(recipient.email())) {
+                calls.incrementAndGet();
+            }
+            return new SendResult.Sent();
+        });
+
+        clock.advance(Duration.ofMinutes(5));
+        dispatcher.run();
+
+        assertThat(delivery(messageId, Channel.EMAIL))
+                .extracting(Delivery::status, Delivery::attempts, Delivery::errorCode)
+                .containsExactly(DeliveryStatus.FAILED, 5, "transient_exhausted");
+        assertThat(calls).hasValue(0);
+    }
+
+    /** Триггер теста отвергает вставку доставок одного сообщения; снимается после теста. */
+    private void failDeliveryInsertsOf(UUID messageId) {
+        var trigger = "dispatcher_test_" + messageId.toString().replace("-", "");
+        failureTrigger = trigger;
+        jdbc.sql("""
+                CREATE OR REPLACE FUNCTION notifications.%s() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.message_id = '%s' THEN
+                        RAISE EXCEPTION 'delivery rejected by test';
+                    END IF;
+                    RETURN NEW;
+                END $$""".formatted(trigger, messageId)).update();
+        jdbc.sql("""
+                CREATE OR REPLACE TRIGGER %1$s BEFORE INSERT ON notifications.delivery
+                FOR EACH ROW EXECUTE FUNCTION notifications.%1$s()""".formatted(trigger)).update();
     }
 
     @Test

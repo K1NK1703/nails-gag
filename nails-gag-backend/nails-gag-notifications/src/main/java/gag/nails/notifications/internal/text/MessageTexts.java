@@ -11,11 +11,15 @@ import gag.nails.notifications.internal.NotificationsProperties;
 import gag.nails.notifications.model.MessageKind;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
@@ -34,6 +38,8 @@ import org.springframework.stereotype.Component;
 public class MessageTexts {
 
     private static final Locale RUSSIAN = Locale.forLanguageTag("ru");
+
+    private static final char NO_BREAK_SPACE = '\u00A0';
 
     private final NotificationsProperties properties;
     private final BookingSettingsService bookingSettings;
@@ -87,14 +93,16 @@ public class MessageTexts {
                         address(),
                         "Перенести или отменить запись можно в личном кабинете: " + account());
             case CANCELLED_BY_CLIENT ->
-                List.of(
+                lines(
                         "Запись на " + visit(booking) + " отменена",
                         client.firstName() + ", вы отменили запись. Будем рады видеть вас снова!",
+                        nextBookingNeedsPrepayment(booking.cancelReason()),
                         "Записаться на другое время можно в личном кабинете: " + account());
             case CANCELLED ->
-                List.of(
+                lines(
                         "Запись на " + visit(booking) + " отменена",
                         client.firstName() + ", " + cancellation(booking.cancelReason()),
+                        nextBookingNeedsPrepayment(booking.cancelReason()),
                         "Записаться на другое время можно в личном кабинете: " + account(),
                         "Написать мастеру: " + properties.masterTelegram());
             case RESCHEDULED ->
@@ -193,6 +201,21 @@ public class MessageTexts {
         return rubles(amount) + (deadline != null ? " до " + dateTime.format(deadline) : "");
     }
 
+    /**
+     * Поздняя отмена клиенткой и отказ из-за опоздания ставят ей признак предоплаты — об этом говорится прямо;
+     * {@code null} — строки нет.
+     */
+    private static @Nullable String nextBookingNeedsPrepayment(@Nullable CancelReason reason) {
+        return reason == CancelReason.CLIENT_LATE || reason == CancelReason.LATE_ARRIVAL
+                ? "Следующую запись нужно будет подтвердить предоплатой."
+                : null;
+    }
+
+    /** Строки текста без пропущенных ({@code null}). */
+    private static List<String> lines(@Nullable String... lines) {
+        return Arrays.stream(lines).filter(Objects::nonNull).toList();
+    }
+
     private static String cancellation(@Nullable CancelReason reason) {
         if (reason == null) {
             return "запись отменена.";
@@ -226,12 +249,17 @@ public class MessageTexts {
         return lastName == null || lastName.isBlank() ? client.firstName() : client.firstName() + " " + lastName;
     }
 
-    /** Рубли без копеек, если их нет («600 ₽»), иначе с двумя знаками через запятую («600,50 ₽»). */
-    private static String rubles(BigDecimal amount) {
+    /**
+     * Рубли: разряды через неразрывный пробел, копейки — через запятую, только если они есть, и неразрывный пробел
+     * перед знаком: «1 500 ₽», «600,50 ₽». Неразрывные пробелы не дают переносу строки разорвать сумму.
+     */
+    static String rubles(BigDecimal amount) {
         var whole = amount.stripTrailingZeros().scale() <= 0;
-        var text = whole
-                ? amount.setScale(0, RoundingMode.UNNECESSARY).toPlainString()
-                : amount.setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
-        return text + " ₽";
+        var symbols = new DecimalFormatSymbols(RUSSIAN);
+        symbols.setGroupingSeparator(NO_BREAK_SPACE);
+        symbols.setDecimalSeparator(',');
+        var format = new DecimalFormat(whole ? "#,##0" : "#,##0.00", symbols);
+        format.setRoundingMode(RoundingMode.HALF_UP);
+        return format.format(amount) + NO_BREAK_SPACE + "₽";
     }
 }

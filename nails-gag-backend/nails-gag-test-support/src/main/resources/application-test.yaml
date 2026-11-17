@@ -1,4 +1,9 @@
 spring:
+  task:
+    execution:
+      # Как в application.yaml приложения: общий applicationTaskExecutor есть и рядом со своим пулом слушателей
+      # уведомлений.
+      mode: force
   jpa:
     open-in-view: false
     hibernate:

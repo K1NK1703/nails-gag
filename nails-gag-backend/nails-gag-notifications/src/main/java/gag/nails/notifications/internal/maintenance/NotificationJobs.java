@@ -1,6 +1,7 @@
 package gag.nails.notifications.internal.maintenance;
 
 import gag.nails.notifications.NotificationMaintenance;
+import gag.nails.notifications.internal.Failures;
 import gag.nails.notifications.internal.NotificationsProperties;
 import gag.nails.notifications.internal.dispatch.Dispatcher;
 import org.slf4j.Logger;
@@ -24,8 +25,9 @@ import org.springframework.scheduling.annotation.Scheduled;
  *       WARN о публикациях, незавершённых дольше суток ({@link EventPublicationRetries}).
  * </ul>
  *
- * Сбой одного запуска пишется в лог и следующему не мешает. Все задачи вызываются вне транзакции. Выключаются
- * свойством {@code nails-gag.notifications.jobs.enabled=false} — так делают тесты, которые вызывают их сами.
+ * Сбой одного запуска пишется в лог (ошибка базы — без текста, {@link Failures}) и следующему не мешает. Все задачи
+ * вызываются вне транзакции. Выключаются свойством {@code nails-gag.notifications.jobs.enabled=false} — так делают
+ * тесты, которые вызывают их сами.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -54,7 +56,7 @@ class NotificationJobs {
         try {
             dispatcher.run();
         } catch (RuntimeException e) {
-            log.error("notifications dispatch failed, the next run will retry", e);
+            logFailure("notifications dispatch failed, the next run will retry", e);
         }
     }
 
@@ -74,12 +76,12 @@ class NotificationJobs {
         try {
             maintenance.purgeExpired();
         } catch (RuntimeException e) {
-            log.error("notifications purge failed, the next run will retry", e);
+            logFailure("notifications purge failed, the next run will retry", e);
         }
         try {
             publications.warnAboutStale();
         } catch (RuntimeException e) {
-            log.error("event publications check failed, the next run will retry", e);
+            logFailure("event publications check failed, the next run will retry", e);
         }
     }
 
@@ -88,7 +90,16 @@ class NotificationJobs {
         try {
             publications.resubmitFailed();
         } catch (RuntimeException e) {
-            log.error("event publications resubmission failed, the next run will retry", e);
+            logFailure("event publications resubmission failed, the next run will retry", e);
+        }
+    }
+
+    /** Ошибка базы — класс и SQLState без текста (в нём бывают значения строк), прочие — со стеком. */
+    private static void logFailure(String what, RuntimeException failure) {
+        if (Failures.isDatabase(failure)) {
+            log.error("{}: {}", what, Failures.describe(failure));
+        } else {
+            log.error(what, failure);
         }
     }
 }

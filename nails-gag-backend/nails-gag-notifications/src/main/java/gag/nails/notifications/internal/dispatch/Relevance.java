@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  *       не получает, а перенос или принятое «пораньше» делают прежние напоминания неактуальными.
  *   <li>Просьба о предоплате — запись всё ещё ждёт предоплату.
  *   <li>Предложение прийти раньше — оно всё ещё ждёт ответа, и это то самое предложение: время его создания совпадает с
- *       моментом события ({@code occurred_at}); у строки без момента события — любое ждущее ответа.
+ *       моментом события ({@code occurred_at}).
  *   <li>Остальные — факты, отправляются всегда.
  * </ul>
  *
@@ -28,10 +28,9 @@ final class Relevance {
 
     /**
      * @param expiresAt срок жизни сообщения
-     * @param occurredAt момент события сообщения; пусто — неизвестен
+     * @param occurredAt момент события сообщения
      */
-    static boolean relevant(
-            MessageKind kind, @Nullable BookingView booking, Instant expiresAt, @Nullable Instant occurredAt) {
+    static boolean relevant(MessageKind kind, @Nullable BookingView booking, Instant expiresAt, Instant occurredAt) {
         if (booking == null) {
             return false;
         }
@@ -56,10 +55,10 @@ final class Relevance {
         };
     }
 
-    private static boolean offerPending(BookingView booking, @Nullable Instant occurredAt) {
+    private static boolean offerPending(BookingView booking, Instant occurredAt) {
         var offer = booking.earlierTime();
         return offer != null
                 && offer.status() == EarlierTimeStatus.PENDING
-                && (occurredAt == null || offer.proposedAt().equals(occurredAt));
+                && offer.proposedAt().equals(occurredAt);
     }
 }

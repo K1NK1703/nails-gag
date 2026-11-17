@@ -1,7 +1,6 @@
 package gag.nails.notifications.internal.dispatch;
 
 import gag.nails.booking.model.BookingView;
-import gag.nails.clients.ClientQueries;
 import gag.nails.clients.model.ClientView;
 import gag.nails.common.error.InternalException;
 import gag.nails.identity.StaffDirectory;
@@ -41,17 +40,12 @@ import org.springframework.stereotype.Component;
 @Component
 class ChannelResolver {
 
-    private final ClientQueries clients;
     private final StaffDirectory staffDirectory;
     private final AccountChannels accountChannels;
     private final Map<Channel, NotificationChannel> channels;
 
     ChannelResolver(
-            ClientQueries clients,
-            StaffDirectory staffDirectory,
-            AccountChannels accountChannels,
-            List<NotificationChannel> channels) {
-        this.clients = clients;
+            StaffDirectory staffDirectory, AccountChannels accountChannels, List<NotificationChannel> channels) {
         this.staffDirectory = staffDirectory;
         this.accountChannels = accountChannels;
         var byChannel = new EnumMap<Channel, NotificationChannel>(Channel.class);
@@ -64,8 +58,8 @@ class ChannelResolver {
     }
 
     /**
-     * Получатели мастерских сообщений с кодами их ролей — один запрос на пачку сообщений: от этого списка зависят и
-     * мастерские сообщения, и умолчания каналов аккаунтов сотрудников.
+     * Получатели мастерских сообщений с кодами их ролей — один запрос на прогон: от этого списка зависят и мастерские
+     * сообщения, и умолчания каналов аккаунтов сотрудников.
      */
     Map<UUID, Set<String>> staff() {
         return staffDirectory.recipients(ChannelDefaults.STAFF_SECTION, ChannelDefaults.STAFF_LEVEL).stream()
@@ -77,18 +71,24 @@ class ChannelResolver {
      * мастерских сообщений.
      *
      * @param accountId аккаунт мастерского сообщения ({@code message.account_id})
+     * @param booking запись сообщения: её текущая карточка — получатель клиентского сообщения
      * @param staff получатели мастерских сообщений ({@link #staff()})
+     * @param cards карточки, уже прочитанные в этой работе
      */
     Optional<Target> target(
-            MessageKind kind, @Nullable UUID accountId, BookingView booking, Map<UUID, Set<String>> staff) {
-        if (kind.name().startsWith("STAFF_")) {
+            MessageKind kind,
+            @Nullable UUID accountId,
+            BookingView booking,
+            Map<UUID, Set<String>> staff,
+            Cards cards) {
+        if (kind.isStaff()) {
             if (accountId == null || !staff.containsKey(accountId)) {
                 return Optional.empty();
             }
-            var card = clients.byAccountId(accountId).orElse(null);
+            var card = cards.byAccountId(accountId).orElse(null);
             return Optional.of(new Target(card, accountId, ChannelDefaults.forStaff(staff.get(accountId))));
         }
-        return clients.byId(booking.clientId()).filter(card -> !card.erased()).map(card -> {
+        return cards.byId(booking.clientId()).filter(card -> !card.erased()).map(card -> {
             var cardAccount = card.accountId();
             var defaults = cardAccount != null && staff.containsKey(cardAccount)
                     ? ChannelDefaults.forStaff(staff.get(cardAccount))
@@ -97,21 +97,24 @@ class ChannelResolver {
         });
     }
 
-    /**
-     * Доступные получателю каналы, в порядке {@link Channel}.
-     *
-     * @param switches свои настройки каналов аккаунтов ({@link AccountChannels#switches})
-     * @param linked аккаунты с привязанным ботом ({@link AccountChannels#linkedToTelegram})
-     */
-    Set<Channel> available(Target target, Map<UUID, ChannelSwitches> switches, Set<UUID> linked) {
+    /** Доступные получателю сейчас каналы, в порядке {@link Channel}. */
+    Set<Channel> available(Target target) {
         var available = EnumSet.noneOf(Channel.class);
-        var enabled = target.switches(switches);
+        var switches = switches(target);
+        var accountId = target.accountId();
         for (var channel : Channel.values()) {
+            if (!configured(channel) || !enabled(switches, channel)) {
+                continue;
+            }
             var hasAddress = switch (channel) {
                 case EMAIL -> target.email() != null;
-                case TELEGRAM -> target.accountId() != null && linked.contains(target.accountId());
+                case TELEGRAM ->
+                    accountId != null
+                            && !accountChannels
+                                    .linkedToTelegram(List.of(accountId))
+                                    .isEmpty();
             };
-            if (configured(channel) && enabled(enabled, channel) && hasAddress) {
+            if (hasAddress) {
                 available.add(channel);
             }
         }
@@ -119,19 +122,16 @@ class ChannelResolver {
     }
 
     /**
-     * Адрес получателя в канале на момент отправки — по тем же правилам, что {@link #available}, но по текущим
-     * настройке и привязке; пусто — канал получателю сейчас недоступен.
+     * Адрес получателя в канале на момент отправки — по тем же правилам, что {@link #available}; пусто — канал
+     * получателю сейчас недоступен.
      */
     Optional<ResolvedRecipient> resolve(Channel channel, Target target) {
-        if (!configured(channel)) {
+        if (!configured(channel) || !enabled(switches(target), channel)) {
             return Optional.empty();
         }
+        var card = target.card();
+        var name = card == null ? null : card.firstName();
         var accountId = target.accountId();
-        var own = accountId == null ? Map.<UUID, ChannelSwitches>of() : accountChannels.switches(List.of(accountId));
-        if (!enabled(target.switches(own), channel)) {
-            return Optional.empty();
-        }
-        var name = target.card() == null ? null : target.card().firstName();
         return switch (channel) {
             case EMAIL -> Optional.ofNullable(target.email()).map(email -> new ResolvedRecipient(email, null, name));
             case TELEGRAM ->
@@ -150,6 +150,16 @@ class ChannelResolver {
         return channel(channel).isPresent();
     }
 
+    /** Своя настройка аккаунта получателя или умолчание. */
+    private ChannelSwitches switches(Target target) {
+        var accountId = target.accountId();
+        if (accountId == null) {
+            return target.defaults();
+        }
+        var own = accountChannels.switches(List.of(accountId)).get(accountId);
+        return own != null ? own : target.defaults();
+    }
+
     private static boolean enabled(ChannelSwitches switches, Channel channel) {
         return switch (channel) {
             case EMAIL -> switches.email();
@@ -158,7 +168,7 @@ class ChannelResolver {
     }
 
     /**
-     * Получатель на текущий момент.
+     * Получатель на текущий момент. {@link #toString()} личных данных карточки не показывает.
      *
      * @param card карточка: клиентки — текущая карточка записи; сотрудника — карточка его аккаунта, если есть
      * @param accountId аккаунт: сотрудника или карточки клиентки; пусто — карточка без аккаунта
@@ -176,10 +186,10 @@ class ChannelResolver {
             return email == null || email.isBlank() ? null : email;
         }
 
-        /** Каналы получателя: своя настройка аккаунта или умолчание. */
-        ChannelSwitches switches(Map<UUID, ChannelSwitches> own) {
-            var configured = accountId == null ? null : own.get(accountId);
-            return configured != null ? configured : defaults;
+        @Override
+        public String toString() {
+            return "Target[card=" + (card == null ? "<none>" : card.id()) + ", accountId=" + accountId + ", defaults="
+                    + defaults + "]";
         }
     }
 }

@@ -88,8 +88,8 @@ CREATE TABLE notifications.message (
     dedup_key     varchar(255) NOT NULL CONSTRAINT message_dedup_key_key UNIQUE,
     -- Момент события, из-за которого сообщение поставлено (у напоминания — момент расчёта): при равном due_at
     -- сообщения уходят в порядке событий, а не постановки — слушатели событий асинхронны и идут не по порядку.
-    -- Очередь пишет его всегда; пусто — у строк, вставленных мимо очереди: они идут после остальных с тем же due_at.
-    occurred_at   timestamptz,
+    -- Очередь пишет его всегда; умолчание — для строк, вставленных мимо очереди (ручные правки).
+    occurred_at   timestamptz  NOT NULL DEFAULT now(),
     created_at    timestamptz  NOT NULL,
     dispatched_at timestamptz,
     CONSTRAINT message_recipient_check CHECK ((client_id IS NULL) <> (account_id IS NULL)),

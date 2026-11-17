@@ -28,11 +28,8 @@ public record NewMessage(
     /** Длина колонки {@code message.dedup_key}. */
     public static final int DEDUP_KEY_MAX_LENGTH = 255;
 
-    private static final String STAFF_PREFIX = "STAFF_";
-
     public NewMessage {
-        var staffKind = kind.name().startsWith(STAFF_PREFIX);
-        if (staffKind != (recipient instanceof Recipient.Account)) {
+        if (kind.isStaff() != (recipient instanceof Recipient.Account)) {
             throw new InternalException("message kind " + kind + " does not match its recipient");
         }
         if (!expiresAt.isAfter(dueAt)) {

@@ -39,7 +39,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * Тексты сообщений — точное совпадение с эталоном на каждый вид (спека §5.3). Визит — суббота 21 ноября 2026, 14:00
- * по Москве; услуги — маникюр (2000 ₽) и дизайн (500 ₽), предоплата 30 % — 750 ₽.
+ * по Москве; услуги — маникюр (2000 ₽) и дизайн (500 ₽), предоплата 30 % — 750 ₽. Пробелы в суммах — неразрывные.
  */
 class MessageTextsTest {
 
@@ -81,7 +81,7 @@ class MessageTextsTest {
         assertThat(texts.render(MessageKind.PREPAYMENT_REQUESTED, awaitingPrepayment(), anna))
                 .isEqualTo("""
                         Запись на сб, 21 ноября, 14:00 ждёт предоплату
-                        Анна, чтобы подтвердить запись, внесите предоплату 750 ₽ до чт, 19 ноября, 18:00. \
+                        Анна, чтобы подтвердить запись, внесите предоплату 750\u00A0₽ до чт, 19 ноября, 18:00. \
                         Если предоплаты к этому сроку не будет, запись отменится.
                         Как внести предоплату — уточните у мастера: @gagushichewa
                         Услуги: Маникюр, Дизайн
@@ -96,7 +96,21 @@ class MessageTextsTest {
 
         // 33 % от 2500 ₽ — 825 ₽: процент от прайса выбранного состава, округлённый до рубля.
         assertThat(texts.render(MessageKind.PREPAYMENT_REQUESTED, awaitingPrepayment(), anna))
-                .contains("внесите предоплату 825 ₽ до чт, 19 ноября, 18:00.");
+                .contains("внесите предоплату 825\u00A0₽ до чт, 19 ноября, 18:00.");
+    }
+
+    /** Сумма от тысячи — с разделителем разрядов, копейки — через запятую; пробелы неразрывные. */
+    @Test
+    void largePrepaymentAmountIsGroupedWithNonBreakingSpaces() {
+        var texts = new MessageTexts(
+                properties(), new SalonTimeZone(ZoneId.of("Europe/Moscow")), new FixedBookingSettings(60));
+
+        // 60 % от 2500 ₽ — 1500 ₽.
+        assertThat(texts.render(MessageKind.PREPAYMENT_REQUESTED, awaitingPrepayment(), anna))
+                .contains("внесите предоплату 1\u00A0500\u00A0₽ до чт, 19 ноября, 18:00.");
+        assertThat(MessageTexts.rubles(new BigDecimal("1234567.50"))).isEqualTo("1\u00A0234\u00A0567,50\u00A0₽");
+        assertThat(MessageTexts.rubles(new BigDecimal("999.00"))).isEqualTo("999\u00A0₽");
+        assertThat(MessageTexts.rubles(new BigDecimal("12.05"))).isEqualTo("12,05\u00A0₽");
     }
 
     @Test
@@ -129,16 +143,48 @@ class MessageTextsTest {
                         Написать мастеру: @gagushichewa""");
     }
 
+    /** Поздняя отмена клиенткой: следующую запись — по предоплате. */
+    @Test
+    void cancelledByClientLate() {
+        assertThat(texts.render(MessageKind.CANCELLED_BY_CLIENT, cancelled(CancelReason.CLIENT_LATE), anna))
+                .isEqualTo("""
+                        Запись на сб, 21 ноября, 14:00 отменена
+                        Анна, вы отменили запись. Будем рады видеть вас снова!
+                        Следующую запись нужно будет подтвердить предоплатой.
+                        Записаться на другое время можно в личном кабинете: https://nails-gag.ru/account""");
+    }
+
+    /** Отказ из-за опоздания приравнивается к поздней отмене: следующую запись — по предоплате. */
+    @Test
+    void cancelledForLateArrival() {
+        assertThat(texts.render(MessageKind.CANCELLED, cancelled(CancelReason.LATE_ARRIVAL), anna))
+                .isEqualTo("""
+                        Запись на сб, 21 ноября, 14:00 отменена
+                        Анна, запись отменена из-за опоздания.
+                        Следующую запись нужно будет подтвердить предоплатой.
+                        Записаться на другое время можно в личном кабинете: https://nails-gag.ru/account
+                        Написать мастеру: @gagushichewa""");
+    }
+
+    /** Без последствий для клиентки — без строки о предоплате. */
+    @Test
+    void cancellationsWithoutConsequencesDoNotMentionPrepayment() {
+        for (var reason : List.of(CancelReason.CLIENT, CancelReason.MASTER, CancelReason.ACCOUNT_DELETED)) {
+            assertThat(texts.render(MessageKind.CANCELLED, cancelled(reason), anna))
+                    .doesNotContain("предоплат");
+            assertThat(texts.render(MessageKind.CANCELLED_BY_CLIENT, cancelled(reason), anna))
+                    .doesNotContain("предоплат");
+        }
+    }
+
     @Test
     void cancelledNamesItsReason() {
-        assertThat(texts.render(MessageKind.CANCELLED, cancelled(CancelReason.LATE_ARRIVAL), anna))
-                .contains("\nАнна, запись отменена из-за опоздания.\n");
         assertThat(texts.render(MessageKind.CANCELLED, cancelled(CancelReason.PREPAYMENT_TIMEOUT), anna))
                 .contains("\nАнна, запись отменена: предоплата не поступила в срок.\n");
         assertThat(texts.render(MessageKind.CANCELLED, cancelled(CancelReason.ACCOUNT_DELETED), anna))
                 .contains("\nАнна, запись отменена, потому что вы удалили аккаунт.\n");
         assertThat(texts.render(MessageKind.CANCELLED, cancelled(CancelReason.CLIENT_LATE), anna))
-                .contains("\nАнна, вы отменили запись.\n");
+                .contains("\nАнна, вы отменили запись.\nСледующую запись нужно будет подтвердить предоплатой.\n");
     }
 
     @Test

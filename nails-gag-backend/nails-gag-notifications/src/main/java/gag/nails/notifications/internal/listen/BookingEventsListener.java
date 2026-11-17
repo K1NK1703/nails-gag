@@ -24,14 +24,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
-import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
 /**
  * Сообщения о событиях записи — матрица спеки §5.1: на каждое событие один {@code switch}, который решает, какой вид
- * уходит клиентке и какой — сотрудникам. Слушатели — {@code @ApplicationModuleListener}: после фиксации события,
- * асинхронно, в своей транзакции, через реестр публикаций (событие, не обработанное до падения, повторяется после
- * рестарта). Повтор безопасен: ключ повтора сообщения — {@code <событие>:<запись>:<occurredAt>:<получатель>}.
+ * уходит клиентке и какой — сотрудникам. Слушатели — {@link NotificationsListener} ({@code @ApplicationModuleListener}
+ * на своём пуле модуля): после фиксации события, асинхронно, в своей транзакции, через реестр публикаций (событие, не
+ * обработанное до падения, повторяется после рестарта). Повтор безопасен: ключ повтора сообщения —
+ * {@code <событие>:<запись>:<occurredAt>:<получатель>}.
  *
  * <p>Клиентке пишем на карточку из события; мастерское сообщение — каждому из
  * {@code StaffDirectory.recipients(BOOKINGS, READ)} на момент обработки, независимо от его каналов: каналы выбираются
@@ -67,7 +67,7 @@ class BookingEventsListener {
      * Запись, созданная мастером, — клиентке, если подтверждена сразу. Запись, ждущую предоплату, клиентке объясняет
      * {@link PrepaymentRequested}, опубликованный вместе с этим событием.
      */
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(BookingCreated event) {
         reminders.replan(event.bookingId());
         var confirmed = event.status() == BookingStatus.CONFIRMED;
@@ -81,19 +81,19 @@ class BookingEventsListener {
         enqueue(event, event.bookingId(), event.clientId(), plan);
     }
 
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(PrepaymentRequested event) {
         enqueue(event, event.bookingId(), event.clientId(), Plan.clientOnly(MessageKind.PREPAYMENT_REQUESTED));
     }
 
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(BookingConfirmed event) {
         reminders.replan(event.bookingId());
         enqueue(event, event.bookingId(), event.clientId(), Plan.clientOnly(MessageKind.CONFIRMED));
     }
 
     /** Новая причина отмены не скомпилируется, пока для неё не решено, кому писать. */
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(BookingCancelled event) {
         reminders.cancel(event.bookingId());
         var plan = switch (event.reason()) {
@@ -105,7 +105,7 @@ class BookingEventsListener {
     }
 
     /** Инициатор {@code null} (событие прежней формы) — перенос мастером. */
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(BookingRescheduled event) {
         reminders.replan(event.bookingId());
         var plan = switch (event.initiator()) {
@@ -116,30 +116,30 @@ class BookingEventsListener {
         enqueue(event, event.bookingId(), event.clientId(), plan);
     }
 
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(EarlierTimeProposed event) {
         enqueue(event, event.bookingId(), event.clientId(), Plan.clientOnly(MessageKind.EARLIER_PROPOSED));
     }
 
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(EarlierTimeAccepted event) {
         reminders.replan(event.bookingId());
         enqueue(event, event.bookingId(), event.clientId(), Plan.staffOnly(MessageKind.STAFF_EARLIER_ACCEPTED));
     }
 
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(EarlierTimeDeclined event) {
         enqueue(event, event.bookingId(), event.clientId(), Plan.staffOnly(MessageKind.STAFF_EARLIER_DECLINED));
     }
 
     /** Визит состоялся — напоминать не о чем; сообщений нет. */
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(BookingCompleted event) {
         reminders.cancel(event.bookingId());
     }
 
     /** Клиентка не пришла — напоминать не о чем; сообщений нет. */
-    @ApplicationModuleListener
+    @NotificationsListener
     void on(BookingNoShow event) {
         reminders.cancel(event.bookingId());
     }

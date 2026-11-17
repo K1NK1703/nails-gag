@@ -1,13 +1,13 @@
 package gag.nails.notifications.internal.dispatch;
 
 import gag.nails.booking.BookingQueries;
-import gag.nails.booking.model.BookingView;
 import gag.nails.clients.ClientQueries;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.actor.Section;
 import gag.nails.common.error.InternalException;
 import gag.nails.common.id.UuidV7;
+import gag.nails.notifications.internal.Failures;
 import gag.nails.notifications.internal.preference.AccountChannels;
 import gag.nails.notifications.internal.queue.QuietHours;
 import gag.nails.notifications.internal.text.MessageTexts;
@@ -15,20 +15,19 @@ import gag.nails.notifications.model.Channel;
 import gag.nails.notifications.model.MessageKind;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,45 +37,48 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Отправка (спека §3.5). Прогон — два шага, каждый пачками по {@value #BATCH}, пока пачки полные.
+ * Отправка (спека §3.5). Прогон — два шага; сбой первого не мешает второму, оба сбоя прогон сообщает после.
  *
- * <p><b>Сообщения → доставки</b> ({@code dispatchDue}), одна короткая транзакция на пачку: созревшие сообщения
- * ({@code PENDING}, {@code due_at <= now}) берутся {@code FOR UPDATE SKIP LOCKED} по {@code due_at}, затем по моменту
- * события ({@code occurred_at}) и id; неактуальные (§5.2, {@link Relevance}) отменяются; для остальных определяются
- * доступные сейчас каналы ({@link ChannelResolver}) — по доставке на канал, и сообщение становится
- * {@code DISPATCHED} (без каналов — без доставок). Доставки создаются в той же транзакции, что и {@code DISPATCHED}:
- * у {@code PENDING}-сообщения доставок не бывает, поэтому удаление неотправленных напоминаний не задевает доставки.
- * Транзакция блокирует только свои строки сообщений, и то без ожидания ({@code SKIP LOCKED}): ни строки настроек, ни
+ * <p><b>Сообщения → доставки</b> ({@code dispatchDue}) — по одному сообщению в своей короткой транзакции: созревшее
+ * сообщение ({@code PENDING}, {@code due_at <= now}) берётся {@code FOR UPDATE SKIP LOCKED} по {@code due_at}, затем
+ * по моменту события ({@code occurred_at}) и id; истёкшее отменяется без чтения записи; неактуальное (§5.2,
+ * {@link Relevance}) отменяется; для остальных определяются доступные сейчас каналы ({@link ChannelResolver}) — по
+ * доставке на канал, и сообщение становится {@code DISPATCHED} (без каналов — без доставок). Доставки создаются в той
+ * же транзакции, что и {@code DISPATCHED}: у {@code PENDING}-сообщения доставок не бывает, поэтому удаление
+ * неотправленных напоминаний не задевает доставки. Сообщение, на котором транзакция упала, остаётся {@code PENDING} и в
+ * этом прогоне больше не берётся — остальные идут дальше; когда истечёт, оно отменится, не читая записи. Транзакция
+ * блокирует только строку своего сообщения, и то без ожидания ({@code SKIP LOCKED}): ни строки настроек, ни
  * advisory-блокировок, ни внешних вызовов — записи, карточки и получатели только читаются. Поэтому в порядке
- * блокировок очереди ({@code ReminderPlanner}) отправки нет: она никого не ждёт, а её ждут не дольше пачки.
+ * блокировок очереди ({@code ReminderPlanner}) отправки нет: она никого не ждёт, а её ждут не дольше одного сообщения.
  *
- * <p><b>Доставки → каналы</b> ({@code sendDue}). Созревшие доставки ({@code PENDING}, {@code next_attempt_at <=
- * now}) берутся {@code FOR UPDATE SKIP LOCKED}; истёкшие (срок жизни сообщения прошёл) и исчерпавшие попытки сразу
- * неудачны, доставки клиенткам в тихие часы откладываются до их конца, остальные берутся в аренду: попытка
- * засчитывается, {@code next_attempt_at} сдвигается на {@link RetryPolicy#LEASE} — и это фиксируется до отправки.
+ * <p><b>Доставки → каналы</b> ({@code sendDue}). Созревшие доставки ({@code PENDING}, {@code next_attempt_at <= now})
+ * читаются пачкой без блокировок, и каждая берётся в аренду прямо перед своей отправкой — короткой транзакцией с
+ * {@code FOR UPDATE SKIP LOCKED} и повторной проверкой срока: истёкшая (срок жизни сообщения прошёл) и исчерпавшая
+ * попытки сразу неудачны, доставка клиентке в тихие часы откладывается до их конца, остальная берётся в аренду: попытка
+ * засчитывается, {@code next_attempt_at} сдвигается на {@link RetryPolicy#LEASE}, и это фиксируется до отправки. Аренда
+ * отсчитывается от начала своей отправки, а не от начала пачки: медленный канал не съедает аренду следующих доставок.
  * Параллельный прогон взятую доставку не видит; после падения посреди отправки она созреет снова (доставка «хотя бы
- * раз»). Затем вне транзакции, по одной: актуальность проверяется заново, адрес определяется сейчас — почта текущей
- * карточки, чат текущей привязки (после обезличивания повтор никуда не уходит), текст собирается из текущих записи и
- * карточки ({@link MessageTexts}), канал отправляет. Результат пишется новой короткой транзакцией — только если аренда
- * всё ещё своя (то же {@code next_attempt_at}).
+ * раз»). Затем вне транзакции: актуальность проверяется заново, адрес определяется сейчас — почта текущей карточки, чат
+ * текущей привязки (после обезличивания повтор никуда не уходит), текст собирается из текущих записи и карточки
+ * ({@link MessageTexts}), канал отправляет. Результат пишется новой короткой транзакцией — только если аренда всё ещё
+ * своя (то же {@code next_attempt_at}).
  *
  * <p>Повторы — {@link RetryPolicy}: временный сбой откладывает доставку по расписанию, но не раньше срока, названного
  * каналом; доставке клиентке — ещё и из тихих часов; не успевающая до срока жизни сообщения — неудачна
  * ({@code expired}). Постоянный отказ канала — неудачна сразу; заблокировавший бота чат отвязывается. Каналы одного
  * сообщения независимы: сбой одного не трогает другой.
  *
- * <p>В лог — только id, вид, канал и код ошибки; сбой канала — WARN не чаще раза в минуту на канал.
+ * <p>В лог — только id, вид, канал и код ошибки; сбой канала — WARN не чаще раза в минуту на канал; ошибки базы — класс
+ * и SQLState без текста ({@link Failures}).
  */
 @Component
 public class Dispatcher {
 
-    /** Сколько сообщений или доставок за одну транзакцию. */
+    /** Сколько созревших доставок читается за раз. */
     static final int BATCH = 100;
 
     /** Системное чтение записей: отправке нужна любая запись, без актора запроса. */
     private static final Actor BOOKINGS_READER = Actor.of(null, null, Map.of(Section.BOOKINGS, AccessLevel.READ));
-
-    private static final String STAFF_PREFIX = "STAFF_";
 
     private static final Logger log = LoggerFactory.getLogger(Dispatcher.class);
 
@@ -113,179 +115,255 @@ public class Dispatcher {
         this.warnings = new ChannelWarnings(clock);
     }
 
-    /** Прогон: все созревшие сообщения — в доставки, затем все созревшие доставки — в каналы. Вне транзакции. */
+    /**
+     * Прогон: все созревшие сообщения — в доставки, затем все созревшие доставки — в каналы. Отправка идёт и тогда,
+     * когда первый шаг упал; упавший шаг (оба — первый с подавленным вторым) прогон бросает в конце. Вне транзакции.
+     */
     public void run() {
         requireNoTransaction();
-        while (dispatchDue() == BATCH) {
-            // Полная пачка — возможно, созревших больше.
+        RuntimeException failure = null;
+        try {
+            dispatchDue();
+        } catch (RuntimeException e) {
+            failure = e;
         }
-        while (sendDue() == BATCH) {
-            // Так же.
-        }
-    }
-
-    /**
-     * Одна пачка созревших сообщений своей короткой транзакцией: неактуальные — {@code CANCELLED}, остальные —
-     * доставки по доступным каналам и {@code DISPATCHED}.
-     *
-     * @return сколько сообщений взято
-     */
-    private int dispatchDue() {
-        return Objects.requireNonNull(transaction.execute(status -> dispatchBatch()));
-    }
-
-    /**
-     * Одна пачка созревших доставок: аренда в своей транзакции, отправка вне её, результат каждой — новой транзакцией.
-     *
-     * @return сколько доставок взято (в том числе неудачных сразу и отложенных из-за тихих часов)
-     */
-    private int sendDue() {
-        var claimed = Objects.requireNonNull(transaction.execute(status -> claimDeliveries()));
-        var leased = claimed.leased();
-        if (!leased.isEmpty()) {
-            var staff = resolver.staff();
-            for (var delivery : leased) {
-                send(delivery, staff);
+        try {
+            sendDue();
+        } catch (RuntimeException e) {
+            if (failure == null) {
+                failure = e;
+            } else {
+                failure.addSuppressed(e);
             }
         }
-        return claimed.taken();
+        warnings.flush();
+        if (failure != null) {
+            throw failure;
+        }
     }
 
-    private int dispatchBatch() {
+    /**
+     * Все созревшие сообщения, по одному в своей транзакции. Сообщение, на котором транзакция упала, исключается до
+     * конца прогона, поэтому цикл конечен; упал сам выбор сообщения (база недоступна) — шаг прерывается.
+     */
+    private void dispatchDue() {
+        var failed = new HashSet<UUID>();
+        var run = new DispatchRun(new Cards(clients));
+        while (true) {
+            var current = new AtomicReference<@Nullable DueMessage>();
+            try {
+                if (!Objects.requireNonNull(transaction.execute(status -> dispatchNext(failed, current, run)))) {
+                    break;
+                }
+            } catch (RuntimeException e) {
+                var message = current.get();
+                if (message == null) {
+                    throw e;
+                }
+                failed.add(message.id());
+                log.warn(
+                        "notification message {} ({}) was not dispatched, it stays pending: {}",
+                        message.id(),
+                        message.kind(),
+                        Failures.describe(e));
+            }
+        }
+        if (run.dispatched > 0 || run.cancelled > 0 || !failed.isEmpty()) {
+            log.info(
+                    "notifications dispatched {} messages with {} deliveries, cancelled {}, failed {}",
+                    run.dispatched,
+                    run.deliveries,
+                    run.cancelled,
+                    failed.size());
+        }
+    }
+
+    /** Одно созревшее сообщение; {@code false} — созревших (кроме упавших в этом прогоне) нет. */
+    private boolean dispatchNext(Set<UUID> failed, AtomicReference<@Nullable DueMessage> current, DispatchRun run) {
         var now = now();
-        var messages = jdbc.sql("""
+        var message = jdbc.sql("""
                         select id, account_id, kind, booking_id, expires_at, occurred_at
                         from notifications.message
                         where status = 'PENDING' and due_at <= :now
-                        order by due_at, occurred_at, id
-                        limit :limit
-                        for update skip locked
+                        """ + (failed.isEmpty() ? "" : " and id not in (:failed)") + """
+                         order by due_at, occurred_at, id
+                         limit 1
+                         for update skip locked
                         """)
-                .param("now", timestamp(now))
-                .param("limit", BATCH)
+                .params(
+                        failed.isEmpty()
+                                ? Map.of("now", timestamp(now))
+                                : Map.of("now", timestamp(now), "failed", failed))
                 .query(Dispatcher::dueMessage)
-                .list();
-        if (messages.isEmpty()) {
-            return 0;
+                .optional()
+                .orElse(null);
+        if (message == null) {
+            return false;
         }
-        var staff = resolver.staff();
-        var bookingsById = new HashMap<UUID, Optional<BookingView>>();
-        var cancelled = new ArrayList<UUID>();
-        var targets = new ArrayList<Targeted>();
-        for (var message : messages) {
-            var booking = bookingsById
-                    .computeIfAbsent(message.bookingId(), id -> bookings.find(id, BOOKINGS_READER))
-                    .orElse(null);
-            if (!Relevance.relevant(message.kind(), booking, message.expiresAt(), message.occurredAt())) {
-                cancelled.add(message.id());
-            } else {
-                var target =
-                        resolver.target(message.kind(), message.accountId(), Objects.requireNonNull(booking), staff);
-                targets.add(new Targeted(message, target.orElse(null)));
-            }
+        current.set(message);
+        if (!message.expiresAt().isAfter(now)) {
+            markCancelled(message.id());
+            run.cancelled++;
+            return true;
         }
-        var accountIds = targets.stream()
-                .map(Targeted::target)
-                .filter(Objects::nonNull)
-                .map(ChannelResolver.Target::accountId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        var switches = accountChannels.switches(accountIds);
-        var linked = accountChannels.linkedToTelegram(accountIds);
-        var deliveries = 0;
-        for (var targeted : targets) {
-            var target = targeted.target();
-            var channels = target == null ? Set.<Channel>of() : resolver.available(target, switches, linked);
-            var nextAttemptAt = isStaff(targeted.message().kind()) ? now : quietHours.shift(now);
-            for (var channel : channels) {
-                insertDelivery(targeted.message().id(), channel, nextAttemptAt);
-                deliveries++;
-            }
+        var booking = bookings.find(message.bookingId(), BOOKINGS_READER).orElse(null);
+        if (!Relevance.relevant(message.kind(), booking, message.expiresAt(), message.occurredAt())) {
+            markCancelled(message.id());
+            run.cancelled++;
+            return true;
         }
-        markDispatched(targets.stream().map(targeted -> targeted.message().id()).toList(), now);
-        markCancelled(cancelled);
-        log.info(
-                "notifications dispatched {} messages with {} deliveries, cancelled {} outdated",
-                targets.size(),
-                deliveries,
-                cancelled.size());
-        return messages.size();
+        var channels = resolver.target(
+                        message.kind(), message.accountId(), Objects.requireNonNull(booking), run.staff(), run.cards)
+                .map(resolver::available)
+                .orElse(Set.of());
+        var nextAttemptAt = message.kind().isStaff() ? now : quietHours.shift(now);
+        insertDeliveries(message.id(), channels, nextAttemptAt);
+        markDispatched(message.id(), now);
+        run.dispatched++;
+        run.deliveries += channels.size();
+        return true;
     }
 
-    private void insertDelivery(UUID messageId, Channel channel, Instant nextAttemptAt) {
-        jdbc.sql("""
-                        insert into notifications.delivery (id, message_id, channel, status, attempts, next_attempt_at)
-                        values (:id, :messageId, :channel, 'PENDING', 0, :nextAttemptAt)
-                        """)
-                .param("id", UuidV7.next())
+    /** Все доставки сообщения — одним оператором. */
+    private void insertDeliveries(UUID messageId, Set<Channel> channels, Instant nextAttemptAt) {
+        if (channels.isEmpty()) {
+            return;
+        }
+        var rows = new ArrayList<String>();
+        var statement = new ArrayList<Channel>(channels);
+        for (var i = 0; i < statement.size(); i++) {
+            rows.add("(:id" + i + ", :messageId, :channel" + i + ", 'PENDING', 0, :nextAttemptAt)");
+        }
+        var insert = jdbc.sql("insert into notifications.delivery"
+                        + " (id, message_id, channel, status, attempts, next_attempt_at) values "
+                        + String.join(", ", rows))
                 .param("messageId", messageId)
-                .param("channel", channel.name())
-                .param("nextAttemptAt", timestamp(nextAttemptAt))
+                .param("nextAttemptAt", timestamp(nextAttemptAt));
+        for (var i = 0; i < statement.size(); i++) {
+            insert = insert.param("id" + i, UuidV7.next())
+                    .param("channel" + i, statement.get(i).name());
+        }
+        insert.update();
+    }
+
+    /** Сообщение взято этой транзакцией ({@code FOR UPDATE}), поэтому всё ещё {@code PENDING}. */
+    private void markDispatched(UUID messageId, Instant now) {
+        jdbc.sql("update notifications.message set status = 'DISPATCHED', dispatched_at = :now where id = :id")
+                .param("now", timestamp(now))
+                .param("id", messageId)
                 .update();
     }
 
-    /** Сообщения взяты этой транзакцией ({@code FOR UPDATE}), поэтому всё ещё {@code PENDING}. */
-    private void markDispatched(List<UUID> messageIds, Instant now) {
-        if (!messageIds.isEmpty()) {
-            jdbc.sql("""
-                            update notifications.message set status = 'DISPATCHED', dispatched_at = :now
-                            where id in (:ids)
-                            """).param("now", timestamp(now)).param("ids", messageIds).update();
-        }
+    private void markCancelled(UUID messageId) {
+        jdbc.sql("update notifications.message set status = 'CANCELLED' where id = :id")
+                .param("id", messageId)
+                .update();
     }
 
-    private void markCancelled(List<UUID> messageIds) {
-        if (!messageIds.isEmpty()) {
-            jdbc.sql("update notifications.message set status = 'CANCELLED' where id in (:ids)")
-                    .param("ids", messageIds)
-                    .update();
+    /**
+     * Все созревшие доставки: пачка читается без блокировок, каждая доставка берётся в аренду и отправляется по одной.
+     * Доставка, на взятии которой транзакция упала, исключается до конца прогона. Следующая пачка читается, только
+     * если эта была полной и что-то сдвинула: иначе остались лишь доставки, которые прямо сейчас берёт другой прогон.
+     */
+    private void sendDue() {
+        var failed = new HashSet<UUID>();
+        var failures = new SendFailures();
+        Map<UUID, Set<String>> staff = null;
+        while (true) {
+            var candidates = dueDeliveries(failed);
+            var progressed = 0;
+            for (var deliveryId : candidates) {
+                Claim claim;
+                try {
+                    claim = Objects.requireNonNull(transaction.execute(status -> claim(deliveryId)));
+                } catch (RuntimeException e) {
+                    failed.add(deliveryId);
+                    failures.failed("claim failed", deliveryId, e);
+                    continue;
+                }
+                if (claim instanceof Claim.Leased leased) {
+                    if (staff == null) {
+                        staff = resolver.staff();
+                    }
+                    send(leased, staff, failures);
+                }
+                if (!(claim instanceof Claim.Skipped)) {
+                    progressed++;
+                }
+            }
+            if (candidates.size() < BATCH || progressed == 0) {
+                break;
+            }
         }
+        failures.summarize();
     }
 
-    private Claimed claimDeliveries() {
+    private List<UUID> dueDeliveries(Set<UUID> failed) {
         var now = now();
-        var due = jdbc.sql("""
+        return jdbc.sql("""
+                        select d.id from notifications.delivery d
+                        join notifications.message m on m.id = d.message_id
+                        where d.status = 'PENDING' and d.next_attempt_at <= :now
+                        """ + (failed.isEmpty() ? "" : " and d.id not in (:failed)") + """
+                         order by d.next_attempt_at, m.occurred_at, d.id
+                         limit :limit
+                        """)
+                .params(
+                        failed.isEmpty()
+                                ? Map.of("now", timestamp(now))
+                                : Map.of("now", timestamp(now), "failed", failed))
+                .param("limit", BATCH)
+                .query(UUID.class)
+                .list();
+    }
+
+    /**
+     * Берёт доставку, если она всё ещё созревшая и её не держит другой прогон: истёкшая или исчерпавшая попытки —
+     * неудачна, клиентке в тихие часы — отложена, иначе — в аренду.
+     */
+    private Claim claim(UUID deliveryId) {
+        var now = now();
+        var delivery = jdbc.sql("""
                         select d.id, d.message_id, d.channel, d.attempts, m.kind, m.booking_id, m.account_id,
                                m.expires_at, m.occurred_at
                         from notifications.delivery d
                         join notifications.message m on m.id = d.message_id
-                        where d.status = 'PENDING' and d.next_attempt_at <= :now
-                        order by d.next_attempt_at, m.occurred_at, d.id
-                        limit :limit
+                        where d.id = :id and d.status = 'PENDING' and d.next_attempt_at <= :now
                         for update of d skip locked
                         """)
+                .param("id", deliveryId)
                 .param("now", timestamp(now))
-                .param("limit", BATCH)
                 .query(Dispatcher::dueDelivery)
-                .list();
-        var leased = new ArrayList<Leased>();
-        for (var delivery : due) {
-            if (!delivery.expiresAt().isAfter(now)) {
-                fail(delivery.id(), ErrorCodes.EXPIRED);
-                log.info("notification delivery {} of message {} expired", delivery.id(), delivery.messageId());
-            } else if (!RetryPolicy.canRetry(delivery.attempts())) {
-                fail(delivery.id(), ErrorCodes.TRANSIENT_EXHAUSTED);
-                log.info(
-                        "notification delivery {} of message {} has no attempts left",
-                        delivery.id(),
-                        delivery.messageId());
-            } else if (!isStaff(delivery.kind()) && quietHours.shift(now).isAfter(now)) {
-                postpone(delivery.id(), quietHours.shift(now));
-            } else {
-                var lease = now.plus(RetryPolicy.LEASE);
-                jdbc.sql("""
-                                update notifications.delivery
-                                set attempts = attempts + 1, next_attempt_at = :lease
-                                where id = :id
-                                """)
-                        .param("lease", timestamp(lease))
-                        .param("id", delivery.id())
-                        .update();
-                leased.add(new Leased(delivery, delivery.attempts() + 1, lease));
-            }
+                .optional()
+                .orElse(null);
+        if (delivery == null) {
+            return new Claim.Skipped();
         }
-        return new Claimed(due.size(), leased);
+        if (!delivery.expiresAt().isAfter(now)) {
+            fail(delivery.id(), ErrorCodes.EXPIRED);
+            log.info("notification delivery {} of message {} expired", delivery.id(), delivery.messageId());
+            return new Claim.Finished();
+        }
+        if (!RetryPolicy.canRetry(delivery.attempts())) {
+            fail(delivery.id(), ErrorCodes.TRANSIENT_EXHAUSTED);
+            log.info(
+                    "notification delivery {} of message {} has no attempts left", delivery.id(), delivery.messageId());
+            return new Claim.Finished();
+        }
+        var quietEnd = quietHours.shift(now);
+        if (!delivery.kind().isStaff() && quietEnd.isAfter(now)) {
+            jdbc.sql("update notifications.delivery set next_attempt_at = :next where id = :id")
+                    .param("next", timestamp(quietEnd))
+                    .param("id", delivery.id())
+                    .update();
+            return new Claim.Finished();
+        }
+        var lease = now.plus(RetryPolicy.LEASE);
+        jdbc.sql("update notifications.delivery set attempts = attempts + 1, next_attempt_at = :lease where id = :id")
+                .param("lease", timestamp(lease))
+                .param("id", delivery.id())
+                .update();
+        return new Claim.Leased(delivery, delivery.attempts() + 1, lease);
     }
 
     /** Доставка взята этой транзакцией ({@code FOR UPDATE}), поэтому всё ещё {@code PENDING}. */
@@ -296,46 +374,58 @@ public class Dispatcher {
                 .update();
     }
 
-    private void postpone(UUID deliveryId, Instant nextAttemptAt) {
-        jdbc.sql("update notifications.delivery set next_attempt_at = :nextAttemptAt where id = :id")
-                .param("nextAttemptAt", timestamp(nextAttemptAt))
-                .param("id", deliveryId)
-                .update();
+    /**
+     * Отправка одной арендованной доставки вне транзакции. Ошибка подготовки (чтение, адрес, текст) или записи исхода
+     * оставляет доставку в аренде: по её истечении будет следующая попытка, а попытки конечны.
+     */
+    private void send(Claim.Leased leased, Map<UUID, Set<String>> staff, SendFailures failures) {
+        var delivery = leased.delivery();
+        Prepared prepared;
+        try {
+            prepared = prepare(leased, staff);
+        } catch (RuntimeException e) {
+            failures.failed("render/resolve failed", delivery.id(), e);
+            return;
+        }
+        var outcome = prepared.outcome();
+        var sent = false;
+        if (outcome == null) {
+            var result = sendVia(
+                    Objects.requireNonNull(prepared.channel()),
+                    Objects.requireNonNull(prepared.recipient()),
+                    Objects.requireNonNull(prepared.text()),
+                    delivery);
+            outcome = outcome(result, leased, prepared.accountId(), Objects.requireNonNull(prepared.recipient()));
+            sent = true;
+        }
+        try {
+            record(leased, outcome);
+        } catch (RuntimeException e) {
+            failures.failed(sent ? "result not recorded after send" : "result not recorded", delivery.id(), e);
+        }
     }
 
-    /**
-     * Отправка одной арендованной доставки вне транзакции. Ошибка самой отправки (не канала) оставляет доставку в
-     * аренде: по её истечении будет следующая попытка, а попытки конечны.
-     */
-    private void send(Leased leased, Map<UUID, Set<String>> staff) {
+    /** Всё, что нужно для отправки, по текущим данным; или исход без отправки (неактуально, недоступно). */
+    private Prepared prepare(Claim.Leased leased, Map<UUID, Set<String>> staff) {
         var delivery = leased.delivery();
-        try {
-            var booking = bookings.find(delivery.bookingId(), BOOKINGS_READER).orElse(null);
-            if (!Relevance.relevant(delivery.kind(), booking, delivery.expiresAt(), delivery.occurredAt())) {
-                record(leased, new Outcome.Failed(ErrorCodes.OUTDATED, null));
-                return;
-            }
-            var bookingClient = clients.byId(booking.clientId()).orElse(null);
-            var target = resolver.target(delivery.kind(), delivery.accountId(), booking, staff);
-            var recipient = target.flatMap(found -> resolver.resolve(delivery.channel(), found));
-            var channel = resolver.channel(delivery.channel());
-            if (bookingClient == null || recipient.isEmpty() || channel.isEmpty()) {
-                record(leased, new Outcome.Failed(ErrorCodes.UNAVAILABLE, null));
-                return;
-            }
-            var text = RenderedText.of(texts.render(delivery.kind(), booking, bookingClient));
-            var result = sendVia(channel.get(), recipient.get(), text, delivery);
-            record(leased, outcome(result, leased, target.get().accountId(), recipient.get()));
-        } catch (RuntimeException e) {
-            log.error(
-                    "notification delivery {} of message {} ({} via {}) could not be sent, it stays leased until {}",
-                    delivery.id(),
-                    delivery.messageId(),
-                    delivery.kind(),
-                    delivery.channel(),
-                    leased.lease(),
-                    e);
+        var booking = bookings.find(delivery.bookingId(), BOOKINGS_READER).orElse(null);
+        if (booking == null
+                || !Relevance.relevant(delivery.kind(), booking, delivery.expiresAt(), delivery.occurredAt())) {
+            return Prepared.finished(new Outcome.Failed(ErrorCodes.OUTDATED, null));
         }
+        var cards = new Cards(clients);
+        var bookingClient = cards.byId(booking.clientId()).orElse(null);
+        var target = resolver.target(delivery.kind(), delivery.accountId(), booking, staff, cards)
+                .orElse(null);
+        var recipient = target == null
+                ? null
+                : resolver.resolve(delivery.channel(), target).orElse(null);
+        var channel = resolver.channel(delivery.channel()).orElse(null);
+        if (bookingClient == null || target == null || recipient == null || channel == null) {
+            return Prepared.finished(new Outcome.Failed(ErrorCodes.UNAVAILABLE, null));
+        }
+        var text = RenderedText.of(texts.render(delivery.kind(), booking, bookingClient));
+        return new Prepared(null, channel, recipient, text, target.accountId());
     }
 
     /**
@@ -357,7 +447,8 @@ public class Dispatcher {
     }
 
     /** Что записать по ответу канала; сбой канала — в лог с ограничением частоты. */
-    private Outcome outcome(SendResult result, Leased leased, @Nullable UUID accountId, ResolvedRecipient recipient) {
+    private Outcome outcome(
+            SendResult result, Claim.Leased leased, @Nullable UUID accountId, ResolvedRecipient recipient) {
         var delivery = leased.delivery();
         return switch (result) {
             case SendResult.Sent sent -> new Outcome.Sent();
@@ -386,7 +477,7 @@ public class Dispatcher {
         };
     }
 
-    private Outcome retryOutcome(SendResult.Retry retry, Leased leased) {
+    private Outcome retryOutcome(SendResult.Retry retry, Claim.Leased leased) {
         if (!RetryPolicy.canRetry(leased.attempts())) {
             return new Outcome.Failed(ErrorCodes.TRANSIENT_EXHAUSTED, null);
         }
@@ -396,7 +487,7 @@ public class Dispatcher {
         if (notBefore != null && now.plus(notBefore).isAfter(next)) {
             next = now.plus(notBefore);
         }
-        if (!isStaff(leased.delivery().kind())) {
+        if (!leased.delivery().kind().isStaff()) {
             next = quietHours.shift(next);
         }
         if (!next.isBefore(leased.delivery().expiresAt())) {
@@ -409,7 +500,7 @@ public class Dispatcher {
      * Пишет исход новой транзакцией — только пока аренда своя: доставка всё ещё {@code PENDING} с тем же
      * {@code next_attempt_at}. Иначе (отправка шла дольше аренды, и доставку взял другой прогон) исход пишет тот.
      */
-    private void record(Leased leased, Outcome outcome) {
+    private void record(Claim.Leased leased, Outcome outcome) {
         var delivery = leased.delivery();
         transaction.executeWithoutResult(status -> {
             var statement = switch (outcome) {
@@ -444,7 +535,7 @@ public class Dispatcher {
     }
 
     /** Изменение доставки, пока аренда своя: {@code PENDING} с тем же {@code next_attempt_at}. */
-    private JdbcClient.StatementSpec leasedUpdate(String assignments, Leased leased) {
+    private JdbcClient.StatementSpec leasedUpdate(String assignments, Claim.Leased leased) {
         return jdbc.sql("update notifications.delivery set " + assignments
                         + " where id = :id and status = 'PENDING' and next_attempt_at = :lease")
                 .param("id", leased.delivery().id())
@@ -453,10 +544,6 @@ public class Dispatcher {
 
     private Instant now() {
         return clock.instant().truncatedTo(ChronoUnit.MICROS);
-    }
-
-    private static boolean isStaff(MessageKind kind) {
-        return kind.name().startsWith(STAFF_PREFIX);
     }
 
     private static void requireNoTransaction() {
@@ -469,10 +556,6 @@ public class Dispatcher {
         return instant.atOffset(ZoneOffset.UTC);
     }
 
-    private static @Nullable Instant nullableInstant(@Nullable Timestamp timestamp) {
-        return timestamp == null ? null : timestamp.toInstant();
-    }
-
     private static DueMessage dueMessage(ResultSet row, int rowNumber) throws SQLException {
         return new DueMessage(
                 row.getObject("id", UUID.class),
@@ -480,7 +563,7 @@ public class Dispatcher {
                 MessageKind.valueOf(row.getString("kind")),
                 row.getObject("booking_id", UUID.class),
                 row.getTimestamp("expires_at").toInstant(),
-                nullableInstant(row.getTimestamp("occurred_at")));
+                row.getTimestamp("occurred_at").toInstant());
     }
 
     private static DueDelivery dueDelivery(ResultSet row, int rowNumber) throws SQLException {
@@ -493,7 +576,60 @@ public class Dispatcher {
                 row.getObject("booking_id", UUID.class),
                 row.getObject("account_id", UUID.class),
                 row.getTimestamp("expires_at").toInstant(),
-                nullableInstant(row.getTimestamp("occurred_at")));
+                row.getTimestamp("occurred_at").toInstant());
+    }
+
+    /**
+     * Сбои отправки, не связанные с каналом, за один прогон (спека §6): ошибки базы — класс и SQLState без текста;
+     * прочие (ошибки кода) — стек только у первой, остальные — строкой и итоговым числом.
+     */
+    private static final class SendFailures {
+
+        private int codeFailures;
+
+        void failed(String what, UUID deliveryId, RuntimeException failure) {
+            if (Failures.isDatabase(failure)) {
+                log.warn("notification delivery {}: {}: {}", deliveryId, what, Failures.describe(failure));
+                return;
+            }
+            codeFailures++;
+            if (codeFailures == 1) {
+                log.error("notification delivery {}: {}", deliveryId, what, failure);
+            } else {
+                log.error("notification delivery {}: {}: {}", deliveryId, what, Failures.describe(failure));
+            }
+        }
+
+        void summarize() {
+            if (codeFailures > 1) {
+                log.error(
+                        "{} notification deliveries failed in this run, the stack trace is logged for the first",
+                        codeFailures);
+            }
+        }
+    }
+
+    /** Прогон постановки доставок: получатели-сотрудники — один раз, карточки — по разу. */
+    private final class DispatchRun {
+
+        private final Cards cards;
+        private @Nullable Map<UUID, Set<String>> staff;
+        private int dispatched;
+        private int deliveries;
+        private int cancelled;
+
+        DispatchRun(Cards cards) {
+            this.cards = cards;
+        }
+
+        Map<UUID, Set<String>> staff() {
+            var loaded = staff;
+            if (loaded == null) {
+                loaded = resolver.staff();
+                staff = loaded;
+            }
+            return loaded;
+        }
     }
 
     /** Созревшее сообщение; получатель-карточка не нужен — клиентке пишем по текущей карточке записи. */
@@ -503,9 +639,7 @@ public class Dispatcher {
             MessageKind kind,
             UUID bookingId,
             Instant expiresAt,
-            @Nullable Instant occurredAt) {}
-
-    private record Targeted(DueMessage message, ChannelResolver.@Nullable Target target) {}
+            Instant occurredAt) {}
 
     /** Созревшая доставка с полями своего сообщения. */
     private record DueDelivery(
@@ -517,21 +651,42 @@ public class Dispatcher {
             UUID bookingId,
             @Nullable UUID accountId,
             Instant expiresAt,
-            @Nullable Instant occurredAt) {}
+            Instant occurredAt) {}
+
+    /** Что стало с доставкой при взятии. */
+    private sealed interface Claim {
+
+        /** Уже не созревшая или её держит другой прогон. */
+        record Skipped() implements Claim {}
+
+        /** Неудачна сразу или отложена до конца тихих часов. */
+        record Finished() implements Claim {}
+
+        /**
+         * В аренде.
+         *
+         * @param attempts попыток вместе с этой
+         * @param lease до какого момента аренда: значение {@code next_attempt_at}, по которому пишется исход
+         */
+        record Leased(DueDelivery delivery, int attempts, Instant lease) implements Claim {}
+    }
 
     /**
-     * Доставка в аренде.
+     * Подготовленная отправка: исход без отправки ({@code outcome}) или канал, адрес и текст.
      *
-     * @param attempts попыток вместе с этой
-     * @param lease до какого момента аренда: значение {@code next_attempt_at}, по которому пишется исход
+     * @param accountId аккаунт получателя — для отвязки заблокированного бота
      */
-    private record Leased(DueDelivery delivery, int attempts, Instant lease) {}
+    private record Prepared(
+            @Nullable Outcome outcome,
+            @Nullable NotificationChannel channel,
+            @Nullable ResolvedRecipient recipient,
+            @Nullable RenderedText text,
+            @Nullable UUID accountId) {
 
-    /**
-     * @param taken сколько доставок взято
-     * @param leased взятые в аренду для отправки
-     */
-    private record Claimed(int taken, List<Leased> leased) {}
+        static Prepared finished(Outcome outcome) {
+            return new Prepared(outcome, null, null, null, null);
+        }
+    }
 
     /** Привязка бота, которую снять: аккаунт получателя и чат, куда не удалось отправить. */
     private record Unlink(UUID accountId, long chatId) {}

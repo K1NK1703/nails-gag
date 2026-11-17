@@ -33,5 +33,10 @@ public enum MessageKind {
     /** Клиентка согласилась приехать раньше. */
     STAFF_EARLIER_ACCEPTED,
     /** Клиентка отказалась приехать раньше. */
-    STAFF_EARLIER_DECLINED
+    STAFF_EARLIER_DECLINED;
+
+    /** Мастерский вид ({@code STAFF_*}): получатель — аккаунт сотрудника, а не карточка клиентки. */
+    public boolean isStaff() {
+        return name().startsWith("STAFF_");
+    }
 }
