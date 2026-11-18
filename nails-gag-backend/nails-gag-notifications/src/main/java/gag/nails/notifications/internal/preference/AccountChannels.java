@@ -1,5 +1,8 @@
 package gag.nails.notifications.internal.preference;
 
+import gag.nails.common.id.UuidV7;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,7 +19,9 @@ import org.springframework.stereotype.Component;
  * <p>Порядок блокировок модуля по этим таблицам — токен → чат → настройки каналов ({@code link_token} →
  * {@code telegram_chat} → {@code preference}): привязка бота по ссылке сначала гасит токен, потом пишет чат. Кто
  * меняет несколько из них в одной транзакции, идёт в этом порядке — иначе встречная привязка может дать взаимную
- * блокировку или оставить чат удалённого аккаунта.
+ * блокировку или оставить чат удалённого аккаунта. Удаление аккаунта ({@link #forget}) начинает с той же строки
+ * токена, которую гасит привязка ({@link LinkTokens#consume}, затем {@link #bindTelegram}): кто взял её вторым, ждёт
+ * первого и видит его итог.
  *
  * <p>Отправка читает здесь настройки каналов и привязки получателей и отвязывает чат, заблокировавший бота. Адрес чата
  * ({@code chat_id}) нужен только каналу Telegram в момент отправки — наружу модуля и в логи он не попадает.
@@ -84,6 +89,40 @@ public class AccountChannels {
                 .param("accountId", accountId)
                 .query(Long.class)
                 .optional();
+    }
+
+    /**
+     * Привязывает чат {@code chatId} к аккаунту (спека §3.6): прежний аккаунт этого чата и прежний чат аккаунта
+     * отвязываются. Вызывается в транзакции привязки по ссылке после гашения её токена ({@link LinkTokens#consume}) —
+     * в порядке блокировок модуля.
+     */
+    public void bindTelegram(UUID accountId, long chatId, Instant linkedAt) {
+        jdbc.sql("delete from notifications.telegram_chat where chat_id = :chatId or account_id = :accountId")
+                .param("chatId", chatId)
+                .param("accountId", accountId)
+                .update();
+        jdbc.sql("""
+                        insert into notifications.telegram_chat (id, account_id, chat_id, linked_at)
+                        values (:id, :accountId, :chatId, :linkedAt)
+                        """)
+                .param("id", UuidV7.next())
+                .param("accountId", accountId)
+                .param("chatId", chatId)
+                .param("linkedAt", Timestamp.from(linkedAt))
+                .update();
+    }
+
+    /**
+     * Отвязывает чат {@code chatId} от аккаунта, к которому он привязан ({@code /stop} в боте); без привязки ничего не
+     * делает.
+     *
+     * @return была ли привязка удалена
+     */
+    public boolean unlinkChat(long chatId) {
+        return jdbc.sql("delete from notifications.telegram_chat where chat_id = :chatId")
+                        .param("chatId", chatId)
+                        .update()
+                > 0;
     }
 
     /**

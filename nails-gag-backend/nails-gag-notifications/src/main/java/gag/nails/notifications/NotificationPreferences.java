@@ -33,10 +33,14 @@ public interface NotificationPreferences {
     MyChannels update(UpdateMyChannels command, Actor actor);
 
     /**
-     * Одноразовая ссылка привязки Telegram-бота к своему аккаунту; новая ссылка заменяет прежнюю.
+     * Одноразовая ссылка привязки Telegram-бота к своему аккаунту: {@code https://t.me/<бот>?start=<токен>}, токен —
+     * 43 символа {@code [A-Za-z0-9_-]}, действует 10 минут; новая ссылка заменяет прежнюю. Чат привязывается, когда
+     * человек открывает ссылку и бот получает {@code /start <токен>}: прежний чат аккаунта и прежний аккаунт этого чата
+     * отвязываются.
      *
+     * @return ссылка и момент, до которого она действует
      * @throws AccessDeniedException у актора нет аккаунта
-     * @throws TelegramUnavailableException бот не настроен на сервере
+     * @throws TelegramUnavailableException бот не настроен на сервере (нет токена бота)
      */
     TelegramLink createTelegramLink(Actor actor);
 

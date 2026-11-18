@@ -138,6 +138,8 @@ nails-gag:
       bot-username: ""
       # Сколько Telegram держит запрос getUpdates без новых сообщений.
       poll-timeout: 50s
+      # Адрес Bot API (схема и хост без пути); свой сервер Bot API — здесь.
+      api-url: https://api.telegram.org
   api:
     # Origin сайта: с ним сверяется Origin изменяющих запросов (CSRF), от него строятся переходы после входа.
     # Абсолютный, без пути и завершающего слэша; https (http — только для localhost).

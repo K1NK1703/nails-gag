@@ -85,6 +85,39 @@ class NotificationsPropertiesTest {
     }
 
     @Test
+    void botTokenMustBeWellFormedAndIsNotEchoed() {
+        for (var token : new String[] {"secret", "123:sec ret", "123:secret/../x", "abc:secret"}) {
+            context.withPropertyValues(
+                            PREFIX + "telegram.bot-token=" + token, PREFIX + "telegram.bot-username=nails_gag_bot")
+                    .run(started -> {
+                        assertRejected(started, "telegram.botTokenWellFormed");
+                        assertThat(NestedExceptionUtils.getRootCause(started.getStartupFailure())
+                                        .getMessage())
+                                .doesNotContain("secret")
+                                .doesNotContain("sec ret");
+                    });
+        }
+        context.withPropertyValues(
+                        PREFIX + "telegram.bot-token=123456789:AAH-x_Y9",
+                        PREFIX + "telegram.bot-username=nails_gag_bot")
+                .run(started -> assertThat(started).hasNotFailed());
+    }
+
+    @Test
+    void botApiUrlDefaultsToTelegramAndHasNoPath() {
+        context.run(started -> assertThat(started.getBean(NotificationsProperties.class)
+                        .telegram()
+                        .apiUrl())
+                .isEqualTo("https://api.telegram.org"));
+        context.withPropertyValues(PREFIX + "telegram.api-url=https://api.telegram.org/bot")
+                .run(started -> assertRejected(started, "telegram.apiUrl"));
+        context.withPropertyValues(PREFIX + "telegram.api-url=http://127.0.0.1:8081")
+                .run(started -> assertThat(started).hasNotFailed());
+        assertThat(new NotificationsProperties.Telegram("", "", Duration.ofSeconds(50)).apiUrl())
+                .isEqualTo("https://api.telegram.org");
+    }
+
+    @Test
     void durationsAndRetentionMustBePositive() {
         context.withPropertyValues(PREFIX + "jobs.dispatch-delay=0s")
                 .run(started -> assertRejected(started, "jobs.dispatchDelay"));

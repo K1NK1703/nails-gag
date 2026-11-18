@@ -16,6 +16,8 @@ dependencies {
     implementation(libs.spring.boot.starter.mail)
     // Коды ответов SMTP из исключений Angus Mail: постоянный отказ 5xx отличается от временного 4xx.
     implementation(libs.angus.mail)
+    // RestClient к Bot API Telegram (sendMessage, getUpdates) с разбором JSON.
+    implementation(libs.spring.boot.starter.restclient)
 
     testImplementation(project(":nails-gag-test-support"))
     // Тесты очереди заводят слоты для настоящих записей через публичный API расписания.

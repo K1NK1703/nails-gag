@@ -12,6 +12,7 @@ import gag.nails.notifications.internal.MailServer;
 import gag.nails.notifications.internal.NotificationsProperties;
 import gag.nails.notifications.model.MyChannels;
 import gag.nails.notifications.model.TelegramLink;
+import java.net.URI;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
 
     private final PreferenceRepository preferences;
     private final TelegramChatRepository chats;
+    private final LinkTokens linkTokens;
     private final ChannelDefaults defaults;
     private final ClientQueries clients;
     private final NotificationsProperties properties;
@@ -32,6 +34,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
     DefaultNotificationPreferences(
             PreferenceRepository preferences,
             TelegramChatRepository chats,
+            LinkTokens linkTokens,
             ChannelDefaults defaults,
             ClientQueries clients,
             NotificationsProperties properties,
@@ -39,6 +42,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
             Clock clock) {
         this.preferences = preferences;
         this.chats = chats;
+        this.linkTokens = linkTokens;
         this.defaults = defaults;
         this.clients = clients;
         this.properties = properties;
@@ -61,13 +65,19 @@ class DefaultNotificationPreferences implements NotificationPreferences {
     }
 
     /**
-     * Ссылку выдаёт бот, а приёма его обновлений в модуле пока нет: привязка недоступна, даже если токен задан.
-     * Аккаунт проверяется первым — актор без аккаунта получает отказ, а не «бот недоступен».
+     * Ссылка {@code https://t.me/<бот>?start=<токен>} с новым токеном аккаунта ({@link LinkTokens}). Аккаунт
+     * проверяется первым — актор без аккаунта получает отказ, а не «бот недоступен».
      */
     @Override
     public TelegramLink createTelegramLink(Actor actor) {
-        requireAccount(actor);
-        throw new TelegramUnavailableException();
+        var accountId = requireAccount(actor);
+        var telegram = properties.telegram();
+        if (!telegram.configured()) {
+            throw new TelegramUnavailableException();
+        }
+        var issued = linkTokens.issue(accountId);
+        return new TelegramLink(
+                URI.create("https://t.me/" + telegram.botUsername() + "?start=" + issued.token()), issued.expiresAt());
     }
 
     @Override
@@ -75,7 +85,10 @@ class DefaultNotificationPreferences implements NotificationPreferences {
         chats.deleteByAccountId(requireAccount(actor));
     }
 
-    /** Почта доступна, если она настроена на сервере и у карточки аккаунта есть адрес (спека §3.2). */
+    /**
+     * Почта доступна, если она настроена на сервере и у карточки аккаунта есть адрес (спека §3.2); Telegram — если
+     * настроен бот (задан токен): то же условие, что у канала Telegram при отправке.
+     */
     private MyChannels channels(UUID accountId) {
         var switches = preferences.findSwitches(accountId).orElseGet(() -> defaults.forAccount(accountId));
         var emailAvailable = mailServer.configured()

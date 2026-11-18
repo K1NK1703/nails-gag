@@ -532,7 +532,10 @@ public class Dispatcher {
                         failed.errorCode());
                 var unlink = failed.unlink();
                 if (unlink != null && accountChannels.unlinkTelegram(unlink.accountId(), unlink.chatId())) {
-                    log.info("telegram binding removed: the bot is blocked (delivery {})", delivery.id());
+                    log.info(
+                            "telegram binding removed: the chat is unreachable for the bot, {} (delivery {})",
+                            failed.errorCode(),
+                            delivery.id());
                 }
             }
         });

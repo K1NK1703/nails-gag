@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
  * Сбой канала — WARN не чаще раза в минуту на канал (спека §6): при упавшем почтовом сервере каждая доставка пишет
  * сбой, и без ограничения лог заполнился бы одинаковыми строками. Пропущенные сбои считаются: их число называет
  * следующая строка канала или {@link #flush()} в конце прогона отправки, когда минута прошла. Исходы, которые зависят
- * от получателя (бот заблокирован, почта карточки не разбирается как адрес), — не сбой канала: INFO без ограничения.
+ * от получателя (бот заблокирован, чата нет, почта не разбирается как адрес), — не сбой канала: INFO без ограничения.
  * Только id, вид, канал и код ошибки — без адресов и текстов.
  */
 final class ChannelWarnings {
@@ -23,10 +23,11 @@ final class ChannelWarnings {
     static final Duration INTERVAL = Duration.ofMinutes(1);
 
     /**
-     * Исходы, которые зависят от получателя, а не от канала: заблокированный бот и неразбираемая почта карточки
-     * ({@code email_invalid_address} канала почты).
+     * Исходы, которые зависят от получателя, а не от канала: заблокированный бот, исчезнувший чат Telegram
+     * ({@code telegram_chat_not_found}) и неразбираемая почта карточки ({@code email_invalid_address} канала почты).
      */
-    private static final Set<String> ORDINARY = Set.of("telegram_blocked", "email_invalid_address");
+    private static final Set<String> ORDINARY =
+            Set.of("telegram_blocked", "telegram_chat_not_found", "email_invalid_address");
 
     private static final Logger log = LoggerFactory.getLogger(Dispatcher.class);
 

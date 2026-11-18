@@ -13,6 +13,7 @@ import java.time.LocalTime;
 import org.hibernate.validator.constraints.time.DurationMax;
 import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.validation.annotation.Validated;
@@ -52,9 +53,13 @@ public record NotificationsProperties(
     public static final String DEFAULT_QUIET_FROM = "22:00";
     public static final String DEFAULT_QUIET_TO = "09:00";
     public static final String DEFAULT_POLL_TIMEOUT = "50s";
+    public static final String DEFAULT_TELEGRAM_API_URL = "https://api.telegram.org";
 
     /** {@code http(s)://хост[:порт]} без пути, запроса и завершающего слэша. */
     public static final String SITE_URL = "https?://[^\\s/?#]+";
+
+    /** Форма токена бота: {@code <id бота>:<секрет>}. */
+    private static final java.util.regex.Pattern BOT_TOKEN = java.util.regex.Pattern.compile("[0-9]+:[A-Za-z0-9_-]+");
 
     /** Имя в Telegram с {@code @}: 5–32 символа латиницы, цифр и подчёркивания. */
     public static final String TELEGRAM_HANDLE = "@[A-Za-z0-9_]{5,32}";
@@ -134,6 +139,8 @@ public record NotificationsProperties(
      * @param botToken токен от @BotFather; пусто — Telegram выключен
      * @param botUsername имя бота без {@code @} для ссылки привязки {@code t.me/<бот>}; обязательно при токене
      * @param pollTimeout сколько Telegram держит запрос {@code getUpdates} без новых сообщений
+     * @param apiUrl адрес Bot API — схема и хост без пути: {@code https://api.telegram.org} или свой сервер Bot API;
+     *     тесты подставляют сюда заглушку
      */
     public record Telegram(
             @DefaultValue("") @NotNull String botToken,
@@ -142,11 +149,34 @@ public record NotificationsProperties(
             String botUsername,
 
             @DefaultValue(DEFAULT_POLL_TIMEOUT) @NotNull @DurationMin(seconds = 1) @DurationMax(seconds = 60)
-            Duration pollTimeout) {
+            Duration pollTimeout,
+
+            @DefaultValue(DEFAULT_TELEGRAM_API_URL) @NotNull @Pattern(regexp = SITE_URL)
+            String apiUrl) {
+
+        /** Связывание настроек — этим конструктором. */
+        @ConstructorBinding
+        public Telegram {}
+
+        /** Прежняя форма: Bot API — {@value NotificationsProperties#DEFAULT_TELEGRAM_API_URL}. */
+        public Telegram(String botToken, String botUsername, Duration pollTimeout) {
+            this(botToken, botUsername, pollTimeout, DEFAULT_TELEGRAM_API_URL);
+        }
 
         /** Бот настроен: задан токен. */
         public boolean configured() {
             return !botToken.isBlank();
+        }
+
+        /**
+         * Проверка при старте: токен — {@code <id бота>:<секрет>} из цифр, латиницы, {@code _} и {@code -}, как его
+         * выдаёт @BotFather. Он часть адреса каждого запроса к Bot API: иной символ сломал бы адрес, а ошибка разбора
+         * адреса показала бы его целиком. Проверка — методом, а не {@code @Pattern}: отвергнутое значение попадает в
+         * сообщение о неудачном старте, а здесь это {@code false}, а не токен.
+         */
+        @AssertTrue(message = "bot-token must be <digits>:<latin letters, digits, _ or ->")
+        public boolean isBotTokenWellFormed() {
+            return !configured() || BOT_TOKEN.matcher(botToken).matches();
         }
 
         /** Проверка при старте: с токеном нужно и имя бота, иначе ссылку привязки не построить. */
@@ -158,7 +188,7 @@ public record NotificationsProperties(
         @Override
         public String toString() {
             return "Telegram[botToken=" + (configured() ? "<set>" : "<empty>") + ", botUsername=" + botUsername
-                    + ", pollTimeout=" + pollTimeout + "]";
+                    + ", pollTimeout=" + pollTimeout + ", apiUrl=" + apiUrl + "]";
         }
     }
 }
