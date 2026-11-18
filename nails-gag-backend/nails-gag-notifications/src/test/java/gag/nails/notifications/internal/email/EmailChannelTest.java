@@ -21,9 +21,7 @@ import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
@@ -150,17 +148,23 @@ class EmailChannelTest {
         assertThat(server.getReceivedMessages()).isEmpty();
     }
 
-    /** Порт занят сокетом теста, который не слушает: соединение отвергается, и порт не займёт чужой процесс. */
+    /**
+     * Порт только что закрытого сервера: соединение отвергается сразу ({@code ConnectException}), а не ждёт таймаута.
+     * Что порт за эти миллисекунды займёт чужой процесс, практически исключено.
+     */
     @Test
     void unreachableServerIsRetried() throws IOException {
-        try (var bound = new Socket()) {
-            bound.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
-            var channel = channel(sender(bound.getLocalPort()));
-
-            var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
-
-            assertThat(result).isEqualTo(new SendResult.Retry(null, "email_unreachable"));
+        int port;
+        try (var closed = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            port = closed.getLocalPort();
         }
+        var channel = channel(sender(port, SHORT_TIMEOUT));
+        var started = System.nanoTime();
+
+        var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+        assertThat(result).isEqualTo(new SendResult.Retry(null, "email_unreachable"));
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(SHORT_TIMEOUT);
     }
 
     /**
