@@ -11,6 +11,7 @@ import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.AccessAdministration;
 import gag.nails.identity.command.CreateRole;
+import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.model.RoleView;
 import gag.nails.notifications.command.UpdateMyChannels;
 import gag.nails.notifications.error.TelegramUnavailableException;
@@ -147,6 +148,20 @@ class MyChannelsTest {
                         e -> assertThat(e.code()).isEqualTo("notifications.telegram_unavailable"));
     }
 
+    /** Аккаунта в {@code identity} нет (удалён) — своих каналов у него не бывает. */
+    @Test
+    void deletedAccountCannotUpdateChannels() {
+        var gone = Actor.of(UUID.randomUUID(), null, Map.of());
+
+        assertThatThrownBy(() -> preferences.update(new UpdateMyChannels(false, true), gone))
+                .isInstanceOf(AccountNotFoundException.class);
+        assertThat(jdbc.sql("select count(*) from notifications.preference where account_id = ?")
+                        .param(gone.accountId())
+                        .query(Long.class)
+                        .single())
+                .isZero();
+    }
+
     @Test
     void actorWithoutAccountIsRejected() {
         var cardOnly = Actor.client(UUID.randomUUID());
@@ -175,9 +190,15 @@ class MyChannelsTest {
         @Autowired
         ClientService cards;
 
+        @Autowired
+        JdbcClient rows;
+
         @Test
         void emailIsUnavailableWithoutMailServer() {
             var accountId = UUID.randomUUID();
+            rows.sql("insert into identity.account (id, created_at, last_login_at) values (?, now(), now())")
+                    .param(accountId)
+                    .update();
             var card = cards.register(new RegisterClient(accountId, "Анна", null, accountId + ".anna@example.com"));
             var client = Actor.of(accountId, card.id(), Map.of());
 
@@ -189,7 +210,7 @@ class MyChannelsTest {
 
     /** Клиентка: карточка, заведённая регистрацией, с аккаунтом. */
     private Actor client(@Nullable String email) {
-        var accountId = UUID.randomUUID();
+        var accountId = account();
         var unique = email == null ? null : accountId + "." + email;
         var card = clients.register(new RegisterClient(accountId, "Анна", null, unique));
         return Actor.of(accountId, card.id(), Map.of());

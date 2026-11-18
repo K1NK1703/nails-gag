@@ -63,14 +63,15 @@ class DefaultNotificationPreferences implements NotificationPreferences {
 
     /**
      * Строка аккаунта удерживается ({@link Accounts#lockExisting}) до записи: удаление аккаунта, начавшееся во
-     * время записи, ждёт её фиксации и стирает настройку. Аккаунта в {@code identity} нет — настройка всё равно
-     * пишется: так ведут себя существующие сценарии без строки аккаунта (тесты с карточкой без аккаунта входа);
-     * остаётся окно, когда удаление зафиксировано раньше, — строка без аккаунта безвредна.
+     * время записи, ждёт её фиксации и стирает настройку; удалённый раньше аккаунт настройки не получает
+     * ({@link AccountNotFoundException}).
      */
     @Override
     public MyChannels update(UpdateMyChannels command, Actor actor) {
         var accountId = requireAccount(actor);
-        accounts.lockExisting(accountId);
+        if (!accounts.lockExisting(accountId)) {
+            throw new AccountNotFoundException(accountId);
+        }
         preferences.upsert(
                 UuidV7.next(), accountId, command.emailEnabled(), command.telegramEnabled(), clock.instant());
         return channels(accountId);

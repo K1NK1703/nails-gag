@@ -121,6 +121,17 @@ class AccountDataConcurrencyTest {
     }
 
     @Test
+    void channelUpdateWaitingForDeletionIsRefused() throws Exception {
+        var anna = account();
+
+        var updated = locks.whileRowIsHeld(
+                () -> accounts.delete(anna), () -> preferences.update(new UpdateMyChannels(false, true), anna));
+
+        assertThat(updated.failure()).isInstanceOf(AccountNotFoundException.class);
+        assertThat(rows("preference", anna)).isZero();
+    }
+
+    @Test
     void mergeWaitingForLinkOfRemovedAccountRemovesItsToken() throws Exception {
         var removed = account();
         var survivor = account();

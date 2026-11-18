@@ -30,6 +30,7 @@ public interface NotificationPreferences {
      *
      * @return каналы после изменения, как {@link #mine}
      * @throws AccessDeniedException у актора нет аккаунта
+     * @throws AccountNotFoundException аккаунта уже нет (удалён)
      */
     MyChannels update(UpdateMyChannels command, Actor actor);
 

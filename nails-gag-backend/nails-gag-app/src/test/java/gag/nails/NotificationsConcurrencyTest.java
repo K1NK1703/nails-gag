@@ -30,7 +30,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Изменение настроек напоминаний встречается на блокировке единственной строки настроек, первое сохранение своих
  * каналов — на уникальном ключе аккаунта. Порядок задаётся ожиданием блокировки ({@link
  * ConcurrencySupport#whileRowIsHeld}): второй гарантированно ждёт первого. База общая для тестов с тем же контекстом:
- * тест возвращает настройки напоминаний как были (мимо журнала) и удаляет свои строки журнала и каналов.
+ * тест возвращает настройки напоминаний как были (мимо журнала) и удаляет свои строки журнала, каналов и аккаунтов
+ * (строки {@code identity.account} заводятся перед тестом: каналы бывают только у существующего аккаунта).
  */
 @SpringBootTest(webEnvironment = WebEnvironment.NONE, properties = "nails-gag.booking.jobs.enabled=false")
 @Import(PostgresTestcontainers.class)
@@ -56,6 +57,11 @@ class NotificationsConcurrencyTest {
 
     @BeforeEach
     void rememberSettings() {
+        for (var actor : List.of(first, second)) {
+            jdbc.sql("insert into identity.account (id, created_at, last_login_at) values (?, now(), now())")
+                    .param(actor.accountId())
+                    .update();
+        }
         locks = new ConcurrencySupport(transaction, jdbc, "%notifications.%");
         original = settings.settings(first);
     }
@@ -73,6 +79,9 @@ class NotificationsConcurrencyTest {
                 .param("accounts", accounts)
                 .update();
         jdbc.sql("delete from notifications.preference where account_id in (:accounts)")
+                .param("accounts", accounts)
+                .update();
+        jdbc.sql("delete from identity.account where id in (:accounts)")
                 .param("accounts", accounts)
                 .update();
     }
