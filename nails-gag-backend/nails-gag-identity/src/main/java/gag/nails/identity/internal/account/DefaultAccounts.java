@@ -20,7 +20,9 @@ import gag.nails.identity.model.AccountView;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -32,6 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code DEVELOPER} не берётся — пока в системе нет ни одного администратора, клиент всё равно вправе
  * удалить аккаунт. Порядок блокировок строк — карточка → аккаунт → роль, как у блокировки клиента
  * мастером, поэтому взаимной блокировки с ней нет.
+ *
+ * <p>Строка аккаунта блокируется {@code FOR UPDATE} сразу после обезличивания карточки (не раньше: вход и
+ * блокировка клиента идут карточка → аккаунт) и до удаления остального. Модули, которые пишут данные
+ * аккаунта, держат её {@code FOR KEY SHARE} ({@link #lockExisting}): удаление ждёт их фиксации, и слушатели
+ * {@link AccountDeleted} стирают уже записанное; пришедшие после удаления узнают, что аккаунта нет. Второе
+ * одновременное удаление того же аккаунта ждёт первое и получает {@link AccountNotFoundException} — вся его
+ * транзакция откатывается.
  *
  * <p>Известное ограничение: вход при фиксации обновляет строки аккаунта ({@code last_login_at}) и, если
  * записывает подтверждённый номер, карточки — в порядке аккаунт → клиент. Совпав по времени с удалением
@@ -53,6 +62,7 @@ class DefaultAccounts implements Accounts {
     private final ClientService clientService;
     private final ClientQueries clientQueries;
     private final ApplicationEventPublisher events;
+    private final JdbcClient jdbc;
     private final Clock clock;
 
     DefaultAccounts(
@@ -67,6 +77,7 @@ class DefaultAccounts implements Accounts {
             ClientService clientService,
             ClientQueries clientQueries,
             ApplicationEventPublisher events,
+            JdbcClient jdbc,
             Clock clock) {
         this.accounts = accounts;
         this.loginMethods = loginMethods;
@@ -79,6 +90,7 @@ class DefaultAccounts implements Accounts {
         this.clientService = clientService;
         this.clientQueries = clientQueries;
         this.events = events;
+        this.jdbc = jdbc;
         this.clock = clock;
     }
 
@@ -98,6 +110,9 @@ class DefaultAccounts implements Accounts {
         var accountId = account.id();
         var leavingAdmin = resolver.effective(accountId).get(Section.ACCESS) == AccessLevel.WRITE;
         clientQueries.byAccountId(accountId).map(ClientView::id).ifPresent(clientService::erase);
+        if (accounts.lockForDeletion(accountId).isEmpty()) {
+            throw new AccountNotFoundException(accountId);
+        }
         sessions.deleteAllByAccountId(accountId);
         loginMethods.deleteAllByAccountId(accountId);
         accountRoles.deleteAllByIdAccountId(accountId);
@@ -107,6 +122,16 @@ class DefaultAccounts implements Accounts {
             guard.requireAdminRemains();
         }
         events.publishEvent(new AccountDeleted(accountId, clock.instant()));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean lockExisting(UUID accountId) {
+        return jdbc.sql("select 1 from identity.account where id = :id for key share")
+                .param("id", accountId)
+                .query(Integer.class)
+                .optional()
+                .isPresent();
     }
 
     private AccountEntity require(Actor actor) {

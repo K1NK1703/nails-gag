@@ -6,6 +6,7 @@ import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.identity.error.LastAccessAdminException;
 import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.model.AccountView;
+import java.util.UUID;
 
 /** Свой аккаунт: профиль и удаление. Имя и номер для связи клиент меняет через {@code clients}. */
 public interface Accounts {
@@ -33,4 +34,15 @@ public interface Accounts {
      * @throws AccountNotFoundException аккаунта уже нет
      */
     void delete(Actor actor);
+
+    /**
+     * Системная операция для модулей, которые хранят данные аккаунта: блокирует его строку ({@code FOR KEY SHARE})
+     * до конца транзакции вызывающего, чтобы удаление аккаунта (оно берёт строку {@code FOR UPDATE}) не прошло
+     * между проверкой и записью. Записанное до фиксации увидят синхронные слушатели {@link AccountDeleted};
+     * удаление, зафиксированное раньше, даёт {@code false} — писать данные несуществующего аккаунта нельзя.
+     * Изменения строки аккаунта (вход, блокировка) эта блокировка не задерживает.
+     *
+     * @return аккаунт есть и заблокирован; {@code false} — аккаунта нет (или он только что удалён)
+     */
+    boolean lockExisting(UUID accountId);
 }

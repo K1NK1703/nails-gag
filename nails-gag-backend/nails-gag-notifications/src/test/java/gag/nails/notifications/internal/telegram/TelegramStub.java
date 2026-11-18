@@ -16,6 +16,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -36,6 +37,7 @@ public final class TelegramStub implements AutoCloseable {
     private final Map<String, Queue<Reply>> scripts = new ConcurrentHashMap<>();
     private final Map<Long, Queue<Reply>> chatScripts = new ConcurrentHashMap<>();
     private volatile CountDownLatch released = new CountDownLatch(1);
+    private volatile Consumer<Request> observer = request -> {};
 
     private TelegramStub(HttpServer server) {
         this.server = server;
@@ -79,6 +81,11 @@ public final class TelegramStub implements AutoCloseable {
         }
     }
 
+    /** Вызывается на каждый запрос до ответа — в потоке сервера (например, чтобы посмотреть в базу в этот момент). */
+    public void observe(Consumer<Request> observer) {
+        this.observer = observer;
+    }
+
     /** Запросы к методу {@code method} в порядке поступления. */
     public List<Request> requests(String method) {
         return requests.stream()
@@ -110,6 +117,7 @@ public final class TelegramStub implements AutoCloseable {
         requests.clear();
         scripts.clear();
         chatScripts.clear();
+        observer = request -> {};
         var previous = released;
         released = new CountDownLatch(1);
         previous.countDown();
@@ -132,6 +140,7 @@ public final class TelegramStub implements AutoCloseable {
             var request = new Request(
                     method, token, json, exchange.getRequestHeaders().getFirst("Content-Type"));
             requests.add(request);
+            observer.accept(request);
             var reply = next(method, json);
             if (reply.hang() != null) {
                 hang(reply.hang());

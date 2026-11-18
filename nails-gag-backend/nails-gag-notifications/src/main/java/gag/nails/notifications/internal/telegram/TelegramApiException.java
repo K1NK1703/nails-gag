@@ -26,11 +26,20 @@ final class TelegramApiException extends InternalException {
         this.description = description;
     }
 
-    /** Telegram ответил, но не успехом с результатом. */
+    /**
+     * Telegram ответил, но не успехом с результатом.
+     *
+     * @param readable тело — ответ Bot API; нет — у ответа 200 своё сообщение («unreadable answer»)
+     */
     static TelegramApiException answered(
-            String method, int status, @Nullable Integer retryAfterSeconds, @Nullable String description) {
+            String method,
+            int status,
+            boolean readable,
+            @Nullable Integer retryAfterSeconds,
+            @Nullable String description) {
+        var what = status == 200 && !readable ? "unreadable answer (HTTP 200)" : "HTTP " + status;
         return new TelegramApiException(
-                "telegram " + method + " failed: HTTP " + status,
+                "telegram " + method + " failed: " + what,
                 status,
                 retryAfterSeconds == null || retryAfterSeconds < 0 ? null : Duration.ofSeconds(retryAfterSeconds),
                 description);

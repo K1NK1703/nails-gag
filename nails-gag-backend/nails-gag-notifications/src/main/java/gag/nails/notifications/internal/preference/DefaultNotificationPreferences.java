@@ -5,6 +5,8 @@ import gag.nails.clients.model.ClientView;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.id.UuidV7;
+import gag.nails.identity.Accounts;
+import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.notifications.NotificationPreferences;
 import gag.nails.notifications.command.UpdateMyChannels;
 import gag.nails.notifications.error.TelegramUnavailableException;
@@ -25,6 +27,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
     private final PreferenceRepository preferences;
     private final TelegramChatRepository chats;
     private final LinkTokens linkTokens;
+    private final Accounts accounts;
     private final ChannelDefaults defaults;
     private final ClientQueries clients;
     private final NotificationsProperties properties;
@@ -35,6 +38,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
             PreferenceRepository preferences,
             TelegramChatRepository chats,
             LinkTokens linkTokens,
+            Accounts accounts,
             ChannelDefaults defaults,
             ClientQueries clients,
             NotificationsProperties properties,
@@ -43,6 +47,7 @@ class DefaultNotificationPreferences implements NotificationPreferences {
         this.preferences = preferences;
         this.chats = chats;
         this.linkTokens = linkTokens;
+        this.accounts = accounts;
         this.defaults = defaults;
         this.clients = clients;
         this.properties = properties;
@@ -56,17 +61,26 @@ class DefaultNotificationPreferences implements NotificationPreferences {
         return channels(requireAccount(actor));
     }
 
+    /**
+     * Строка аккаунта удерживается ({@link Accounts#lockExisting}) до записи: удаление аккаунта, начавшееся во
+     * время записи, ждёт её фиксации и стирает настройку. Аккаунта в {@code identity} нет — настройка всё равно
+     * пишется: так ведут себя существующие сценарии без строки аккаунта (тесты с карточкой без аккаунта входа);
+     * остаётся окно, когда удаление зафиксировано раньше, — строка без аккаунта безвредна.
+     */
     @Override
     public MyChannels update(UpdateMyChannels command, Actor actor) {
         var accountId = requireAccount(actor);
+        accounts.lockExisting(accountId);
         preferences.upsert(
                 UuidV7.next(), accountId, command.emailEnabled(), command.telegramEnabled(), clock.instant());
         return channels(accountId);
     }
 
     /**
-     * Ссылка {@code https://t.me/<бот>?start=<токен>} с новым токеном аккаунта ({@link LinkTokens}). Аккаунт
-     * проверяется первым — актор без аккаунта получает отказ, а не «бот недоступен».
+     * Ссылка {@code https://t.me/<бот>?start=<токен>} с новым токеном аккаунта ({@link LinkTokens}). Актор без
+     * аккаунта получает отказ первым, а не «бот недоступен». Перед записью токена строка аккаунта удерживается
+     * ({@link Accounts#lockExisting}): удаление аккаунта, начавшееся во время записи, ждёт её фиксации и стирает
+     * токен; удалённый раньше аккаунт ссылки не получает ({@link AccountNotFoundException}).
      */
     @Override
     public TelegramLink createTelegramLink(Actor actor) {
@@ -74,6 +88,9 @@ class DefaultNotificationPreferences implements NotificationPreferences {
         var telegram = properties.telegram();
         if (!telegram.configured()) {
             throw new TelegramUnavailableException();
+        }
+        if (!accounts.lockExisting(accountId)) {
+            throw new AccountNotFoundException(accountId);
         }
         var issued = linkTokens.issue(accountId);
         return new TelegramLink(

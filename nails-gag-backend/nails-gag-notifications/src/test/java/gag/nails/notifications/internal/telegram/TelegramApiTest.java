@@ -14,7 +14,11 @@ import gag.nails.notifications.internal.telegram.TelegramApi.Update;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.time.Duration;
+import java.util.ArrayList;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -25,6 +29,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
  * Клиент Bot API на {@link MockRestServiceServer}: тела запросов, разбор ответов и ошибок. Ошибка не несёт адреса
  * запроса (в нём токен бота) и исходного исключения клиента HTTP — только метод, код ответа и класс сбоя.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class TelegramApiTest {
 
     static final String TOKEN = "123456:secret-token";
@@ -129,12 +134,75 @@ class TelegramApiTest {
                 .andRespond(withSuccess("{\"ok\": false}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(API + "getUpdates")).andRespond(withSuccess("not json", MediaType.APPLICATION_JSON));
 
+        var messages = new ArrayList<String>();
         for (var i = 0; i < 3; i++) {
             assertThatThrownBy(() -> api.getUpdates(null, Duration.ofSeconds(50)))
-                    .isInstanceOfSatisfying(
-                            TelegramApiException.class,
-                            e -> assertThat(e.answered()).isTrue());
+                    .isInstanceOfSatisfying(TelegramApiException.class, e -> {
+                        assertThat(e.answered()).isTrue();
+                        messages.add(e.getMessage());
+                    });
         }
+        assertThat(messages)
+                .containsExactly(
+                        "telegram getUpdates failed: HTTP 502",
+                        "telegram getUpdates failed: HTTP 200",
+                        "telegram getUpdates failed: unreadable answer (HTTP 200)");
+    }
+
+    /**
+     * Обновление, которое не разбирается, не ломает пачку: остальные разобраны, у него — только id (чтобы
+     * подтвердить); без читаемого id оно пропускается. Содержимое в лог не попадает.
+     */
+    @Test
+    void malformedUpdateDoesNotBreakTheBatch(CapturedOutput output) {
+        server.expect(requestTo(API + "getUpdates")).andRespond(withSuccess("""
+                        {"ok": true, "result": [
+                          {"update_id": 30, "message": {"chat": "secret-chat-text"}},
+                          {"update_id": 31, "message": {"from": {"id": 5, "is_bot": false},
+                            "chat": {"id": 5, "type": "private"}, "text": "/stop"}},
+                          {"message": {"text": "secret-without-id"}},
+                          "secret-not-an-object"
+                        ]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var updates = api.getUpdates(null, Duration.ofSeconds(50));
+
+        assertThat(updates).extracting(Update::updateId).containsExactly(30L, 31L);
+        assertThat(updates.getFirst().message()).isNull();
+        assertThat(updates.get(1).message()).isNotNull();
+        assertThat(output.getAll())
+                .contains("telegram update 30 is not readable")
+                .doesNotContain("secret");
+    }
+
+    /** Отправка, принятая Telegram (200), — доставлена, даже если тело ответа не разобрать: повтор дал бы дубль. */
+    @Test
+    void acceptedMessageWithUnreadableAnswerIsSent() {
+        server.expect(requestTo(API + "sendMessage")).andRespond(withSuccess("not json", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(API + "sendMessage"))
+                .andRespond(withSuccess("{\"ok\": true}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(API + "sendMessage")).andRespond(withSuccess("<html/>", MediaType.TEXT_HTML));
+
+        api.sendMessage(1, "текст");
+        api.sendMessage(1, "текст");
+        api.sendMessage(1, "текст");
+
+        server.verify();
+    }
+
+    /** Подтверждение обработанных при остановке: {@code getUpdates} со смещением и нулевым таймаутом. */
+    @Test
+    void confirmAsksForNothingNew() {
+        server.expect(requestTo(API + "getUpdates"))
+                .andExpect(content()
+                        .json(
+                                "{\"offset\": 41, \"timeout\": 0, \"allowed_updates\": [\"message\"]}",
+                                JsonCompareMode.STRICT))
+                .andRespond(withSuccess("{\"ok\": true, \"result\": []}", MediaType.APPLICATION_JSON));
+
+        api.confirm(41);
+
+        server.verify();
     }
 
     @Test

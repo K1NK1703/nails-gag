@@ -28,9 +28,9 @@ import org.springframework.test.context.TestPropertySource;
 /**
  * Тесты бота в контексте модуля: бот настроен (токен и имя), Bot API — заглушка {@link TelegramStub} одна на все
  * классы-наследники (и контекст у них один). Приём обновлений по расписанию в тестах выключен — обновления
- * обрабатываются вызовом {@link TelegramUpdates#handle}. Аккаунты — случайные id без строк {@code identity.account}:
- * привязка и ссылки хранятся без внешних ключей. После теста удаляются ссылки, привязки и настройки каналов своих
- * аккаунтов и привязки своих чатов.
+ * обрабатываются вызовом {@link TelegramUpdates#handle}. Аккаунты — строки {@code identity.account} напрямую (ссылку
+ * выдают только существующему аккаунту). После теста удаляются ссылки, привязки и настройки каналов своих аккаунтов,
+ * сами аккаунты и привязки своих чатов.
  */
 @NotificationsModuleTest
 @TestPropertySource(
@@ -88,6 +88,11 @@ abstract class TelegramTestSupport {
                         .update();
             }
         }
+        if (!accounts.isEmpty()) {
+            jdbc.sql("delete from identity.account where id in (:ids)")
+                    .param("ids", accounts)
+                    .update();
+        }
         if (!chats.isEmpty()) {
             jdbc.sql("delete from notifications.telegram_chat where chat_id in (:chats)")
                     .param("chats", chats)
@@ -96,10 +101,13 @@ abstract class TelegramTestSupport {
         STUB.reset();
     }
 
-    /** Свой аккаунт клиентки — сессия с ним. */
+    /** Свой аккаунт клиентки (строка напрямую, без карточки и способов входа) — сессия с ним. */
     Actor account() {
         var accountId = UUID.randomUUID();
         accounts.add(accountId);
+        jdbc.sql("insert into identity.account (id, created_at, last_login_at) values (?, ?, ?)")
+                .params(accountId, Timestamp.from(clock.instant()), Timestamp.from(clock.instant()))
+                .update();
         return Actor.of(accountId, null, Map.of());
     }
 

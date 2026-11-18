@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,19 +14,25 @@ import org.springframework.context.SmartLifecycle;
 
 /**
  * Приём сообщений боту (спека §3.6): один виртуальный поток в цикле долгого опроса {@code getUpdates}; каждое
- * сообщение — {@link TelegramUpdates}. Смещение — в памяти: после рестарта Telegram отдаёт неподтверждённые обновления
- * снова, их повтор безопасен. Работает, только если бот настроен; бин есть, только если включены задачи модуля.
+ * сообщение — {@link TelegramUpdates}. Смещение — в памяти: после рестарта Telegram отдаёт неподтверждённые
+ * обновления снова, их повтор безопасен. Работает, только если бот настроен; бин есть, только если включены задачи
+ * модуля.
  *
  * <ul>
- *   <li>Сбой опроса — пауза {@link #PAUSES} (5, 10, 30, 60 с, дальше 60 с), WARN — не чаще раза в {@link #LOG_INTERVAL}
- *       с числом пропущенных сбоев; восстановление — INFO. 409 — отдельной строкой: этим токеном опрашивает кто-то
- *       ещё (второй экземпляр приложения) или у бота задан webhook — без вмешательства человека не пройдёт.
- *   <li>Сбой обработки сообщения (база недоступна) — тоже сбой с паузой; сообщение не подтверждается и приходит снова.
- *       После {@link #ATTEMPTS_PER_UPDATE} неудач подряд оно пропускается с WARN — иначе одно сообщение, которое не
- *       обработать никогда, остановило бы бота.
+ *   <li>Сбой опроса — пауза {@link #PAUSES} (5, 10, 30, 60 с, дальше 60 с), WARN — не чаще раза в
+ *       {@link #LOG_INTERVAL} с числом пропущенных сбоев; восстановление — INFO. 409 — своей строкой, и первый 409
+ *       подряд пишется всегда, мимо ограничения: этим токеном опрашивает кто-то ещё (второй экземпляр приложения)
+ *       или у бота задан webhook — без вмешательства человека не пройдёт.
+ *   <li>Сбой обработки сообщения — тоже сбой с паузой; сообщение не подтверждается и приходит снова. Временный сбой
+ *       базы (нет соединения, таймаут, взаимная блокировка — {@link Failures#isTransientDatabase}) повторяется сколько
+ *       угодно: иначе недоступная база «съела» бы сообщения, в том числе {@code /stop}. Прочий сбой — после
+ *       {@link #ATTEMPTS_PER_UPDATE} неудач подряд сообщение пропускается с WARN: одно сообщение, которое не
+ *       обработать никогда, не должно останавливать бота.
  *   <li>Остановка ({@link #stop()}) прерывает долгий опрос и паузу, но не обработку сообщения посреди транзакции (её
- *       прерывание оборвало бы соединение с базой): поток доделывает сообщение и выходит; остановка ждёт его не
- *       дольше {@link #STOP_WAIT}.
+ *       прерывание оборвало бы соединение с базой): поток доделывает сообщение, коротким запросом подтверждает
+ *       обработанные с последнего опроса (иначе после рестарта они пришли бы снова) и выходит; остановка ждёт его не
+ *       дольше {@link #STOP_WAIT}. Пока прежний поток жив, новый не запускается.
+ *   <li>Неожиданная ошибка ({@link Error}) останавливает приём с ERROR в логе.
  * </ul>
  *
  * В логе — только метод Bot API, код ответа или класс сбоя, id обновления; ни токена, ни чатов, ни текстов.
@@ -37,7 +44,13 @@ final class TelegramPoller implements SmartLifecycle {
             List.of(Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30), Duration.ofSeconds(60));
 
     static final Duration LOG_INTERVAL = Duration.ofMinutes(1);
-    static final Duration STOP_WAIT = Duration.ofSeconds(10);
+
+    /**
+     * Сколько остановка ждёт поток: обработка сообщения и ответ бота (до {@link TelegramApi#REPLY_TIMEOUT} плюс
+     * подключение), затем подтверждение обработанного.
+     */
+    static final Duration STOP_WAIT = Duration.ofSeconds(15);
+
     static final int ATTEMPTS_PER_UPDATE = 3;
 
     private static final int CONFLICT = 409;
@@ -49,6 +62,7 @@ final class TelegramPoller implements SmartLifecycle {
     private final Duration pollTimeout;
     private final Clock clock;
     private final Pause pause;
+    private final Duration stopWait;
 
     /** Поток приёма и признак «можно прервать»: прерывается только ожидание — опрос или пауза. */
     private final Object lock = new Object();
@@ -57,13 +71,15 @@ final class TelegramPoller implements SmartLifecycle {
     private boolean interruptible;
     private volatile boolean running;
 
-    // Состояние цикла — только в потоке приёма.
+    // Состояние цикла — только в потоке приёма (поток один: новый не запускается, пока жив прежний).
     private @Nullable Long offset;
+    private @Nullable Long requestedOffset;
     private int failures;
     private long failingUpdate = -1;
     private int updateAttempts;
     private @Nullable Instant lastWarned;
     private int suppressed;
+    private boolean conflict;
 
     /**
      * @param handler обработка одного обновления; исключение — сбой, обновление придёт снова
@@ -71,17 +87,28 @@ final class TelegramPoller implements SmartLifecycle {
      * @param pause ожидание между попытками; прерывается остановкой
      */
     TelegramPoller(TelegramApi api, Handler handler, Duration pollTimeout, Clock clock, Pause pause) {
+        this(api, handler, pollTimeout, clock, pause, STOP_WAIT);
+    }
+
+    /** @param stopWait сколько остановка ждёт поток приёма */
+    TelegramPoller(
+            TelegramApi api, Handler handler, Duration pollTimeout, Clock clock, Pause pause, Duration stopWait) {
         this.api = api;
         this.handler = handler;
         this.pollTimeout = pollTimeout;
         this.clock = clock;
         this.pause = pause;
+        this.stopWait = stopWait;
     }
 
     @Override
     public void start() {
         synchronized (lock) {
             if (running || !api.configured()) {
+                return;
+            }
+            if (thread != null && thread.isAlive()) {
+                log.warn("telegram polling is not started: the previous polling thread has not finished yet");
                 return;
             }
             running = true;
@@ -107,8 +134,8 @@ final class TelegramPoller implements SmartLifecycle {
             return;
         }
         try {
-            if (!polling.join(STOP_WAIT)) {
-                log.warn("telegram polling did not stop in {}, leaving it", STOP_WAIT);
+            if (!polling.join(stopWait)) {
+                log.warn("telegram polling did not stop in {} s, leaving it", stopWait.toSeconds());
                 return;
             }
         } catch (InterruptedException e) {
@@ -131,15 +158,21 @@ final class TelegramPoller implements SmartLifecycle {
     }
 
     private void run() {
-        while (running) {
-            try {
-                poll();
-            } catch (RuntimeException e) {
-                if (!running) {
-                    return;
+        try {
+            while (running) {
+                try {
+                    poll();
+                } catch (RuntimeException e) {
+                    if (!running) {
+                        break;
+                    }
+                    failed("telegram polling failed unexpectedly: " + Failures.describe(e), e, false);
                 }
-                failed("telegram polling failed unexpectedly: " + Failures.describe(e), e);
             }
+            confirmHandled();
+        } catch (Throwable e) {
+            running = false;
+            log.error("telegram polling stopped by an unexpected error", e);
         }
     }
 
@@ -147,16 +180,20 @@ final class TelegramPoller implements SmartLifecycle {
     private void poll() {
         List<Update> updates;
         try {
+            requestedOffset = offset;
             updates = interruptibly(() -> api.getUpdates(offset, pollTimeout));
         } catch (TelegramApiException e) {
             if (running) {
-                failed(describe(e), null);
+                var isConflict = e.status() == CONFLICT;
+                failed(describe(e), null, isConflict && !conflict);
+                conflict = isConflict;
             }
             return;
         }
         if (updates == null) {
             return;
         }
+        conflict = false;
         for (var update : updates) {
             if (!running) {
                 return;
@@ -174,6 +211,12 @@ final class TelegramPoller implements SmartLifecycle {
         try {
             handler.handle(update);
         } catch (RuntimeException e) {
+            var description = "telegram update " + id + " not handled: " + Failures.describe(e);
+            offset = id;
+            if (Failures.isTransientDatabase(e)) {
+                failed(description, null, false);
+                return false;
+            }
             updateAttempts = id == failingUpdate ? updateAttempts + 1 : 1;
             failingUpdate = id;
             if (updateAttempts >= ATTEMPTS_PER_UPDATE) {
@@ -185,10 +228,7 @@ final class TelegramPoller implements SmartLifecycle {
                 confirm(id);
                 return true;
             }
-            offset = id;
-            failed(
-                    "telegram update " + id + " not handled: " + Failures.describe(e),
-                    Failures.isDatabase(e) ? null : e);
+            failed(description, Failures.isDatabase(e) ? null : e, false);
             return false;
         }
         confirm(id);
@@ -203,12 +243,31 @@ final class TelegramPoller implements SmartLifecycle {
         }
     }
 
-    /** Сбой: WARN не чаще раза в {@link #LOG_INTERVAL} и пауза по числу сбоев подряд. */
-    private void failed(String description, @Nullable Throwable failure) {
+    /**
+     * При остановке: обработанные с последнего опроса обновления подтверждаются коротким запросом — иначе после
+     * рестарта они пришли бы снова. Не вышло — не страшно: повтор безопасен.
+     */
+    private void confirmHandled() {
+        var handled = offset;
+        if (handled == null || Objects.equals(handled, requestedOffset)) {
+            return;
+        }
+        try {
+            api.confirm(handled);
+        } catch (TelegramApiException e) {
+            log.info("telegram updates not confirmed on stop: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Сбой: WARN не чаще раза в {@link #LOG_INTERVAL} (или всегда, если {@code always}) и пауза по числу сбоев
+     * подряд.
+     */
+    private void failed(String description, @Nullable Throwable failure, boolean always) {
         failures++;
         var wait = PAUSES.get(Math.min(failures, PAUSES.size()) - 1);
         var now = clock.instant();
-        if (lastWarned == null || !now.isBefore(lastWarned.plus(LOG_INTERVAL))) {
+        if (always || lastWarned == null || !now.isBefore(lastWarned.plus(LOG_INTERVAL))) {
             var message =
                     "telegram polling failed: {}; {} more failures since the previous warning; next attempt in {} s";
             if (failure == null) {

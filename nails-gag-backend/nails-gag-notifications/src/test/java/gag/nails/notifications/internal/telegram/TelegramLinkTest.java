@@ -1,11 +1,16 @@
 package gag.nails.notifications.internal.telegram;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gag.nails.common.actor.Actor;
+import gag.nails.identity.error.AccountNotFoundException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -30,6 +35,18 @@ class TelegramLinkTest extends TelegramTestSupport {
                         .single())
                 .isEqualTo(sha256(token));
         assertThat(preferences.mine(anna).telegramAvailable()).isTrue();
+    }
+
+    @Test
+    void deletedAccountGetsNoLink() {
+        var gone = Actor.of(UUID.randomUUID(), null, Map.of());
+
+        assertThatThrownBy(() -> preferences.createTelegramLink(gone)).isInstanceOf(AccountNotFoundException.class);
+        assertThat(jdbc.sql("select count(*) from notifications.link_token where account_id = ?")
+                        .param(gone.accountId())
+                        .query(Long.class)
+                        .single())
+                .isZero();
     }
 
     @Test

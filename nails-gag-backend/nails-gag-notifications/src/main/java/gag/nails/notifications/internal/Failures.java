@@ -9,6 +9,9 @@ import java.util.Set;
 import org.hibernate.JDBCException;
 import org.jspecify.annotations.Nullable;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionException;
 
 /**
@@ -24,6 +27,32 @@ public final class Failures {
     /** В цепочке есть ошибка базы или транзакции: в лог — только {@link #describe}, без текста и стека. */
     public static boolean isDatabase(Throwable failure) {
         return database(failure) != null;
+    }
+
+    /**
+     * В цепочке — временный сбой базы, который пройдёт сам: нет соединения или транзакции
+     * ({@link DataAccessResourceFailureException}, в том числе {@code CannotGetJdbcConnectionException},
+     * {@link CannotCreateTransactionException}), временная ошибка ({@link TransientDataAccessException}: таймаут,
+     * взаимная блокировка) или SQLState класса {@code 08} (соединение) и {@code 57P} (сервер останавливается). Повтор
+     * той же работы позже — правильный ответ; ошибка данных (нарушение ограничения) — не такой сбой.
+     */
+    public static boolean isTransientDatabase(Throwable failure) {
+        for (var throwable : chain(failure)) {
+            if (throwable instanceof TransientDataAccessException
+                    || throwable instanceof DataAccessResourceFailureException
+                    || throwable instanceof CannotCreateTransactionException) {
+                return true;
+            }
+            var sqlState = switch (throwable) {
+                case SQLException sql -> sql.getSQLState();
+                case JDBCException jdbc -> jdbc.getSQLState();
+                default -> null;
+            };
+            if (sqlState != null && (sqlState.startsWith("08") || sqlState.startsWith("57P"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

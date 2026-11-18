@@ -58,7 +58,8 @@ class TelegramTokenLoggingTest {
 
     @Test
     void botTokenNeverLogged(CapturedOutput output) throws Exception {
-        var timeouts = new TelegramApi.Timeouts(Duration.ofSeconds(1), Duration.ofMillis(300), Duration.ofMillis(300));
+        var timeouts = new TelegramApi.Timeouts(
+                Duration.ofSeconds(1), Duration.ofMillis(300), Duration.ofMillis(300), Duration.ofMillis(300));
         try (var unreachable = TelegramApi.connect("http://127.0.0.1:" + closedPort(), TOKEN, timeouts);
                 var answering = TelegramApi.connect(stub.url(), TOKEN, timeouts)) {
             stub.respond(

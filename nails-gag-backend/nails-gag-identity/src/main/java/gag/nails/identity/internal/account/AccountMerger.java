@@ -24,6 +24,11 @@ import org.springframework.stereotype.Component;
  * AccountDeleted} — при любом слиянии: объединении карточек с двумя аккаунтами ({@code ClientMergedListener})
  * и привязке способа входа другого аккаунта без карточки ({@code LoginWriter}). Правило последнего
  * администратора проверяет вызывающий.
+ *
+ * <p>Первым делом строка удаляемого аккаунта блокируется {@code FOR UPDATE}
+ * ({@link AccountRepository#lockForDeletion}), как при удалении владельцем: модули, которые держат её
+ * {@code FOR KEY SHARE} на время записи своих данных аккаунта, успевают зафиксироваться, и слушатели
+ * {@link AccountDeleted} их стирают. Аккаунта уже нет — слияния нет.
  */
 @Component
 public class AccountMerger {
@@ -57,6 +62,9 @@ public class AccountMerger {
     }
 
     public void merge(UUID removedAccountId, UUID survivorAccountId) {
+        if (accounts.lockForDeletion(removedAccountId).isEmpty()) {
+            return;
+        }
         loginMethods
                 .findAllByAccountIdOrderByLinkedAtAscIdAsc(removedAccountId)
                 .forEach(method -> method.reassignTo(survivorAccountId));
@@ -92,9 +100,7 @@ public class AccountMerger {
         }
 
         sessions.deleteAllByAccountId(removedAccountId);
-        accounts.findById(removedAccountId).ifPresent(removed -> {
-            accounts.delete(removed);
-            events.publishEvent(new AccountDeleted(removedAccountId, clock.instant()));
-        });
+        accounts.delete(accounts.getReferenceById(removedAccountId));
+        events.publishEvent(new AccountDeleted(removedAccountId, clock.instant()));
     }
 }

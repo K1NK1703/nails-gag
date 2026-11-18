@@ -54,6 +54,13 @@ class TelegramChannelTest {
     }
 
     @Test
+    void acceptedMessageWithUnreadableAnswerIsSent() {
+        expectSend().andRespond(withSuccess("not json", MediaType.APPLICATION_JSON));
+
+        assertThat(channel.send(ANNA, TEXT)).isEqualTo(new SendResult.Sent());
+    }
+
+    @Test
     void blockedBotUnlinksTheChat() {
         respond(HttpStatus.FORBIDDEN, "Forbidden: bot was blocked by the user", null);
         respond(HttpStatus.FORBIDDEN, "Forbidden: user is deactivated", null);

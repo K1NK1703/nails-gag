@@ -2,6 +2,7 @@ package gag.nails.notifications;
 
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
+import gag.nails.identity.error.AccountNotFoundException;
 import gag.nails.notifications.command.UpdateMyChannels;
 import gag.nails.notifications.error.TelegramUnavailableException;
 import gag.nails.notifications.model.MyChannels;
@@ -41,6 +42,7 @@ public interface NotificationPreferences {
      * @return ссылка и момент, до которого она действует
      * @throws AccessDeniedException у актора нет аккаунта
      * @throws TelegramUnavailableException бот не настроен на сервере (нет токена бота)
+     * @throws AccountNotFoundException аккаунта уже нет (удалён)
      */
     TelegramLink createTelegramLink(Actor actor);
 

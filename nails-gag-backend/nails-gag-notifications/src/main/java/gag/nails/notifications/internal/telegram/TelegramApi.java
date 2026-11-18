@@ -6,6 +6,7 @@ import gag.nails.common.error.InternalException;
 import io.micrometer.observation.ObservationRegistry;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -16,80 +17,106 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Клиент Bot API Telegram (спека §3.6): {@code sendMessage} и {@code getUpdates} по {@code <api-url>/bot<токен>/}.
  *
- * <p>Токен — секрет, а он часть адреса каждого запроса. Поэтому наблюдение (трассы, метрики с адресом) у этого клиента
- * выключено ({@link ObservationRegistry#NOOP}), а сбой — всегда {@link TelegramApiException} с методом и кодом
- * ответа: исключения клиента HTTP Spring (их текст начинается с адреса запроса) не выходят наружу и не становятся
- * причиной. Описание ошибки от Telegram в текст исключения не попадает. Тела запросов в отладочном логе клиента HTTP
- * Spring не показывают ни чат, ни текст ({@code toString} тел скрывает их).
+ * <p>Токен — секрет, а он часть адреса каждого запроса. Поэтому наблюдение (трассы, метрики с адресом) у этого
+ * клиента выключено ({@link ObservationRegistry#NOOP}), а сбой — всегда {@link TelegramApiException} с методом и
+ * кодом ответа: исключения клиента HTTP Spring (их текст начинается с адреса запроса) не выходят наружу и не
+ * становятся причиной. Описание ошибки от Telegram в текст исключения не попадает. Тела запросов в отладочном логе
+ * клиента HTTP Spring не показывают ни чат, ни текст ({@code toString} тел скрывает их).
  *
- * <p>Таймауты раздельные: отправка — коротко ({@link #SEND_TIMEOUT}), чтобы попытка доставки укладывалась в её аренду
- * (5 минут); долгий опрос — на {@link #POLL_MARGIN} дольше, чем Telegram держит {@code getUpdates} без новых сообщений.
- * Запрос прерывается прерыванием потока — так останавливается приём обновлений.
+ * <p>Таймауты раздельные: доставка — коротко ({@link #SEND_TIMEOUT}), чтобы попытка укладывалась в её аренду
+ * (5 минут); долгий опрос — на {@link #POLL_MARGIN} дольше, чем Telegram держит {@code getUpdates} без новых
+ * сообщений; ответы бота и подтверждение обновлений при остановке — ещё короче ({@link #REPLY_TIMEOUT}), чтобы приём
+ * останавливался вовремя. Долгий опрос прерывается прерыванием потока — так останавливается приём обновлений.
  */
 final class TelegramApi implements AutoCloseable {
 
     /** Подключение к Bot API. */
     static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
 
-    /** Ответ на {@code sendMessage}. */
+    /** Ответ на {@code sendMessage} доставки. */
     static final Duration SEND_TIMEOUT = Duration.ofSeconds(20);
+
+    /** Ответ на ответ бота человеку и на подтверждение обновлений при остановке. */
+    static final Duration REPLY_TIMEOUT = Duration.ofSeconds(5);
 
     /** Запас ответа на {@code getUpdates} сверх времени, которое Telegram держит запрос. */
     static final Duration POLL_MARGIN = Duration.ofSeconds(10);
 
     private static final String SEND_MESSAGE = "sendMessage";
     private static final String GET_UPDATES = "getUpdates";
+    private static final int OK = 200;
 
     /** Только сообщения: правленые сообщения, кнопки, участники чатов боту не нужны. */
     private static final List<String> ALLOWED_UPDATES = List.of("message");
 
     private static final ParameterizedTypeReference<Reply<Object>> SENT = new ParameterizedTypeReference<>() {};
-    private static final ParameterizedTypeReference<Reply<List<Update>>> UPDATES =
+    private static final ParameterizedTypeReference<Reply<List<JsonNode>>> UPDATES =
             new ParameterizedTypeReference<>() {};
+
+    /** Разбор отдельных обновлений: неизвестные поля пропускаются. */
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final Logger log = LoggerFactory.getLogger(TelegramApi.class);
 
     private final @Nullable RestClient sending;
     private final @Nullable RestClient polling;
+    private final @Nullable RestClient replying;
     private final @Nullable HttpClient http;
 
     /**
-     * @param sending клиент для {@code sendMessage} — с базовым адресом {@link #client}
-     * @param polling клиент для {@code getUpdates} — с тем же адресом и таймаутом долгого опроса
-     * @param http клиент HTTP обоих — закрывается вместе с этим; пусто — закрывать нечего
+     * @param sending клиент для {@code sendMessage} доставок — с базовым адресом {@link #client}
+     * @param polling клиент для долгого опроса {@code getUpdates} — с тем же адресом
+     * @param replying клиент для ответов бота и подтверждения обновлений — с тем же адресом
+     * @param http клиент HTTP всех трёх — закрывается вместе с этим; пусто — закрывать нечего
      */
-    TelegramApi(@Nullable RestClient sending, @Nullable RestClient polling, @Nullable HttpClient http) {
+    TelegramApi(
+            @Nullable RestClient sending,
+            @Nullable RestClient polling,
+            @Nullable RestClient replying,
+            @Nullable HttpClient http) {
         this.sending = sending;
         this.polling = polling;
+        this.replying = replying;
         this.http = http;
+    }
+
+    /** Для тестов: доставки и ответы бота — одним клиентом. */
+    TelegramApi(RestClient sending, RestClient polling, @Nullable HttpClient http) {
+        this(sending, polling, sending, http);
     }
 
     /** Бот не настроен: запросов нет, вызовы — ошибка программы. */
     static TelegramApi disabled() {
-        return new TelegramApi(null, null, null);
+        return new TelegramApi(null, null, null, null);
     }
 
-    /** Клиент Bot API бота {@code token} по адресу {@code apiUrl} с таймаутами по умолчанию; Telegram держит опрос
-     * {@code pollTimeout}. */
+    /**
+     * Клиент Bot API бота {@code token} по адресу {@code apiUrl} с таймаутами по умолчанию.
+     *
+     * @param pollTimeout сколько Telegram держит долгий опрос без новых сообщений
+     */
     static TelegramApi connect(String apiUrl, String token, Duration pollTimeout) {
-        return connect(apiUrl, token, new Timeouts(CONNECT_TIMEOUT, SEND_TIMEOUT, pollTimeout.plus(POLL_MARGIN)));
+        return connect(
+                apiUrl,
+                token,
+                new Timeouts(CONNECT_TIMEOUT, SEND_TIMEOUT, pollTimeout.plus(POLL_MARGIN), REPLY_TIMEOUT));
     }
 
     /** Клиент Bot API бота {@code token} по адресу {@code apiUrl} (схема и хост без пути). */
     static TelegramApi connect(String apiUrl, String token, Timeouts timeouts) {
         var http = HttpClient.newBuilder().connectTimeout(timeouts.connect()).build();
-        var sendFactory = new JdkClientHttpRequestFactory(http);
-        sendFactory.setReadTimeout(timeouts.send());
-        var pollFactory = new JdkClientHttpRequestFactory(http);
-        pollFactory.setReadTimeout(timeouts.poll());
         var builder = client(apiUrl, token);
         return new TelegramApi(
-                builder.clone().requestFactory(sendFactory).build(),
-                builder.clone().requestFactory(pollFactory).build(),
+                builder.clone().requestFactory(factory(http, timeouts.send())).build(),
+                builder.clone().requestFactory(factory(http, timeouts.poll())).build(),
+                builder.clone().requestFactory(factory(http, timeouts.reply())).build(),
                 http);
     }
 
@@ -98,33 +125,55 @@ final class TelegramApi implements AutoCloseable {
         return RestClient.builder().baseUrl(apiUrl + "/bot" + token).observationRegistry(ObservationRegistry.NOOP);
     }
 
+    private static JdkClientHttpRequestFactory factory(HttpClient http, Duration readTimeout) {
+        var factory = new JdkClientHttpRequestFactory(http);
+        factory.setReadTimeout(readTimeout);
+        return factory;
+    }
+
     /** Бот настроен: запросы уходят в Bot API. */
     boolean configured() {
         return sending != null;
     }
 
     /**
-     * Простой текст в чат, без разметки ({@code parse_mode} не задан) и без превью ссылок.
+     * Сообщение доставки: простой текст в чат, без разметки ({@code parse_mode} не задан) и без превью ссылок. Ответ
+     * 200, который не разобрать (или без результата), — принято: повтор отправил бы сообщение второй раз.
      *
      * @throws TelegramApiException Telegram не принял сообщение или не ответил
      */
     void sendMessage(long chatId, String text) {
-        call(require(sending), SEND_MESSAGE, new SendMessage(chatId, text, new LinkPreview(true)), SENT);
+        send(require(sending), chatId, text);
+    }
+
+    /** Ответ бота человеку — как {@link #sendMessage}, но с коротким таймаутом: его ждёт остановка приёма. */
+    void reply(long chatId, String text) {
+        send(require(replying), chatId, text);
     }
 
     /**
-     * Новые сообщения боту — долгий опрос: Telegram держит запрос до {@code timeout}, если сообщений нет.
+     * Новые сообщения боту — долгий опрос: Telegram держит запрос до {@code timeout}, если сообщений нет. Обновление,
+     * которое не разбирается, приходит без сообщения (только его id — чтобы подтвердить); без читаемого id —
+     * пропускается.
      *
      * @param offset id первого ещё не обработанного обновления; меньшие Telegram считает обработанными и забывает;
      *     пусто — с самого старого необработанного
-     * @throws TelegramApiException Telegram ответил ошибкой (в том числе 409 — опрашивает кто-то ещё) или не ответил
+     * @throws TelegramApiException Telegram ответил ошибкой (в том числе 409 — опрашивает кто-то ещё), ответ не
+     *     разобрать или ответа нет
      */
     List<Update> getUpdates(@Nullable Long offset, Duration timeout) {
-        return call(
-                require(polling),
-                GET_UPDATES,
-                new GetUpdates(offset, Math.toIntExact(timeout.toSeconds()), ALLOWED_UPDATES),
-                UPDATES);
+        return updates(require(polling), offset, timeout);
+    }
+
+    /**
+     * Подтверждает обработанные обновления (меньше {@code offset}) без ожидания новых: {@code getUpdates} с нулевым
+     * таймаутом и коротким ожиданием ответа. Полученные при этом обновления не обрабатываются — Telegram отдаст их
+     * снова.
+     *
+     * @throws TelegramApiException Telegram ответил ошибкой или не ответил
+     */
+    void confirm(long offset) {
+        updates(require(replying), offset, Duration.ZERO);
     }
 
     /** Прерывает запросы в работе и освобождает клиент HTTP — не дожидаясь долгого опроса. */
@@ -142,33 +191,74 @@ final class TelegramApi implements AutoCloseable {
         return client;
     }
 
-    private static <T> T call(
+    private static void send(RestClient client, long chatId, String text) {
+        var answer = exchange(client, SEND_MESSAGE, new SendMessage(chatId, text, new LinkPreview(true)), SENT);
+        var reply = answer.reply();
+        if (answer.status() == OK && (reply == null || !Boolean.FALSE.equals(reply.ok()))) {
+            if (reply == null || reply.result() == null) {
+                log.debug("telegram sendMessage accepted (HTTP 200) without a readable result");
+            }
+            return;
+        }
+        throw answer.failure(SEND_MESSAGE);
+    }
+
+    private static List<Update> updates(RestClient client, @Nullable Long offset, Duration timeout) {
+        var answer = exchange(
+                client,
+                GET_UPDATES,
+                new GetUpdates(offset, Math.toIntExact(timeout.toSeconds()), ALLOWED_UPDATES),
+                UPDATES);
+        var reply = answer.reply();
+        if (answer.status() != OK || reply == null || !Boolean.TRUE.equals(reply.ok()) || reply.result() == null) {
+            throw answer.failure(GET_UPDATES);
+        }
+        var updates = new ArrayList<Update>();
+        for (var node : reply.result()) {
+            var update = update(node);
+            if (update != null) {
+                updates.add(update);
+            }
+        }
+        return updates;
+    }
+
+    /** Обновление из JSON; не разбирается — только его id без сообщения; нет и id — пусто. Содержимое не в логе. */
+    private static @Nullable Update update(JsonNode node) {
+        try {
+            return JSON.treeToValue(node, Update.class);
+        } catch (JacksonException e) {
+            var id = node.path("update_id");
+            if (id.isIntegralNumber()) {
+                log.warn(
+                        "telegram update {} is not readable ({}), it is skipped",
+                        id.asLong(),
+                        e.getClass().getName());
+                return new Update(id.asLong(), null);
+            }
+            log.warn(
+                    "telegram update without a readable id is skipped ({})",
+                    e.getClass().getName());
+            return null;
+        }
+    }
+
+    private static <T> Answer<T> exchange(
             RestClient client, String method, Object request, ParameterizedTypeReference<Reply<T>> type) {
         try {
-            return client.post()
+            var answer = client.post()
                     .uri("/" + method)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(request)
-                    .exchange((sent, response) -> {
-                        var status = response.getStatusCode().value();
-                        var reply = read(method, response, type);
-                        if (status == 200 && reply != null && Boolean.TRUE.equals(reply.ok())) {
-                            var result = reply.result();
-                            if (result != null) {
-                                return result;
-                            }
-                        }
-                        log.debug("telegram {} answered HTTP {}", method, status);
-                        throw TelegramApiException.answered(
-                                method,
-                                status,
-                                reply == null || reply.parameters() == null
-                                        ? null
-                                        : reply.parameters().retryAfter(),
-                                reply == null ? null : reply.description());
-                    });
-        } catch (TelegramApiException e) {
-            throw e;
+                    .exchange((sent, response) ->
+                            new Answer<>(response.getStatusCode().value(), read(method, response, type)));
+            if (answer == null) {
+                throw new InternalException("telegram " + method + " exchange returned nothing");
+            }
+            if (answer.status() != OK) {
+                log.debug("telegram {} answered HTTP {}", method, answer.status());
+            }
+            return answer;
         } catch (RuntimeException e) {
             if (!(e instanceof RestClientException)) {
                 // Не сбой сети, а ошибка клиента (тело не записалось): без причины — её текст бывает с адресом.
@@ -202,10 +292,26 @@ final class TelegramApi implements AutoCloseable {
      * Таймауты клиента.
      *
      * @param connect подключение
-     * @param send ответ на {@code sendMessage}
-     * @param poll ответ на {@code getUpdates} — дольше, чем Telegram держит долгий опрос
+     * @param send ответ на {@code sendMessage} доставки
+     * @param poll ответ на долгий опрос {@code getUpdates} — дольше, чем Telegram его держит
+     * @param reply ответ на ответ бота человеку и на подтверждение обновлений
      */
-    record Timeouts(Duration connect, Duration send, Duration poll) {}
+    record Timeouts(Duration connect, Duration send, Duration poll, Duration reply) {}
+
+    /** Ответ сервера: код и разобранное тело; пусто — тело не Bot API. */
+    private record Answer<T>(int status, @Nullable Reply<T> reply) {
+
+        TelegramApiException failure(String method) {
+            return TelegramApiException.answered(
+                    method,
+                    status,
+                    reply != null,
+                    reply == null || reply.parameters() == null
+                            ? null
+                            : reply.parameters().retryAfter(),
+                    reply == null ? null : reply.description());
+        }
+    }
 
     /** Обновление: пока бот получает только сообщения, у остальных обновлений {@link #message()} пусто. */
     record Update(

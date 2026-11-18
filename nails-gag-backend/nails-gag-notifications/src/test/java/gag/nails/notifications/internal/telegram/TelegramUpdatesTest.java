@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gag.nails.notifications.internal.telegram.TelegramStub.Reply;
 import java.time.Duration;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -30,6 +32,23 @@ class TelegramUpdatesTest extends TelegramTestSupport {
             assertThat(request.token()).isEqualTo(TOKEN);
             assertThat(request.body().has("parse_mode")).isFalse();
         });
+    }
+
+    /** Ответ уходит после фиксации: в момент ответа привязка видна другому соединению. */
+    @Test
+    void replyIsSentAfterTheBindingIsCommitted() {
+        var anna = account();
+        var chat = chat();
+        var seen = new CopyOnWriteArrayList<Optional<Long>>();
+        STUB.observe(request -> {
+            if (request.method().equals("sendMessage")) {
+                seen.add(chatOf(anna));
+            }
+        });
+
+        updates.handle(privateMessage(chat, "/start " + linkToken(anna)));
+
+        assertThat(seen).containsExactly(Optional.of(chat));
     }
 
     @Test

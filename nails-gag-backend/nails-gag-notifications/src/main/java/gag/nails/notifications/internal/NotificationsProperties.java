@@ -58,9 +58,6 @@ public record NotificationsProperties(
     /** {@code http(s)://хост[:порт]} без пути, запроса и завершающего слэша. */
     public static final String SITE_URL = "https?://[^\\s/?#]+";
 
-    /** Форма токена бота: {@code <id бота>:<секрет>}. */
-    private static final java.util.regex.Pattern BOT_TOKEN = java.util.regex.Pattern.compile("[0-9]+:[A-Za-z0-9_-]+");
-
     /** Имя в Telegram с {@code @}: 5–32 символа латиницы, цифр и подчёркивания. */
     public static final String TELEGRAM_HANDLE = "@[A-Za-z0-9_]{5,32}";
 
@@ -153,6 +150,10 @@ public record NotificationsProperties(
 
             @DefaultValue(DEFAULT_TELEGRAM_API_URL) @NotNull @Pattern(regexp = SITE_URL)
             String apiUrl) {
+
+        /** Форма токена бота: {@code <id бота>:<секрет>}. */
+        private static final java.util.regex.Pattern BOT_TOKEN =
+                java.util.regex.Pattern.compile("[0-9]+:[A-Za-z0-9_-]+");
 
         /** Связывание настроек — этим конструктором. */
         @ConstructorBinding

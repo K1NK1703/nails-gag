@@ -30,8 +30,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * просто текст. Повтор того же обновления (после рестарта — смещение приёма в памяти) безопасен: токен одноразовый,
  * привязка остаётся, повтор получает «ссылка устарела».
  *
- * <p>Ответ уходит после фиксации изменений; не ушёл — в лог (метод и код ответа, без чата и текста), привязка остаётся,
- * приём обновлений идёт дальше. Сбой базы — исключением: приём повторит обновление.
+ * <p>Ответ уходит после фиксации изменений, с коротким таймаутом ({@link TelegramApi#reply}); не ушёл — в лог (метод
+ * и код ответа, без чата и текста), привязка остаётся, приём обновлений идёт дальше. Сбой базы — исключением: приём
+ * повторит обновление. В логе привязки нет ни чата, ни аккаунта (спека §6).
  */
 @Component
 class TelegramUpdates {
@@ -105,7 +106,7 @@ class TelegramUpdates {
                 .consume(token)
                 .map(accountId -> {
                     accountChannels.bindTelegram(accountId, chatId, clock.instant());
-                    log.info("telegram chat linked to account {}", accountId);
+                    log.info("telegram chat linked by a link token");
                     return true;
                 })
                 .orElse(false));
@@ -114,7 +115,7 @@ class TelegramUpdates {
 
     private void reply(long chatId, String text, long updateId) {
         try {
-            api.sendMessage(chatId, text);
+            api.reply(chatId, text);
         } catch (TelegramApiException e) {
             log.warn("telegram reply not sent: {} (update {})", e.getMessage(), updateId);
         }
