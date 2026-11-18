@@ -17,13 +17,22 @@ spring:
   mail:
     # Почтовый сервер писем уведомлений: host, port, username, password — при развёртывании через переменные окружения
     # (SPRING_MAIL_HOST и т. д.), не в файле. Без host (или без nails-gag.notifications.email.from) почта выключена.
+    # Ключи — протокола smtp; для SMTPS (spring.mail.protocol: smtps) те же настройки — под mail.smtps.*, в том числе
+    # mail.smtps.quitwait (STARTTLS там не нужен: TLS с начала соединения).
     properties:
       # Таймауты SMTP, мс. Обязательны и не больше 20 с (проверяются при старте): отправка держит доставку в аренде
       # 5 минут от начала попытки, а письмо — около десятка обменов с сервером; без таймаутов JavaMail ждёт сервер
-      # бесконечно. Для SMTPS (spring.mail.protocol: smtps) — те же ключи mail.smtps.*.
+      # бесконечно.
       "[mail.smtp.connectiontimeout]": 10000
       "[mail.smtp.timeout]": 20000
       "[mail.smtp.writetimeout]": 20000
+      # После принятого письма QUIT не ждёт ответа: сбой на закрытии иначе выглядел бы как неудачная отправка.
+      "[mail.smtp.quitwait]": false
+      # Имя в EHLO — домен сайта, а не имя контейнера: случайное имя машины портит репутацию писем.
+      "[mail.smtp.localhost]": nails-gag.ru
+      # Только по TLS: без STARTTLS у сервера письмо не уходит (пароль и письма не идут открытым текстом).
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
   jpa:
     open-in-view: false
     hibernate:

@@ -15,12 +15,17 @@ import gag.nails.notifications.internal.dispatch.ResolvedRecipient;
 import gag.nails.notifications.internal.dispatch.SendResult;
 import gag.nails.notifications.model.Channel;
 import jakarta.mail.Message.RecipientType;
+import jakarta.mail.MessagingException;
 import jakarta.mail.internet.ContentType;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
 import org.jspecify.annotations.Nullable;
@@ -43,8 +48,11 @@ class EmailChannelTest {
             Анна, мастер записал вас на визит.
             Адрес: пр. КИМа 6, метро Приморская, 3 этаж, студия 365""");
 
-    /** Таймауты SMTP тестов: в пределах секунд, чтобы молчащий сервер не держал тест. */
+    /** Таймауты SMTP тестов: в пределах секунд, чтобы сбойный сервер не держал тест. */
     private static final Duration TIMEOUT = Duration.ofSeconds(2);
+
+    /** Таймауты тестов, которые ждут именно таймаута: молчащий сервер. */
+    private static final Duration SHORT_TIMEOUT = Duration.ofMillis(400);
 
     private @Nullable GreenMail mailServer;
 
@@ -142,17 +150,17 @@ class EmailChannelTest {
         assertThat(server.getReceivedMessages()).isEmpty();
     }
 
+    /** Порт занят сокетом теста, который не слушает: соединение отвергается, и порт не займёт чужой процесс. */
     @Test
     void unreachableServerIsRetried() throws IOException {
-        int port;
-        try (var socket = new ServerSocket(0)) {
-            port = socket.getLocalPort();
+        try (var bound = new Socket()) {
+            bound.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            var channel = channel(sender(bound.getLocalPort()));
+
+            var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+            assertThat(result).isEqualTo(new SendResult.Retry(null, "email_unreachable"));
         }
-        var channel = channel(sender(port));
-
-        var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
-
-        assertThat(result).isEqualTo(new SendResult.Retry(null, "email_unreachable"));
     }
 
     /**
@@ -161,15 +169,94 @@ class EmailChannelTest {
      */
     @Test
     void silentServerTimesOutAndIsRetried() throws IOException {
-        try (var silent = new ServerSocket(0)) {
-            var channel = channel(sender(silent.getLocalPort()));
+        try (var silent = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            var channel = channel(sender(silent.getLocalPort(), SHORT_TIMEOUT));
             var started = System.nanoTime();
 
             var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
 
             assertThat(result).isEqualTo(new SendResult.Retry(null, "email_unreachable"));
-            assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(TIMEOUT.multipliedBy(3));
+            assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(SHORT_TIMEOUT.multipliedBy(5));
         }
+    }
+
+    /**
+     * Сервер принял письмо (250 на конец письма) и молчит на {@code QUIT}: закрытие соединения кончается таймаутом, но
+     * письмо уже у сервера — доставлено, иначе повтор отправил бы его второй раз.
+     */
+    @Test
+    void acceptedLetterIsSentEvenIfQuitTimesOut() throws IOException {
+        try (var server = new ScriptedSmtpServer("250 OK queued", false)) {
+            var channel = channel(sender(server.port(), SHORT_TIMEOUT));
+
+            var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+            assertThat(result).isEqualTo(new SendResult.Sent());
+        }
+    }
+
+    @Test
+    void refusalAfterEndOfLetterIsRejection() throws IOException {
+        try (var server = new ScriptedSmtpServer("554 5.7.1 Message rejected as spam", true)) {
+            var channel = channel(sender(server.port(), SHORT_TIMEOUT));
+
+            var result = channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+            assertThat(result).isEqualTo(new SendResult.Fail("email_rejected", false));
+        }
+    }
+
+    /** 552 на {@code RCPT TO} — переполненный ящик, по RFC 5321 (§4.5.3.1.10) временная ошибка, как 452. */
+    @Test
+    void fullMailboxOnRecipientIsDeferred() {
+        var server = start(new RefusingGreenMail(Map.of("full@example.com", "552 5.2.2 Mailbox full")));
+        var channel = channel(sender(server.getSmtp().getPort()));
+
+        var result = channel.send(new ResolvedRecipient("full@example.com", null, "Анна"), TEXT);
+
+        assertThat(result).isEqualTo(new SendResult.Retry(null, "email_deferred"));
+    }
+
+    /** Свой Message-ID в домене отправителя, а не в имени машины, на которой работает приложение. */
+    @Test
+    void messageIdIsInSenderDomain() throws Exception {
+        var server = start(new GreenMail(ServerSetupTest.SMTP.dynamicPort()));
+        var channel = channel(sender(server.getSmtp().getPort()));
+
+        channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+        channel.send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+        assertThat(server.waitForIncomingEmail(5_000, 2)).isTrue();
+        var ids = Arrays.stream(server.getReceivedMessages())
+                .map(EmailChannelTest::messageId)
+                .toList();
+        assertThat(ids)
+                .doesNotHaveDuplicates()
+                .allSatisfy(id -> assertThat(id)
+                        .matches("<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@nails-gag\\.ru>"));
+    }
+
+    /** Письмо не собирается — так будет при каждой попытке: доставка неудачна сразу, без повторов. */
+    @Test
+    void letterThatCannotBeComposedIsPermanentFailure() {
+        var sender = new JavaMailSenderImpl() {
+
+            @Override
+            public MimeMessage createMimeMessage() {
+                return new MimeMessage(getSession()) {
+
+                    @Override
+                    public void setSubject(String subject, String charset) throws MessagingException {
+                        throw new MessagingException("subject is not accepted");
+                    }
+                };
+            }
+        };
+        sender.setHost("127.0.0.1");
+
+        var result = channel(sender).send(new ResolvedRecipient("anna@example.com", null, "Анна"), TEXT);
+
+        assertThat(result).isEqualTo(new SendResult.Fail("email_compose_failed", false));
     }
 
     @Test
@@ -227,11 +314,15 @@ class EmailChannelTest {
 
     /** Отправитель на локальный порт с короткими таймаутами SMTP. */
     private static JavaMailSenderImpl sender(int port) {
+        return sender(port, TIMEOUT);
+    }
+
+    private static JavaMailSenderImpl sender(int port, Duration timeouts) {
         var sender = new JavaMailSenderImpl();
         sender.setHost("127.0.0.1");
         sender.setPort(port);
         var properties = new Properties();
-        var timeout = Long.toString(TIMEOUT.toMillis());
+        var timeout = Long.toString(timeouts.toMillis());
         properties.setProperty("mail.smtp.connectiontimeout", timeout);
         properties.setProperty("mail.smtp.timeout", timeout);
         properties.setProperty("mail.smtp.writetimeout", timeout);
@@ -245,6 +336,14 @@ class EmailChannelTest {
         return letters[0];
     }
 
+    private static String messageId(MimeMessage letter) {
+        try {
+            return letter.getMessageID();
+        } catch (MessagingException e) {
+            throw new AssertionError(e);
+        }
+    }
+
     /** Тело письма без различий в переводах строк: при передаче они становятся CRLF. */
     private static String body(MimeMessage letter) throws Exception {
         return ((String) letter.getContent()).replace("\r\n", "\n").stripTrailing();
@@ -252,7 +351,9 @@ class EmailChannelTest {
 
     /**
      * GreenMail, который на {@code MAIL FROM} и {@code RCPT TO} заданных адресов отвечает заданной строкой (кодом
-     * отказа).
+     * отказа). Опирается на внутренности GreenMail 2.1 — защищённое поле {@code managers} и открытые для
+     * переопределения {@code SmtpManager.checkSender}/{@code checkRecipient}: при обновлении GreenMail проверить, что
+     * отказы по-прежнему приходят (тесты отказов упадут, если нет).
      */
     private static final class RefusingGreenMail extends GreenMail {
 

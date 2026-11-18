@@ -4,11 +4,18 @@ spring:
     compose:
       file: compose.yaml
       lifecycle-management: start-only
+      start:
+        # docker compose up --detach --wait при каждом bootRun, даже если база уже запущена: так поднимается и Mailpit.
+        # Запущенный сервис с той же настройкой up не пересоздаёт, тома не трогает; start-only ничего не останавливает.
+        skip: never
   mail:
-    # Письма уведомлений — в Mailpit из compose.yaml (веб-интерфейс http://localhost:8025), наружу не уходят. Compose
-    # поднимается при bootRun, только если не запущен ни один сервис; иначе: docker compose up -d mailpit.
+    # Письма уведомлений — в Mailpit из compose.yaml (веб-интерфейс http://localhost:8025), наружу не уходят.
     host: localhost
     port: 1025
+    properties:
+      # Mailpit без TLS: STARTTLS из application.yaml здесь выключен.
+      "[mail.smtp.starttls.enable]": false
+      "[mail.smtp.starttls.required]": false
 
 logging:
   structured:

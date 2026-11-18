@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.UUID;
 import org.eclipse.angus.mail.smtp.SMTPAddressFailedException;
 import org.eclipse.angus.mail.smtp.SMTPSendFailedException;
 import org.eclipse.angus.mail.smtp.SMTPSenderFailedException;
@@ -34,32 +35,47 @@ import org.springframework.mail.javamail.MimeMessageHelper;
  * Письма уведомлений (спека §3.7): простой текст {@code text/plain; charset=UTF-8} от отправителя из настроек, тема —
  * первая строка текста, в конце — ссылка на настройки уведомлений в личном кабинете. Отправляет
  * {@code JavaMailSender} Spring Boot ({@code spring.mail.*}): каждое письмо — своё соединение, таймауты SMTP заданы и
- * проверены при старте ({@link EmailConfiguration}), поэтому попытка укладывается в аренду доставки.
+ * проверены при старте ({@link EmailConfiguration}), поэтому попытка укладывается в аренду доставки. {@code Message-ID}
+ * — свой, в домене отправителя: иначе JavaMail строит его из имени машины (в контейнере — случайного).
  *
  * <p>Исход — кодом результата, а не исключением; текст исключений JavaMail (в нём бывают адреса и ответы сервера с
  * ними) никуда не передаётся, в отладочный лог — только классы и код ответа SMTP:
  *
  * <ul>
  *   <li>{@value #REJECTED} — сервер ответил постоянным отказом 5xx получателю ({@code RCPT TO}) или письму
- *       ({@code DATA}): доставка неудачна сразу;
+ *       ({@code DATA}, в том числе после конца письма): доставка неудачна сразу. Кроме 552 на {@code RCPT TO}: по
+ *       RFC 5321 (§4.5.3.1.10) это переполненный ящик — временно, как 452;
  *   <li>{@value #SENDER_REJECTED} — постоянный отказ 5xx отправителю ({@code MAIL FROM}): это настройка почты, а не
  *       получатель, — повтор, пока её не исправят;
  *   <li>{@value #INVALID_ADDRESS} — почта получателя не разбирается как адрес: доставка неудачна сразу;
+ *   <li>{@value #COMPOSE_FAILED} — письмо не собирается (JavaMail отверг заголовок или тело): это повторится при
+ *       каждой попытке — доставка неудачна сразу;
  *   <li>{@value #DEFERRED} — временный отказ сервера 4xx: повтор по расписанию;
  *   <li>{@value #UNREACHABLE} — нет соединения или ответа сервера, в том числе по таймауту: повтор;
  *   <li>{@value #AUTH_FAILED} — сервер не принял вход: повтор — настройки можно исправить, пока попытки не кончились;
  *   <li>{@value #FAILED} — прочий сбой почты без кода ответа SMTP: повтор.
  * </ul>
+ *
+ * <p>Письмо, которое сервер уже принял (250 на конец письма), — доставлено, даже если затем не удалось закрыть
+ * соединение ({@code QUIT} без ответа, обрыв): {@code JavaMailSenderImpl} (Spring 7.0) сообщает об этом
+ * {@link MailSendException} без исключений отдельных писем — единственный такой случай; повтор отправил бы письмо
+ * второй раз.
  */
 final class EmailChannel implements NotificationChannel {
 
     static final String REJECTED = "email_rejected";
     static final String SENDER_REJECTED = "email_sender_rejected";
     static final String INVALID_ADDRESS = "email_invalid_address";
+    static final String COMPOSE_FAILED = "email_compose_failed";
     static final String DEFERRED = "email_deferred";
     static final String UNREACHABLE = "email_unreachable";
     static final String AUTH_FAILED = "email_auth_failed";
     static final String FAILED = "email_error";
+
+    /** Ящик получателя переполнен: на {@code RCPT TO} — временная ошибка, как 452 (RFC 5321 §4.5.3.1.10). */
+    private static final int MAILBOX_FULL = 552;
+
+    private static final int INSUFFICIENT_STORAGE = 452;
 
     private static final Logger log = LoggerFactory.getLogger(EmailChannel.class);
 
@@ -103,7 +119,7 @@ final class EmailChannel implements NotificationChannel {
             letter = letter(sender.createMimeMessage(), from, to, text);
         } catch (MessagingException e) {
             log.debug("email letter not composed: {}", e.getClass().getName());
-            return new SendResult.Retry(null, FAILED);
+            return new SendResult.Fail(COMPOSE_FAILED, false);
         }
         try {
             sender.send(letter);
@@ -120,7 +136,14 @@ final class EmailChannel implements NotificationChannel {
         helper.setTo(to);
         helper.setSubject(text.subject());
         helper.setText(text.body() + "\n\n" + footer, false);
+        letter.setHeader("Message-ID", "<" + UUID.randomUUID() + "@" + domain(from) + ">");
         return letter;
+    }
+
+    /** Домен адреса отправителя (проверен при старте как адрес). */
+    private static String domain(InternetAddress from) {
+        var address = from.getAddress();
+        return address.substring(address.lastIndexOf('@') + 1);
     }
 
     /** Адрес получателя с его именем в заголовке {@code To}, если оно есть. */
@@ -138,6 +161,14 @@ final class EmailChannel implements NotificationChannel {
 
     /** Исход по сбою отправки: код ответа SMTP, если сервер его дал, иначе — по виду сбоя. */
     private static SendResult failure(MailException error) {
+        if (error instanceof MailSendException send && send.getMessageExceptions().length == 0) {
+            log.debug(
+                    "email accepted, connection not closed cleanly: {}",
+                    error.getCause() == null
+                            ? null
+                            : error.getCause().getClass().getName());
+            return new SendResult.Sent();
+        }
         if (error instanceof MailAuthenticationException) {
             log.debug("email login rejected: {}", error.getClass().getName());
             return new SendResult.Retry(null, AUTH_FAILED);
@@ -167,7 +198,8 @@ final class EmailChannel implements NotificationChannel {
     /** Код ответа SMTP из исключения Angus Mail; {@code -1} — у исключения его нет. */
     private static int replyCode(Throwable error) {
         return switch (error) {
-            case SMTPAddressFailedException e -> e.getReturnCode();
+            case SMTPAddressFailedException e ->
+                e.getReturnCode() == MAILBOX_FULL ? INSUFFICIENT_STORAGE : e.getReturnCode();
             case SMTPSenderFailedException e -> e.getReturnCode();
             case SMTPSendFailedException e -> e.getReturnCode();
             default -> -1;

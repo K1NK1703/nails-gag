@@ -15,6 +15,10 @@ spring:
       "[mail.smtp.connectiontimeout]": 10000
       "[mail.smtp.timeout]": 20000
       "[mail.smtp.writetimeout]": 20000
+      "[mail.smtp.quitwait]": false
+      # Не как в приложении: GreenMail тестов — без TLS.
+      "[mail.smtp.starttls.enable]": false
+      "[mail.smtp.starttls.required]": false
   jpa:
     open-in-view: false
     hibernate:
