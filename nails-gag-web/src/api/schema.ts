@@ -1902,7 +1902,10 @@ export interface components {
       reminderHoursBefore: number | null
     }
     VisitReminders: {
-      /** Format: time-local */
+      /**
+       * Format: time-local
+       * @example 12:00
+       */
       reminderDayBeforeAt: string | null
       /** Format: int32 */
       reminderHoursBefore: number | null
