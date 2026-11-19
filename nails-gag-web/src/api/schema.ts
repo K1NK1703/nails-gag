@@ -68,6 +68,38 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/notifications/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['notificationSettings_settings']
+    put: operations['notificationSettings_update']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/notifications/me': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['myNotifications_mine']
+    put: operations['myNotifications_update']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/finance/categories/order': {
     parameters: {
       query?: never
@@ -446,6 +478,22 @@ export interface paths {
     get?: never
     put?: never
     post: operations['works_hide']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/notifications/me/telegram-link': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['myNotifications_createTelegramLink']
     delete?: never
     options?: never
     head?: never
@@ -1316,6 +1364,38 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/notifications/settings/history': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['notificationSettings_history']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/notifications/deliveries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['notificationSettings_deliveries']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/me': {
     parameters: {
       query?: never
@@ -1716,6 +1796,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/notifications/me/telegram': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['myNotifications_unlinkTelegram']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/clients/{id}/consents/{consentKind}': {
     parameters: {
       query?: never
@@ -1795,6 +1891,32 @@ export interface components {
     }
     ReorderWorks: {
       orderedWorkIds: string[]
+    }
+    ChangeVisitReminders: {
+      /**
+       * Format: time-local
+       * @example 12:00
+       */
+      reminderDayBeforeAt: string | null
+      /** Format: int32 */
+      reminderHoursBefore: number | null
+    }
+    VisitReminders: {
+      /** Format: time-local */
+      reminderDayBeforeAt: string | null
+      /** Format: int32 */
+      reminderHoursBefore: number | null
+    }
+    UpdateMyChannels: {
+      emailEnabled: boolean
+      telegramEnabled: boolean
+    }
+    MyChannels: {
+      emailEnabled: boolean
+      emailAvailable: boolean
+      telegramEnabled: boolean
+      telegramLinked: boolean
+      telegramAvailable: boolean
     }
     ReorderFinanceCategories: {
       /** @enum {string} */
@@ -2113,6 +2235,12 @@ export interface components {
       consent: 'GIVEN' | 'MISSING' | 'OUTSIDE_SITE' | 'NOT_NEEDED'
       /** Format: date-time */
       createdAt: string
+    }
+    TelegramLink: {
+      /** Format: uri */
+      url: string
+      /** Format: date-time */
+      expiresAt: string
     }
     CreateRecurringEntry: {
       /** Format: uuid */
@@ -2481,6 +2609,65 @@ export interface components {
       /** Format: int32 */
       height: number
     }
+    ReminderSettingsChange: {
+      field: string
+      oldValue: string | null
+      newValue: string | null
+      /** Format: uuid */
+      changedBy: string | null
+      /** Format: date-time */
+      changedAt: string
+    }
+    DeliveryView: {
+      /** Format: uuid */
+      deliveryId: string
+      /** Format: uuid */
+      messageId: string
+      /** @enum {string} */
+      kind:
+        | 'BOOKING_RECEIVED'
+        | 'BOOKED_BY_MASTER'
+        | 'PREPAYMENT_REQUESTED'
+        | 'CONFIRMED'
+        | 'CANCELLED_BY_CLIENT'
+        | 'CANCELLED'
+        | 'RESCHEDULED'
+        | 'EARLIER_PROPOSED'
+        | 'REMINDER_DAY_BEFORE'
+        | 'REMINDER_HOURS_BEFORE'
+        | 'STAFF_NEW_BOOKING'
+        | 'STAFF_CLIENT_CANCELLED'
+        | 'STAFF_PREPAYMENT_TIMEOUT'
+        | 'STAFF_CLIENT_RESCHEDULED'
+        | 'STAFF_EARLIER_ACCEPTED'
+        | 'STAFF_EARLIER_DECLINED'
+      /** Format: uuid */
+      bookingId: string
+      /** Format: uuid */
+      clientId: string | null
+      /** Format: uuid */
+      accountId: string | null
+      /** @enum {string} */
+      channel: 'EMAIL' | 'TELEGRAM'
+      /** @enum {string} */
+      status: 'PENDING' | 'SENT' | 'FAILED'
+      /** Format: int32 */
+      attempts: number
+      errorCode: string | null
+      /** Format: date-time */
+      dueAt: string
+      /** Format: date-time */
+      sentAt: string | null
+    }
+    PagedDeliveryView: {
+      items: components['schemas']['DeliveryView'][]
+      /** Format: int32 */
+      page: number
+      /** Format: int32 */
+      size: number
+      /** Format: int64 */
+      total: number
+    }
     CategoryTotal: {
       /** Format: uuid */
       categoryId: string
@@ -2765,6 +2952,7 @@ export interface components {
         | 'DOCUMENTS'
         | 'ACCESS'
         | 'ANALYTICS'
+        | 'NOTIFICATIONS'
         | null
       /** @enum {string|null} */
       oldLevel: 'NONE' | 'READ' | 'WRITE' | null
@@ -2953,6 +3141,130 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  notificationSettings_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['VisitReminders']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  notificationSettings_update: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeVisitReminders']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['VisitReminders']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  myNotifications_mine: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MyChannels']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  myNotifications_update: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateMyChannels']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MyChannels']
+        }
       }
       /** @description Problem (RFC 9457) */
       default: {
@@ -3380,6 +3692,7 @@ export interface operations {
           | 'documents'
           | 'access'
           | 'analytics'
+          | 'notifications'
       }
       cookie?: never
     }
@@ -3426,6 +3739,7 @@ export interface operations {
           | 'documents'
           | 'access'
           | 'analytics'
+          | 'notifications'
       }
       cookie?: never
     }
@@ -4000,6 +4314,35 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  myNotifications_createTelegramLink: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TelegramLink']
+        }
       }
       /** @description Problem (RFC 9457) */
       default: {
@@ -6408,6 +6751,69 @@ export interface operations {
       }
     }
   }
+  notificationSettings_history: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReminderSettingsChange'][]
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  notificationSettings_deliveries: {
+    parameters: {
+      query?: {
+        status?: 'pending' | 'sent' | 'failed'
+        bookingId?: string
+        page?: number
+        size?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PagedDeliveryView']
+        }
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
   me_me: {
     parameters: {
       query?: never
@@ -7191,6 +7597,33 @@ export interface operations {
       path: {
         id: string
       }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Problem (RFC 9457) */
+      default: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  myNotifications_unlinkTelegram: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
       cookie?: never
     }
     requestBody?: never
