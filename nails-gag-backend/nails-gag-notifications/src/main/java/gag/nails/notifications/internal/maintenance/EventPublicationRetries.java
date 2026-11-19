@@ -1,6 +1,7 @@
 package gag.nails.notifications.internal.maintenance;
 
 import gag.nails.common.error.InternalException;
+import gag.nails.notifications.internal.JobsLifecycle;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -53,16 +54,19 @@ public class EventPublicationRetries {
     private final FailedEventPublications failed;
     private final JdbcClient jdbc;
     private final Clock clock;
+    private final JobsLifecycle lifecycle;
     private final String table;
 
     EventPublicationRetries(
             FailedEventPublications failed,
             JdbcClient jdbc,
             Clock clock,
+            JobsLifecycle lifecycle,
             @Value("${spring.modulith.events.jdbc.schema:}") String schema) {
         this.failed = failed;
         this.jdbc = jdbc;
         this.clock = clock;
+        this.lifecycle = lifecycle;
         if (!schema.isEmpty() && !SCHEMA.matcher(schema).matches()) {
             throw new InternalException("spring.modulith.events.jdbc.schema is not a plain identifier: " + schema);
         }
@@ -78,12 +82,19 @@ public class EventPublicationRetries {
      * <p>Возраст проверяется фильтром: в Spring Modulith 2.1.1 запрос неудачных публикаций
      * ({@code JdbcEventPublicationRepositoryV2.findFailedPublications}) склеивает условие на дату через {@code AND} с
      * {@code STATUS = 'FAILED' OR (...)} без скобок, и для {@code FAILED} минимальный возраст запроса не действует.
+     *
+     * <p>При остановке приложения ({@link JobsLifecycle}) не повторяет ничего, а начатый запуск — больше ни одной
+     * публикации: пул слушателей уже дорабатывает своё.
      */
     public void resubmitFailed() {
+        if (!lifecycle.accepting()) {
+            return;
+        }
+        var due = dueAtMost(clock.instant(), BATCH);
         failed.resubmit(ResubmissionOptions.defaults()
                 .withMinAge(MIN_AGE)
                 .withBatchSize(WINDOW)
-                .withFilter(dueAtMost(clock.instant(), BATCH)));
+                .withFilter(publication -> lifecycle.accepting() && due.test(publication)));
     }
 
     /**

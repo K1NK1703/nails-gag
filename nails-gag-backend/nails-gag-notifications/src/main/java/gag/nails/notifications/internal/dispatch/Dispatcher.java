@@ -8,6 +8,7 @@ import gag.nails.common.actor.Section;
 import gag.nails.common.error.InternalException;
 import gag.nails.common.id.UuidV7;
 import gag.nails.notifications.internal.Failures;
+import gag.nails.notifications.internal.JobsLifecycle;
 import gag.nails.notifications.internal.preference.AccountChannels;
 import gag.nails.notifications.internal.queue.QuietHours;
 import gag.nails.notifications.internal.text.MessageTexts;
@@ -68,6 +69,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * ({@code expired}). Постоянный отказ канала — неудачна сразу; заблокировавший бота чат отвязывается. Каналы одного
  * сообщения независимы: сбой одного не трогает другой.
  *
+ * <p>Остановка приложения ({@link JobsLifecycle}) проверяется перед взятием каждого сообщения и каждой доставки: после
+ * неё прогон новых не берёт, а начатая отправка дорабатывает и записывает результат, пока планировщик ждёт задачу.
+ * Невзятые сообщения и доставки остаются созревшими до следующего запуска.
+ *
  * <p>В лог — только id, вид, канал и код ошибки; сбой канала — WARN не чаще раза в минуту на канал; ошибки базы — класс
  * и SQLState без текста ({@link Failures}).
  */
@@ -92,6 +97,7 @@ public class Dispatcher {
     private final QuietHours quietHours;
     private final Clock clock;
     private final ChannelWarnings warnings;
+    private final JobsLifecycle lifecycle;
 
     Dispatcher(
             JdbcClient jdbc,
@@ -102,7 +108,8 @@ public class Dispatcher {
             AccountChannels accountChannels,
             MessageTexts texts,
             QuietHours quietHours,
-            Clock clock) {
+            Clock clock,
+            JobsLifecycle lifecycle) {
         this.jdbc = jdbc;
         this.transaction = transaction;
         this.bookings = bookings;
@@ -113,6 +120,7 @@ public class Dispatcher {
         this.quietHours = quietHours;
         this.clock = clock;
         this.warnings = new ChannelWarnings(clock);
+        this.lifecycle = lifecycle;
     }
 
     /**
@@ -144,13 +152,14 @@ public class Dispatcher {
 
     /**
      * Все созревшие сообщения, по одному в своей транзакции. Сообщение, на котором транзакция упала, исключается до
-     * конца прогона, поэтому цикл конечен; упал сам выбор сообщения (база недоступна) — шаг прерывается.
+     * конца прогона, поэтому цикл конечен; упал сам выбор сообщения (база недоступна) — шаг прерывается. При остановке
+     * приложения новые сообщения не берутся.
      */
     private void dispatchDue() {
         var failed = new HashSet<UUID>();
         var failures = new RunFailures("messages");
         var run = new DispatchRun(new Cards(clients));
-        while (true) {
+        while (lifecycle.accepting()) {
             var current = new AtomicReference<@Nullable DueMessage>();
             try {
                 if (!Objects.requireNonNull(transaction.execute(status -> dispatchNext(failed, current, run)))) {
@@ -265,15 +274,20 @@ public class Dispatcher {
      * Все созревшие доставки: пачка читается без блокировок, каждая доставка берётся в аренду и отправляется по одной.
      * Доставка, на взятии которой транзакция упала, исключается до конца прогона. Следующая пачка читается, только
      * если эта была полной и что-то сдвинула: иначе остались лишь доставки, которые прямо сейчас берёт другой прогон.
+     * При остановке приложения новые доставки не берутся: начатая отправка дорабатывает, остальные ждут следующего
+     * запуска.
      */
     private void sendDue() {
         var failed = new HashSet<UUID>();
         var failures = new RunFailures("deliveries");
         Map<UUID, Set<String>> staff = null;
-        while (true) {
+        while (lifecycle.accepting()) {
             var candidates = dueDeliveries(failed);
             var progressed = 0;
             for (var deliveryId : candidates) {
+                if (!lifecycle.accepting()) {
+                    break;
+                }
                 Claim claim;
                 try {
                     claim = Objects.requireNonNull(transaction.execute(status -> claim(deliveryId)));

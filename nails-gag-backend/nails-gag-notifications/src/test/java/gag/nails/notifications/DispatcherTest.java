@@ -12,6 +12,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.InternalException;
 import gag.nails.common.id.UuidV7;
 import gag.nails.notifications.command.UpdateMyChannels;
+import gag.nails.notifications.internal.JobsLifecycle;
 import gag.nails.notifications.internal.dispatch.Dispatcher;
 import gag.nails.notifications.internal.dispatch.ResolvedRecipient;
 import gag.nails.notifications.internal.dispatch.SendResult;
@@ -70,11 +71,15 @@ class DispatcherTest extends QueueTestSupport {
     @Autowired
     EarlierTimeOffers earlierTimes;
 
+    @Autowired
+    JobsLifecycle lifecycle;
+
     /** Триггер теста, отвергающий вставку доставок; снимается после теста. */
     private @Nullable String failureTrigger;
 
     @AfterEach
     void resetChannels() {
+        lifecycle.start();
         fakeEmail.reset();
         fakeTelegram.reset();
         if (failureTrigger != null) {
@@ -559,6 +564,69 @@ class DispatcherTest extends QueueTestSupport {
                     .extracting(Delivery::status, Delivery::attempts)
                     .containsExactly(tuple(DeliveryStatus.SENT, 1));
         }
+    }
+
+    /**
+     * Остановка приложения посреди отправки: начатая доставка отправляется и её результат записывается, следующая не
+     * берётся — ни попытки, ни аренды, она созревшая до следующего запуска, который её и отправляет.
+     */
+    @Test
+    void stopDuringSendingFinishesCurrentDeliveryAndClaimsNoMore() {
+        var emails = List.of(email(), email());
+        var days = List.of(MONDAY, TUESDAY);
+        var bookings = List.of(0, 1).stream()
+                .map(i -> bookByMaster(client("Анна", null, emails.get(i)), slot(days.get(i), "14:00"), false))
+                .toList();
+        var due = clock.instant();
+        fakeEmail.respond((recipient, text) -> {
+            if (emails.contains(recipient.email())) {
+                lifecycle.stop();
+            }
+            return new SendResult.Sent();
+        });
+
+        dispatcher.run();
+
+        var deliveries = bookings.stream()
+                .map(booking -> deliveries(messageId(booking.id(), MessageKind.BOOKED_BY_MASTER))
+                        .getFirst())
+                .toList();
+        assertThat(deliveries)
+                .extracting(Delivery::status, Delivery::attempts, Delivery::nextAttemptAt, Delivery::sentAt)
+                .containsExactlyInAnyOrder(
+                        tuple(DeliveryStatus.SENT, 1, due.plus(Duration.ofMinutes(5)), due),
+                        tuple(DeliveryStatus.PENDING, 0, due, null));
+        assertThat(emails.stream().mapToInt(email -> fakeEmail.toEmail(email).size()))
+                .containsExactlyInAnyOrder(1, 0);
+
+        lifecycle.start();
+        fakeEmail.respond(FakeChannel::sent);
+        dispatcher.run();
+
+        for (var email : emails) {
+            assertThat(fakeEmail.toEmail(email)).hasSize(1);
+        }
+    }
+
+    /** После остановки приложения созревшие сообщения не берутся: остаются {@code PENDING} без доставок. */
+    @Test
+    void stoppedDispatcherClaimsNoMessages() {
+        var email = email();
+        var booking = bookByMaster(client("Анна", null, email), slot(MONDAY, "14:00"), false);
+        var messageId = messageId(booking.id(), MessageKind.BOOKED_BY_MASTER);
+
+        lifecycle.stop();
+        dispatcher.run();
+
+        assertThat(status(messageId)).isEqualTo(MessageStatus.PENDING);
+        assertThat(deliveries(messageId)).isEmpty();
+        assertThat(fakeEmail.toEmail(email)).isEmpty();
+
+        lifecycle.start();
+        dispatcher.run();
+
+        assertThat(status(messageId)).isEqualTo(MessageStatus.DISPATCHED);
+        assertThat(fakeEmail.toEmail(email)).hasSize(1);
     }
 
     @Test

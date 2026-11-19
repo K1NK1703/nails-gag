@@ -27,7 +27,8 @@ import org.springframework.scheduling.annotation.Scheduled;
  *
  * Сбой одного запуска пишется в лог (ошибка базы — без текста, {@link Failures}) и следующему не мешает. Все задачи
  * вызываются вне транзакции. Выключаются свойством {@code nails-gag.notifications.jobs.enabled=false} — так делают
- * тесты, которые вызывают их сами.
+ * тесты, которые вызывают их сами. При остановке приложения отправка и повтор публикаций новой работы не берут
+ * ({@link gag.nails.notifications.internal.JobsLifecycle}): начатая доставка дорабатывает, пока планировщик её ждёт.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
