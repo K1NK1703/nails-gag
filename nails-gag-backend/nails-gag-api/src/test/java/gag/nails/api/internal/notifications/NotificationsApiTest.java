@@ -119,6 +119,18 @@ class NotificationsApiTest extends ApiTestSupport {
         assertThat(noStore(get(master, ME))).isEqualTo(changed);
     }
 
+    /** Пропущенный ключ каналов — не {@code false}: тело без поля отвергается, каналы не меняются. */
+    @Test
+    void missingChannelIsRejected() {
+        var anna = signInClient();
+        var before = noStore(get(anna, ME));
+
+        expectInvalid(putJson(anna, "{\"emailEnabled\":false}", ME), "telegramEnabled");
+        expectInvalid(putJson(anna, "{\"telegramEnabled\":false}", ME), "emailEnabled");
+
+        assertThat(noStore(get(anna, ME))).isEqualTo(before);
+    }
+
     @Test
     void unknownFieldOfChannelsIsRejected() {
         var anna = signInClient();
@@ -181,7 +193,7 @@ class NotificationsApiTest extends ApiTestSupport {
         var master = signInMaster();
         var channels = Map.of("emailEnabled", true, "telegramEnabled", false);
         var reminders = Map.of("reminderDayBeforeAt", "11:00", "reminderHoursBefore", 5);
-        var before = settings.settings(actor(master));
+        var before = rememberSettings();
 
         expectCsrf(as(master, client.put().uri(ME).header(HttpHeaders.ORIGIN, SITE))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -215,6 +227,9 @@ class NotificationsApiTest extends ApiTestSupport {
             assertThat(field(read, "reminderDayBeforeAt").asString()).isEqualTo(hhmm(original.dayBeforeAt()));
         }
         assertThat(field(read, "reminderHoursBefore").isNull()).isEqualTo(original.hoursBefore() == null);
+        if (original.hoursBefore() != null) {
+            assertThat(field(read, "reminderHoursBefore").asInt()).isEqualTo(original.hoursBefore());
+        }
         assertThat(read.propertyNames()).containsExactlyInAnyOrder("reminderDayBeforeAt", "reminderHoursBefore");
 
         var changed = noStore(
@@ -236,7 +251,11 @@ class NotificationsApiTest extends ApiTestSupport {
             assertThat(field(row, "changedBy").asString())
                     .isEqualTo(master.accountId().toString());
             assertThat(Instant.parse(field(row, "changedAt").asString())).isEqualTo(change.changedAt());
-            assertThat(row.has("oldValue")).isTrue();
+            if (change.oldValue() == null) {
+                assertThat(field(row, "oldValue").isNull()).isTrue();
+            } else {
+                assertThat(field(row, "oldValue").asString()).isEqualTo(change.oldValue());
+            }
         }
         assertThat(List.of(history.get(0), history.get(1)))
                 .extracting(row -> field(row, "field").asString() + "="
@@ -261,7 +280,7 @@ class NotificationsApiTest extends ApiTestSupport {
     @Test
     void invalidSettingsPointAtBodyFields() {
         var master = signInMaster();
-        var before = settings.settings(actor(master));
+        var before = rememberSettings();
 
         for (var hours : List.of(0, 25)) {
             expectInvalid(
@@ -276,9 +295,38 @@ class NotificationsApiTest extends ApiTestSupport {
         }
         // Имена полей команды модуля телу HTTP неизвестны.
         expectInvalid(
-                putJson(master, "{\"dayBeforeAt\":\"12:00\",\"reminderHoursBefore\":2}", SETTINGS), "dayBeforeAt");
+                putJson(
+                        master,
+                        "{\"reminderDayBeforeAt\":\"12:00\",\"reminderHoursBefore\":2,\"dayBeforeAt\":\"12:00\"}",
+                        SETTINGS),
+                "dayBeforeAt");
         expectInvalid(
-                putJson(master, "{\"reminderDayBeforeAt\":\"12:00\",\"hoursBefore\":2}", SETTINGS), "hoursBefore");
+                putJson(
+                        master,
+                        "{\"reminderDayBeforeAt\":\"12:00\",\"reminderHoursBefore\":2,\"hoursBefore\":2}",
+                        SETTINGS),
+                "hoursBefore");
+
+        assertThat(settings.settings(actor(master))).isEqualTo(before);
+    }
+
+    /**
+     * Пропущенный ключ — не выключение: выключает напоминание только явный {@code null}, иначе тело без поля (опечатка,
+     * старый клиент) молча выключило бы напоминания всем.
+     */
+    @Test
+    void missingSettingIsRejected() {
+        var master = signInMaster();
+        var before = rememberSettings();
+
+        expectInvalid(putJson(master, "{\"reminderHoursBefore\":2}", SETTINGS), "reminderDayBeforeAt");
+        expectInvalid(putJson(master, "{\"reminderDayBeforeAt\":\"12:00\"}", SETTINGS), "reminderHoursBefore");
+        var problem = json(putJson(master, "{}", SETTINGS), HttpStatus.BAD_REQUEST);
+        assertThat(field(problem, "code").asString()).isEqualTo("common.validation");
+        assertThat(field(problem, "errors").values())
+                .extracting(error -> field(error, "field").asString())
+                .isNotEmpty()
+                .isSubsetOf("reminderDayBeforeAt", "reminderHoursBefore");
 
         assertThat(settings.settings(actor(master))).isEqualTo(before);
     }
@@ -305,7 +353,7 @@ class NotificationsApiTest extends ApiTestSupport {
     @Test
     void staffWithoutWriteIsForbidden() {
         var master = signInMaster();
-        var before = settings.settings(actor(master));
+        var before = rememberSettings();
         var body = Map.of("reminderDayBeforeAt", "12:00", "reminderHoursBefore", 2);
 
         access.setOverride(master.accountId(), Section.NOTIFICATIONS, AccessLevel.READ, developerActor());

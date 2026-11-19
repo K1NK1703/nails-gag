@@ -1,6 +1,7 @@
 package gag.nails.api.internal.notifications;
 
 import gag.nails.notifications.model.ReminderSettings;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalTime;
 import org.jspecify.annotations.Nullable;
 
@@ -13,7 +14,8 @@ import org.jspecify.annotations.Nullable;
  * @param reminderHoursBefore за сколько часов до начала визита напоминать, от 1 до 24; {@code null} — не напоминать
  */
 record VisitReminders(
-        @Nullable LocalTime reminderDayBeforeAt, @Nullable Integer reminderHoursBefore) {
+        @Schema(example = "12:00") @Nullable LocalTime reminderDayBeforeAt,
+        @Nullable Integer reminderHoursBefore) {
 
     static VisitReminders of(ReminderSettings settings) {
         return new VisitReminders(settings.dayBeforeAt(), settings.hoursBefore());

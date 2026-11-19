@@ -420,13 +420,17 @@ class OpenApiSchemaTest extends ApiTestSupport {
     /**
      * Уведомления (спецификация уведомлений, §4): состояние доставки в параметре журнала — через дефис, как его
      * принимает адрес, в JSON — имя Java; настройки напоминаний — в именах тела HTTP, оба поля обязательны и допускают
-     * {@code null}, пределы часов (их проверяет модуль) — в схеме; ссылка привязки Telegram — {@code 201}.
+     * {@code null}, пределы часов — в схеме; ссылка привязки Telegram — {@code 201}, отвязка — {@code 204}.
      */
     @Test
     void notificationsInSchema() {
         var schema = openApi();
 
-        var statuses = parameters(operations(schema), "status");
+        var deliveries = operations(schema).stream()
+                .filter(operation -> operation.name().equals("get /api/notifications/deliveries"))
+                .toList();
+        assertThat(deliveries).hasSize(1);
+        var statuses = parameters(deliveries, "status");
         assertThat(statuses).hasSize(1);
         assertThat(statuses.getFirst().path("in").asString()).isEqualTo("query");
         assertThat(enumValues(statuses.getFirst())).containsExactly("pending", "sent", "failed");
@@ -452,6 +456,8 @@ class OpenApiSchemaTest extends ApiTestSupport {
                 schema.path("paths").path("/api/notifications/me/telegram-link").path("post");
         assertThat(link.path("responses").propertyNames()).containsExactlyInAnyOrder("201", "default");
         assertThat(required(schemas.path("TelegramLink"))).containsExactlyInAnyOrder("url", "expiresAt");
+        var unlink = schema.path("paths").path("/api/notifications/me/telegram").path("delete");
+        assertThat(unlink.path("responses").propertyNames()).containsExactlyInAnyOrder("204", "default");
     }
 
     /**
