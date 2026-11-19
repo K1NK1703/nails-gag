@@ -60,6 +60,16 @@ public interface BookingRepository extends JpaRepository<BookingEntity, UUID> {
             + " order by coalesce(b.agreedStart, b.slotStartsAt), b.id")
     List<BookingEntity> underReview(Collection<BookingStatus> statuses, Instant now);
 
+    /**
+     * Записи в состояниях {@code statuses}, визит по которым ещё не начался (начало визита позже {@code now}), вместе
+     * с составом — одним запросом; по началу визита, при равенстве — по id. Условие на начало слота избыточно, но
+     * позволяет пользоваться индексом по слоту.
+     */
+    @Query("select b from BookingEntity b left join fetch b.services where b.status in :statuses"
+            + " and coalesce(b.agreedStart, b.slotStartsAt) > :now and b.slotStartsAt > :now"
+            + " order by coalesce(b.agreedStart, b.slotStartsAt), b.id")
+    List<BookingEntity> notStartedWithServices(Collection<BookingStatus> statuses, Instant now);
+
     List<BookingEntity> findAllByStatusOrderByPrepaymentDeadlineAscIdAsc(BookingStatus status);
 
     /**

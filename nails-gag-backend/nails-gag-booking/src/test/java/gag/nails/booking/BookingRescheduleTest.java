@@ -8,6 +8,7 @@ import gag.nails.booking.error.LateRescheduleNotAllowedException;
 import gag.nails.booking.error.TooLateToBookException;
 import gag.nails.booking.event.BookingRescheduled;
 import gag.nails.booking.model.BookingStatus;
+import gag.nails.booking.model.RescheduleInitiator;
 import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.common.error.ValidationException;
@@ -155,6 +156,46 @@ class BookingRescheduleTest extends BookingTestSupport {
                                 && e.newSlotId().equals(to.id())
                                 && e.slotStartsAt().equals(to.startsAt())))
                 .hasSize(1);
+    }
+
+    @Test
+    void rescheduleByClientPublishesClientInitiator(PublishedEvents events) {
+        var anna = client("Анна");
+        var booking = book(anna, slot(MONDAY, "12:00"));
+        var to = slot(TUESDAY, "15:00");
+
+        bookings.reschedule(booking.id(), to.id(), Actor.client(anna));
+
+        assertThat(events.ofType(BookingRescheduled.class)
+                        .matching(e -> e.bookingId().equals(booking.id())))
+                .extracting(BookingRescheduled::initiator)
+                .containsExactly(RescheduleInitiator.CLIENT);
+    }
+
+    @Test
+    void rescheduleByMasterPublishesMasterInitiator(PublishedEvents events) {
+        var booking = book(client("Анна"), slot(MONDAY, "12:00"));
+        var to = slot(TUESDAY, "15:00");
+
+        bookings.reschedule(booking.id(), to.id(), master);
+
+        assertThat(events.ofType(BookingRescheduled.class)
+                        .matching(e -> e.bookingId().equals(booking.id())))
+                .extracting(BookingRescheduled::initiator)
+                .containsExactly(RescheduleInitiator.MASTER);
+    }
+
+    @Test
+    void rescheduleByDeveloperPublishesMasterInitiator(PublishedEvents events) {
+        var booking = book(client("Анна"), slot(MONDAY, "12:00"));
+        var to = slot(TUESDAY, "15:00");
+
+        bookings.reschedule(booking.id(), to.id(), Actor.developer());
+
+        assertThat(events.ofType(BookingRescheduled.class)
+                        .matching(e -> e.bookingId().equals(booking.id())))
+                .extracting(BookingRescheduled::initiator)
+                .containsExactly(RescheduleInitiator.MASTER);
     }
 
     @Test

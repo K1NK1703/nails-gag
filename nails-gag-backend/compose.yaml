@@ -15,6 +15,14 @@ services:
       timeout: 3s
       retries: 10
 
+  # Почтовый сервер для разработки: принимает письма уведомлений профиля local по SMTP и показывает их в
+  # веб-интерфейсе, наружу ничего не отправляет. Без профиля Compose: письма шлёт обычный bootRun с local.
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # веб-интерфейс http://localhost:8025
+
   # Grafana + Loki + Tempo + Prometheus + OTel-коллектор в одном контейнере, только для разработки.
   # Запуск: docker compose --profile observability up -d
   lgtm:

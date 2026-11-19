@@ -9,6 +9,7 @@ import gag.nails.files.model.FilePurpose;
 import gag.nails.finance.model.EntryKind;
 import gag.nails.finance.model.JournalType;
 import gag.nails.identity.model.Provider;
+import gag.nails.notifications.model.DeliveryStatus;
 import java.beans.PropertyEditorSupport;
 import java.util.Arrays;
 import java.util.List;
@@ -30,7 +31,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * ({@code /api/documents/policy/…}), раздел админки ({@code …/overrides/booking-settings}), записи клиента
  * ({@code ?scope=history}), вид согласия ({@code …/consents/photo-publication}), назначение файла
  * ({@code ?purpose=reference}), вид записи финансов ({@code ?entryKind=income}), виды операций журнала финансов
- * ({@code ?type=visit&type=kept-prepayment}) — по имени в нижнем регистре через дефис.
+ * ({@code ?type=visit&type=kept-prepayment}), состояние доставки уведомления ({@code ?status=failed}) — по имени в
+ * нижнем регистре через дефис.
  */
 @Configuration(proxyBeanMethods = false)
 class WebConfiguration implements WebMvcConfigurer {
@@ -44,7 +46,8 @@ class WebConfiguration implements WebMvcConfigurer {
             KebabCaseEnum.of(ConsentKind.class),
             KebabCaseEnum.of(FilePurpose.class),
             KebabCaseEnum.of(EntryKind.class),
-            KebabCaseEnum.of(JournalType.class));
+            KebabCaseEnum.of(JournalType.class),
+            KebabCaseEnum.of(DeliveryStatus.class));
 
     /** Типы из {@link #KEBAB_CASE_ENUMS}; по ним же схема OpenAPI показывает значения через дефис. */
     static final Set<Class<?>> KEBAB_CASE_TYPES =

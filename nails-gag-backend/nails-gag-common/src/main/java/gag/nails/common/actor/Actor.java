@@ -21,9 +21,9 @@ import org.jspecify.annotations.Nullable;
 public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Section, AccessLevel> access) {
 
     private static final Map<Section, AccessLevel> MASTER_ACCESS =
-            builtIn(AccessLevel.READ, AccessLevel.NONE, AccessLevel.WRITE, AccessLevel.NONE);
+            builtIn(AccessLevel.READ, AccessLevel.NONE, AccessLevel.WRITE, AccessLevel.NONE, AccessLevel.WRITE);
     private static final Map<Section, AccessLevel> DEVELOPER_ACCESS =
-            builtIn(AccessLevel.WRITE, AccessLevel.WRITE, AccessLevel.READ, AccessLevel.READ);
+            builtIn(AccessLevel.WRITE, AccessLevel.WRITE, AccessLevel.READ, AccessLevel.READ, AccessLevel.WRITE);
 
     public Actor {
         access = Map.copyOf(access);
@@ -115,7 +115,11 @@ public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Secti
 
     /** Встроенный набор: всем разделам {@link AccessLevel#WRITE}, кроме переданных; {@code NONE} не хранится. */
     private static Map<Section, AccessLevel> builtIn(
-            AccessLevel documents, AccessLevel access, AccessLevel finance, AccessLevel analytics) {
+            AccessLevel documents,
+            AccessLevel access,
+            AccessLevel finance,
+            AccessLevel analytics,
+            AccessLevel notifications) {
         var levels = new EnumMap<Section, AccessLevel>(Section.class);
         for (var section : Section.values()) {
             levels.put(section, AccessLevel.WRITE);
@@ -124,6 +128,7 @@ public record Actor(@Nullable UUID accountId, @Nullable UUID clientId, Map<Secti
         levels.put(Section.ACCESS, access);
         levels.put(Section.FINANCE, finance);
         levels.put(Section.ANALYTICS, analytics);
+        levels.put(Section.NOTIFICATIONS, notifications);
         levels.values().removeIf(level -> level == AccessLevel.NONE);
         return Map.copyOf(levels);
     }

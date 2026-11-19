@@ -2,14 +2,11 @@ package gag.nails.booking.internal.booking;
 
 import gag.nails.booking.model.BookingSettingsView;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 
 /** Временные правила записи для одного момента: настройки плюс «сейчас». Вычисления без базы. */
 public record BookingRules(BookingSettingsView settings, Instant now) {
-
-    private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
 
     /**
      * До начала слота меньше отсечки: клиенту запись и перенос сюда закрыты. Слот, который уже
@@ -41,16 +38,9 @@ public record BookingRules(BookingSettingsView settings, Instant now) {
         return !now.isAfter(from.plus(correctionWindow()));
     }
 
-    /**
-     * Сумма предоплаты по умолчанию: процент предоплаты из настроек от прайса выбранного при записи состава,
-     * округлённый до рубля (половина — вверх), но не меньше рубля. Это же правило повторяет миграция
-     * {@code booking/0005-finance.sql} для предоплат, полученных до появления суммы.
-     */
+    /** Сумма предоплаты по умолчанию — правило {@link BookingSettingsView#defaultPrepaymentAmount}. */
     public BigDecimal defaultPrepaymentAmount(BigDecimal plannedPrice) {
-        var amount = plannedPrice
-                .multiply(BigDecimal.valueOf(settings.prepaymentPercent()))
-                .divide(ONE_HUNDRED, 0, RoundingMode.HALF_UP);
-        return amount.max(BigDecimal.ONE).setScale(2, RoundingMode.UNNECESSARY);
+        return settings.defaultPrepaymentAmount(plannedPrice);
     }
 
     /**

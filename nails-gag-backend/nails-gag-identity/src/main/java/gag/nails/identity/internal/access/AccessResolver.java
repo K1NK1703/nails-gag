@@ -2,13 +2,20 @@ package gag.nails.identity.internal.access;
 
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Section;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
@@ -42,16 +49,55 @@ public class AccessResolver {
         var roleIds = accountRoles.findAllByIdAccountId(accountId).stream()
                 .map(AccountRoleEntity::roleId)
                 .toList();
-        var assigned = roles.findAllById(roleIds).stream()
-                .sorted(Comparator.comparing(RoleEntity::code))
-                .toList();
         var own = new EnumMap<Section, AccessLevel>(Section.class);
         overrides.findAllByIdAccountId(accountId).forEach(o -> own.put(o.section(), o.level()));
-        return new Resolved(assigned, Collections.unmodifiableMap(own), effective(assigned, own));
+        return resolved(roles.findAllById(roleIds), own);
     }
 
     public Map<Section, AccessLevel> effective(UUID accountId) {
         return resolve(accountId).effective();
+    }
+
+    /**
+     * То же, что {@link #resolve(UUID)}, для всех аккаунтов хотя бы с одной ролью или переопределением,
+     * по id: назначения, роли и переопределения читаются целиком несколькими запросами, а не по аккаунту.
+     * У остальных аккаунтов итог по всем разделам — {@link AccessLevel#NONE}.
+     *
+     * <p>Не снимок: при READ COMMITTED запросы видят разные моменты, как и {@code Actor}, собранный на запрос.
+     * Назначение роли, которой при чтении ролей не было (её создали между запросами), пропускается.
+     */
+    SortedMap<UUID, Resolved> resolveStaff() {
+        var rolesById = roles.findAll().stream().collect(Collectors.toMap(RoleEntity::id, Function.identity()));
+        var assigned = new HashMap<UUID, List<RoleEntity>>();
+        accountRoles.findAll().forEach(link -> {
+            var role = rolesById.get(link.roleId());
+            if (role != null) {
+                assigned.computeIfAbsent(link.accountId(), id -> new ArrayList<>())
+                        .add(role);
+            }
+        });
+        var own = new HashMap<UUID, Map<Section, AccessLevel>>();
+        overrides
+                .findAll()
+                .forEach(o -> own.computeIfAbsent(o.accountId(), id -> new EnumMap<>(Section.class))
+                        .put(o.section(), o.level()));
+        var accountIds = new TreeSet<UUID>(assigned.keySet());
+        accountIds.addAll(own.keySet());
+        var staff = new TreeMap<UUID, Resolved>();
+        for (var accountId : accountIds) {
+            staff.put(
+                    accountId,
+                    resolved(assigned.getOrDefault(accountId, List.of()), own.getOrDefault(accountId, Map.of())));
+        }
+        return Collections.unmodifiableSortedMap(staff);
+    }
+
+    private static Resolved resolved(Collection<RoleEntity> assigned, Map<Section, AccessLevel> own) {
+        var sorted =
+                assigned.stream().sorted(Comparator.comparing(RoleEntity::code)).toList();
+        var overrides = new EnumMap<Section, AccessLevel>(Section.class);
+        overrides.putAll(own);
+        return new Resolved(sorted, Collections.unmodifiableMap(overrides), effective(sorted, overrides));
     }
 
     /** Итог по правилу спецификации для заданных ролей и переопределений; все разделы. */

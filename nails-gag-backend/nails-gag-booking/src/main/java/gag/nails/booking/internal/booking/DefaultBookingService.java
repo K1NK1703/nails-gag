@@ -12,6 +12,7 @@ import gag.nails.booking.model.BookingCreator;
 import gag.nails.booking.model.BookingStatus;
 import gag.nails.booking.model.BookingView;
 import gag.nails.booking.model.CancelReason;
+import gag.nails.booking.model.RescheduleInitiator;
 import gag.nails.catalog.CatalogQueries;
 import gag.nails.clients.ClientQueries;
 import gag.nails.clients.error.ClientBlockedException;
@@ -195,7 +196,8 @@ class DefaultBookingService implements BookingService {
         booking.moveTo(newSlot, deadline);
         writer.flushMoved(booking);
         occupation.occupy(newSlotId, booking.id());
-        events.rescheduled(booking, oldSlotId, oldSlotStartsAt, rules.now());
+        var initiator = byClient ? RescheduleInitiator.CLIENT : RescheduleInitiator.MASTER;
+        events.rescheduled(booking, oldSlotId, oldSlotStartsAt, initiator, rules.now());
         return booking.toView(actor);
     }
 

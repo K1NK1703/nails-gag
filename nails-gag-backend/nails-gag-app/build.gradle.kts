@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":nails-gag-finance"))
     implementation(project(":nails-gag-analytics"))
     implementation(project(":nails-gag-identity"))
+    implementation(project(":nails-gag-notifications"))
     implementation(project(":nails-gag-api"))
 
     implementation(libs.spring.boot.starter.webmvc)
@@ -43,6 +44,8 @@ dependencies {
     testImplementation(libs.archunit.junit5)
     testImplementation(libs.spring.boot.micrometer.tracing.test)
     testImplementation(libs.opentelemetry.sdk.testing)
+    // Проверка, что таймауты SMTP из application.yaml доходят до сессии JavaMail (автонастройка почты Spring Boot).
+    testImplementation(libs.spring.boot.starter.mail)
 }
 
 springBoot {

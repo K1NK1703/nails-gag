@@ -1,10 +1,41 @@
 spring:
+  task:
+    execution:
+      # Как в application.yaml приложения: общий applicationTaskExecutor есть и рядом со своим пулом слушателей
+      # уведомлений.
+      mode: force
+  mail:
+    # Почта уведомлений в тестах настроена (сервер и отправитель есть): кабинет видит её доступной, как на рабочем
+    # сервере. Писем сюда не шлют: тесты отправки работают с подменными каналами или со своим сервером GreenMail. Порт 1
+    # закрыт — случайное письмо сразу получило бы отказ в соединении, а не ушло бы наружу.
+    host: localhost
+    port: 1
+    properties:
+      # Как в application.yaml приложения: без таймаутов настроенная почта не стартует.
+      "[mail.smtp.connectiontimeout]": 10000
+      "[mail.smtp.timeout]": 20000
+      "[mail.smtp.writetimeout]": 20000
+      "[mail.smtp.quitwait]": false
+      # Не как в приложении: GreenMail тестов — без TLS.
+      "[mail.smtp.starttls.enable]": false
+      "[mail.smtp.starttls.required]": false
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
   liquibase:
     change-log: classpath:db/changelog/test-master.yaml
+  modulith:
+    events:
+      # Как в application.yaml приложения: реестр публикаций (модуль уведомлений) — в схеме modulith из Liquibase.
+      jdbc:
+        schema: modulith
+        schema-initialization:
+          enabled: false
+      # Не как в приложении: старт тестового контекста не повторяет незавершённые публикации в фоне посреди чужих
+      # проверок (например, оставшиеся в базе от прежнего контекста); тест повторной доставки вызывает её явно.
+      republish-outstanding-events-on-restart: false
+      completion-mode: delete
   servlet:
     multipart:
       # Как в application.yaml приложения: HTTP-тесты загрузки проверяют эти пределы (у Spring Boot по умолчанию 1 МБ).
@@ -36,6 +67,20 @@ nails-gag:
     jobs:
       # Уборка солей и отпечатков в тестах не запускается сама: тесты вызывают AnalyticsMaintenance сами.
       enabled: false
+  notifications:
+    jobs:
+      # Отправка и уборка в тестах не запускаются по расписанию: тесты вызывают их напрямую.
+      enabled: false
+    # Как в application.yaml приложения: тексты сообщений сверяются с этими значениями.
+    site-url: https://nails-gag.ru
+    master-telegram: "@gagushichewa"
+    salon-address: "пр. КИМа 6, метро Приморская, 3 этаж, студия 365"
+    email:
+      # Как в application.yaml приложения; вместе с spring.mail.host почта настроена.
+      from: "nails.gag <noreply@nails-gag.ru>"
+    telegram:
+      # Бот выключен: внешние сервисы в тестах не вызываются; тесты бота включают его сами.
+      bot-token: ""
   identity:
     jobs:
       # Обслуживание входа в тестах не работает: тесты вызывают IdentityMaintenance сами.

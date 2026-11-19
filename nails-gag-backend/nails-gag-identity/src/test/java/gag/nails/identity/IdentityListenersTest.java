@@ -8,11 +8,15 @@ import gag.nails.clients.model.MergeResult;
 import gag.nails.common.actor.AccessLevel;
 import gag.nails.common.actor.Section;
 import gag.nails.identity.error.AccountNotFoundException;
+import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.model.AccountAccessView;
 import gag.nails.identity.model.RoleView;
 import gag.nails.testsupport.ModuleTest;
+import gag.nails.testsupport.TestTimeConfiguration;
+import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.modulith.test.PublishedEvents;
 
 /** Синхронные слушатели {@code ClientBlocked} и {@code ClientMerged} в транзакции операции {@code clients}. */
 @ModuleTest
@@ -78,5 +82,30 @@ class IdentityListenersTest extends IdentityTestSupport {
         assertThat(result.survivorId()).isEqualTo(clientId(signedIn));
         assertThat(sessions.authenticate(signedIn.sessionToken())).isPresent();
         assertThat(me(signedIn).loginMethods()).hasSize(1);
+    }
+
+    @Test
+    void mergeOfTwoAccountsPublishesAccountDeletedForTheRemovedOne(PublishedEvents events) {
+        developer();
+        var first = signInFirstTime(profile("a", "+79211234567"));
+        var second = signInFirstTime(profile("b", "+79215550000"));
+        clock.advance(Duration.ofMinutes(5));
+
+        clients.merge(clientId(second), clientId(first), master);
+
+        assertThat(events.ofType(AccountDeleted.class))
+                .containsExactly(new AccountDeleted(
+                        second.accountId(), TestTimeConfiguration.START.plus(Duration.ofMinutes(5))));
+    }
+
+    @Test
+    void mergeWithOneAccountPublishesNoAccountDeleted(PublishedEvents events) {
+        developer();
+        var signedIn = signInFirstTime(profile("a", "+79211234567"));
+        var card = clients.create(new CreateClient("Маша", null, null, "+79215550000", null, null), master);
+
+        clients.merge(clientId(signedIn), card.id(), master);
+
+        assertThat(events.ofType(AccountDeleted.class)).isEmpty();
     }
 }

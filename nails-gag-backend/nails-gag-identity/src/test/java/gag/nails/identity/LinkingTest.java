@@ -8,6 +8,7 @@ import gag.nails.common.actor.Actor;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.error.AccountBlockedException;
 import gag.nails.identity.error.RegistrationExpiredException;
+import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.model.LinkConfirmationRequired;
 import gag.nails.identity.model.Linked;
 import gag.nails.identity.model.LoginEventView;
@@ -18,12 +19,20 @@ import gag.nails.identity.model.LoginResult;
 import gag.nails.identity.model.Provider;
 import gag.nails.identity.testing.FakeProfile;
 import gag.nails.testsupport.ModuleTest;
+import gag.nails.testsupport.TestTimeConfiguration;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.modulith.test.PublishedEvents;
 
 @ModuleTest
 class LinkingTest extends IdentityTestSupport {
+
+    @PersistenceContext
+    EntityManager entityManager;
 
     @Test
     void linkingUnownedMethodAddsItToAccount() {
@@ -83,6 +92,30 @@ class LinkingTest extends IdentityTestSupport {
                 .isTrue();
         assertThatThrownBy(() -> loginFlow.confirmLink(ticket, firstActor, CLIENT))
                 .isInstanceOf(RegistrationExpiredException.class);
+    }
+
+    @Test
+    void linkingMethodOfAnotherAccountWithoutCardPublishesAccountDeleted(PublishedEvents events) {
+        developer();
+        var first = signInFirstTime(profile("yandex-1", "+79211234567"));
+        var second = signInFirstTime(profile("vk-2", "+79215550000"));
+        // Аккаунт без карточки входом не создаётся: отвязываем карточку второго напрямую.
+        jdbc.sql("update clients.client set account_id = null where account_id = ?")
+                .param(second.accountId())
+                .update();
+        entityManager.flush();
+        entityManager.clear();
+        var firstActor = actor(first);
+        var result = link(firstActor, profile("vk-2", "+79215550000"));
+        assertThat(result).isInstanceOf(LinkConfirmationRequired.class);
+        clock.advance(Duration.ofMinutes(5));
+
+        loginFlow.confirmLink(((LinkConfirmationRequired) result).ticket(), firstActor, CLIENT);
+
+        assertThat(me(first).loginMethods()).hasSize(2);
+        assertThat(events.ofType(AccountDeleted.class))
+                .containsExactly(new AccountDeleted(
+                        second.accountId(), TestTimeConfiguration.START.plus(Duration.ofMinutes(5))));
     }
 
     @Test

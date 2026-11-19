@@ -9,6 +9,7 @@ import gag.nails.common.actor.Section;
 import gag.nails.common.error.AccessDeniedException;
 import gag.nails.identity.Accounts;
 import gag.nails.identity.error.AccountNotFoundException;
+import gag.nails.identity.event.AccountDeleted;
 import gag.nails.identity.internal.access.AccessGuard;
 import gag.nails.identity.internal.access.AccessOverrideRepository;
 import gag.nails.identity.internal.access.AccessResolver;
@@ -16,23 +17,36 @@ import gag.nails.identity.internal.access.AccountRoleRepository;
 import gag.nails.identity.internal.session.ActorAssembly;
 import gag.nails.identity.internal.session.SessionRepository;
 import gag.nails.identity.model.AccountView;
+import java.time.Clock;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Свой аккаунт (спецификация 4.6). Удаление в одной транзакции: обезличивание карточки в {@code
  * clients}, затем удаление способов входа, сессий, ролей, переопределений и самого аккаунта (строки
  * журнала входов теряют ссылку, {@code ON DELETE SET NULL}); правило последнего администратора —
- * последним, уже без уходящего. Проверка нужна только уходящему администратору: у остального клиента
- * терять системе нечего, и блокировка роли {@code DEVELOPER} не берётся — пока в системе нет ни одного
- * администратора, клиент всё равно вправе удалить аккаунт. Порядок блокировок строк — карточка →
- * аккаунт → роль, как у блокировки клиента мастером, поэтому взаимной блокировки с ней нет.
+ * последним, уже без уходящего; после неё — событие {@link AccountDeleted} в той же транзакции. Проверка
+ * нужна только уходящему администратору: у остального клиента терять системе нечего, и блокировка роли
+ * {@code DEVELOPER} не берётся — пока в системе нет ни одного администратора, клиент всё равно вправе
+ * удалить аккаунт. Порядок блокировок строк — карточка → аккаунт → роль, как у блокировки клиента
+ * мастером, поэтому взаимной блокировки с ней нет.
  *
- * <p>Известное ограничение: вход при фиксации обновляет строки аккаунта ({@code last_login_at}) и, если
- * записывает подтверждённый номер, карточки — в порядке аккаунт → клиент. Совпав по времени с удалением
- * того же аккаунта (клиент входит с другого устройства и одновременно удаляет аккаунт), они могут
- * взаимно заблокироваться; PostgreSQL прервёт одну из транзакций, её достаточно повторить.
+ * <p>Строка аккаунта блокируется {@code FOR UPDATE} сразу после обезличивания карточки (не раньше: вход и
+ * блокировка клиента идут карточка → аккаунт) и до удаления остального. Модули, которые пишут данные
+ * аккаунта, держат её {@code FOR KEY SHARE} ({@link #lockExisting}): удаление ждёт их фиксации, и слушатели
+ * {@link AccountDeleted} стирают уже записанное; пришедшие после удаления узнают, что аккаунта нет. Второе
+ * одновременное удаление того же аккаунта ждёт первое и получает {@link AccountNotFoundException} — вся его
+ * транзакция откатывается.
+ *
+ * <p>Вход в тот же аккаунт идёт в том же порядке: карточка (если записывает подтверждённый номер) — первой, затем
+ * при фиксации строка аккаунта (вставка сессии и записи журнала входов ссылаются на неё внешним ключом —
+ * {@code FOR KEY SHARE}) и только потом способ входа и {@code last_login_at}. Удаление берёт строку аккаунта раньше,
+ * чем удаляет способы входа, поэтому одновременные вход и удаление встречаются на строке аккаунта, а не в обратном
+ * порядке: вход ждёт, пока удаление не зафиксируется.
  */
 @Service
 @Transactional
@@ -48,6 +62,9 @@ class DefaultAccounts implements Accounts {
     private final AccessGuard guard;
     private final ClientService clientService;
     private final ClientQueries clientQueries;
+    private final ApplicationEventPublisher events;
+    private final JdbcClient jdbc;
+    private final Clock clock;
 
     DefaultAccounts(
             AccountRepository accounts,
@@ -59,7 +76,10 @@ class DefaultAccounts implements Accounts {
             AccessResolver resolver,
             AccessGuard guard,
             ClientService clientService,
-            ClientQueries clientQueries) {
+            ClientQueries clientQueries,
+            ApplicationEventPublisher events,
+            JdbcClient jdbc,
+            Clock clock) {
         this.accounts = accounts;
         this.loginMethods = loginMethods;
         this.sessions = sessions;
@@ -70,6 +90,9 @@ class DefaultAccounts implements Accounts {
         this.guard = guard;
         this.clientService = clientService;
         this.clientQueries = clientQueries;
+        this.events = events;
+        this.jdbc = jdbc;
+        this.clock = clock;
     }
 
     @Override
@@ -88,6 +111,9 @@ class DefaultAccounts implements Accounts {
         var accountId = account.id();
         var leavingAdmin = resolver.effective(accountId).get(Section.ACCESS) == AccessLevel.WRITE;
         clientQueries.byAccountId(accountId).map(ClientView::id).ifPresent(clientService::erase);
+        if (accounts.lockForDeletion(accountId).isEmpty()) {
+            throw new AccountNotFoundException(accountId);
+        }
         sessions.deleteAllByAccountId(accountId);
         loginMethods.deleteAllByAccountId(accountId);
         accountRoles.deleteAllByIdAccountId(accountId);
@@ -96,6 +122,17 @@ class DefaultAccounts implements Accounts {
         if (leavingAdmin) {
             guard.requireAdminRemains();
         }
+        events.publishEvent(new AccountDeleted(accountId, clock.instant()));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean lockExisting(UUID accountId) {
+        return jdbc.sql("select 1 from identity.account where id = :id for key share")
+                .param("id", accountId)
+                .query(Integer.class)
+                .optional()
+                .isPresent();
     }
 
     private AccountEntity require(Actor actor) {

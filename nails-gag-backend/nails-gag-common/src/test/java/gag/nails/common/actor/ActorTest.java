@@ -57,6 +57,19 @@ class ActorTest {
     }
 
     @Test
+    void notificationsIsWrittenByMasterAndDeveloper() {
+        assertThat(Section.values()[Section.values().length - 1]).isEqualTo(Section.NOTIFICATIONS);
+
+        assertThat(Actor.master().level(Section.NOTIFICATIONS)).isEqualTo(AccessLevel.WRITE);
+        assertThat(Actor.masterAccess()).containsEntry(Section.NOTIFICATIONS, AccessLevel.WRITE);
+
+        assertThat(Actor.developer().level(Section.NOTIFICATIONS)).isEqualTo(AccessLevel.WRITE);
+        assertThat(Actor.developerAccess()).containsEntry(Section.NOTIFICATIONS, AccessLevel.WRITE);
+
+        assertThat(Actor.client(CLIENT_ID).level(Section.NOTIFICATIONS)).isEqualTo(AccessLevel.NONE);
+    }
+
+    @Test
     void clientHasNoSections() {
         var client = Actor.client(CLIENT_ID);
 

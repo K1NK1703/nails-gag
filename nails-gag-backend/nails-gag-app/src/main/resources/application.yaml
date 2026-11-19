@@ -4,6 +4,47 @@ spring:
   threads:
     virtual:
       enabled: true
+  task:
+    execution:
+      # Общий applicationTaskExecutor создаётся, хотя у слушателей уведомлений свой пул (notificationsListenerExecutor,
+      # 4 потока): без force Spring Boot не создаёт общий при наличии другого Executor, и прочие @Async ушли бы на пул
+      # уведомлений.
+      mode: force
+      # При остановке приложения начатые задачи общего исполнителя дорабатывают, но не дольше периода.
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
+    scheduling:
+      # При остановке приложения начатые задачи по расписанию дорабатывают, но не дольше периода (taskTerminationTimeout
+      # планировщика на виртуальных потоках): без этого закрытие планировщика их не ждёт, и прогон, прерванный посреди
+      # работы (закрытием пула соединений), оставляет итог недописанным. Это ожидание — для задач по cron и fixedRate
+      # (каждый запуск — свой поток: ночные уборки и т. п.). Задачи с fixedDelay (отправка уведомлений, повтор
+      # публикаций) идут на потоке планировщика: их ждёт остановка жизненного цикла
+      # (spring.lifecycle.timeout-per-shutdown-phase, по умолчанию 30 с), после которой поток прерывается. Отправка
+      # с начала остановки новых сообщений и доставок не берёт (JobsLifecycle модуля уведомлений): начатая доставка
+      # (канал — не дольше 20 с) успевает уйти и записать результат, а не уйти повторно после аренды.
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
+  mail:
+    # Почтовый сервер писем уведомлений: host, port, username, password — при развёртывании через переменные окружения
+    # (SPRING_MAIL_HOST и т. д.), не в файле. Без host (или без nails-gag.notifications.email.from) почта выключена.
+    # Ключи — протокола smtp; для SMTPS (spring.mail.protocol: smtps) те же настройки — под mail.smtps.*, в том числе
+    # mail.smtps.quitwait (STARTTLS там не нужен: TLS с начала соединения).
+    properties:
+      # Таймауты SMTP, мс. Обязательны и не больше 20 с (проверяются при старте): отправка держит доставку в аренде
+      # 5 минут от начала попытки, а письмо — около десятка обменов с сервером; без таймаутов JavaMail ждёт сервер
+      # бесконечно.
+      "[mail.smtp.connectiontimeout]": 10000
+      "[mail.smtp.timeout]": 20000
+      "[mail.smtp.writetimeout]": 20000
+      # После принятого письма QUIT не ждёт ответа: сбой на закрытии иначе выглядел бы как неудачная отправка.
+      "[mail.smtp.quitwait]": false
+      # Имя в EHLO — домен сайта, а не имя контейнера: случайное имя машины портит репутацию писем.
+      "[mail.smtp.localhost]": nails-gag.ru
+      # Только по TLS: без STARTTLS у сервера письмо не уходит (пароль и письма не идут открытым текстом).
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
   jpa:
     open-in-view: false
     hibernate:
@@ -11,6 +52,17 @@ spring:
       ddl-auto: validate
   liquibase:
     change-log: classpath:db/changelog/master.yaml
+  modulith:
+    events:
+      # Реестр публикаций событий: таблица в своей схеме, её ведёт Liquibase модуля уведомлений, а не Spring Modulith.
+      jdbc:
+        schema: modulith
+        schema-initialization:
+          enabled: false
+      # Событие, не обработанное слушателем до остановки или падения, обрабатывается снова после старта.
+      republish-outstanding-events-on-restart: true
+      # Завершённые публикации удаляются сразу: в таблице только необработанные.
+      completion-mode: delete
   servlet:
     multipart:
       # Загрузка фото (POST /api/files): файл — ровно max-file-bytes модуля файлов, запрос — больше, с запасом на
@@ -73,6 +125,33 @@ nails-gag:
         client-id: ""
         client-secret: ""
         redirect-uri: ""
+  notifications:
+    jobs:
+      enabled: true
+      # Пауза между прогонами отправки созревших сообщений.
+      dispatch-delay: 1m
+      # Ночная уборка по времени салона: сообщения в конечном состоянии старше retention-days и истёкшие ссылки.
+      purge-cron: "0 15 4 * * *"
+    retention-days: 90
+    # Тихие часы клиенток по времени салона: сообщение переносится на их конец, напоминание накануне в них не ставится.
+    quiet-hours: { from: "22:00", to: "09:00" }
+    # Адрес сайта для ссылок в сообщениях (кабинет, запись в админке); без пути и завершающего слэша. Свой ключ модуля,
+    # по умолчанию — origin сайта слоя api: в профиле local ссылки писем ведут на локальный сайт.
+    site-url: ${nails-gag.api.site-origin}
+    master-telegram: "@gagushichewa"
+    salon-address: "пр. КИМа 6, метро Приморская, 3 этаж, студия 365"
+    email:
+      # Отправитель писем. Пустой вместе с spring.mail.host — почта выключена.
+      from: "nails.gag <noreply@nails-gag.ru>"
+    telegram:
+      # Токен бота от @BotFather — секрет, задавать через переменную окружения, не в файле. Пустой — Telegram выключен.
+      bot-token: ""
+      # Имя бота без @ для ссылки привязки t.me/<бот>; обязательно при токене.
+      bot-username: ""
+      # Сколько Telegram держит запрос getUpdates без новых сообщений.
+      poll-timeout: 50s
+      # Адрес Bot API (схема и хост без пути); свой сервер Bot API — здесь.
+      api-url: https://api.telegram.org
   api:
     # Origin сайта: с ним сверяется Origin изменяющих запросов (CSRF), от него строятся переходы после входа.
     # Абсолютный, без пути и завершающего слэша; https (http — только для localhost).
@@ -122,6 +201,11 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    mail:
+      # Недоступный почтовый сервер — не болезнь приложения: письма повторяются по расписанию, сбой виден в логе. Иначе
+      # каждая проверка здоровья ходила бы на почтовый сервер.
+      enabled: false
   tracing:
     sampling:
       probability: 1.0
