@@ -46,6 +46,7 @@ import gag.nails.identity.error.RoleBuiltInException;
 import gag.nails.identity.error.RoleCodeTakenException;
 import gag.nails.identity.error.RoleInUseException;
 import gag.nails.identity.error.RoleNotFoundException;
+import gag.nails.notifications.error.TelegramUnavailableException;
 import gag.nails.portfolio.error.WorkNotFoundException;
 import gag.nails.schedule.error.DayTemplateInUseException;
 import gag.nails.schedule.error.DayTemplateNotFoundException;
@@ -147,7 +148,9 @@ final class ProblemStatuses {
             entry(RoleInUseException.class, HttpStatus.CONFLICT),
             entry(RoleBuiltInException.class, HttpStatus.CONFLICT),
             entry(RoleCodeTakenException.class, HttpStatus.CONFLICT),
-            entry(ProviderUnavailableException.class, HttpStatus.SERVICE_UNAVAILABLE));
+            entry(ProviderUnavailableException.class, HttpStatus.SERVICE_UNAVAILABLE),
+            // notifications
+            entry(TelegramUnavailableException.class, HttpStatus.CONFLICT));
 
     private ProblemStatuses() {}
 

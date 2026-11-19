@@ -418,6 +418,43 @@ class OpenApiSchemaTest extends ApiTestSupport {
     }
 
     /**
+     * Уведомления (спецификация уведомлений, §4): состояние доставки в параметре журнала — через дефис, как его
+     * принимает адрес, в JSON — имя Java; настройки напоминаний — в именах тела HTTP, оба поля обязательны и допускают
+     * {@code null}, пределы часов (их проверяет модуль) — в схеме; ссылка привязки Telegram — {@code 201}.
+     */
+    @Test
+    void notificationsInSchema() {
+        var schema = openApi();
+
+        var statuses = parameters(operations(schema), "status");
+        assertThat(statuses).hasSize(1);
+        assertThat(statuses.getFirst().path("in").asString()).isEqualTo("query");
+        assertThat(enumValues(statuses.getFirst())).containsExactly("pending", "sent", "failed");
+        var schemas = schema.path("components").path("schemas");
+        assertThat(jsonEnum(schemas.path("DeliveryView").path("properties").path("status")))
+                .containsExactly("PENDING", "SENT", "FAILED");
+        for (var body : List.of("VisitReminders", "ChangeVisitReminders")) {
+            var properties = schemas.path(body).path("properties");
+            assertThat(required(schemas.path(body)))
+                    .as(body)
+                    .containsExactlyInAnyOrder("reminderDayBeforeAt", "reminderHoursBefore");
+            assertThat(types(properties.path("reminderDayBeforeAt")))
+                    .as(body)
+                    .containsExactlyInAnyOrder("string", "null");
+            assertThat(types(properties.path("reminderHoursBefore")))
+                    .as(body)
+                    .containsExactlyInAnyOrder("integer", "null");
+        }
+        var hours = schemas.path("ChangeVisitReminders").path("properties").path("reminderHoursBefore");
+        assertThat(hours.path("minimum").asInt()).isEqualTo(1);
+        assertThat(hours.path("maximum").asInt()).isEqualTo(24);
+        var link =
+                schema.path("paths").path("/api/notifications/me/telegram-link").path("post");
+        assertThat(link.path("responses").propertyNames()).containsExactlyInAnyOrder("201", "default");
+        assertThat(required(schemas.path("TelegramLink"))).containsExactlyInAnyOrder("url", "expiresAt");
+    }
+
+    /**
      * Адреса {@code /api/**} контроллеров приложения: «метод адрес» в виде ключа схемы → метод контроллера. Тестовые
      * адреса ({@code /api/test/**}) и {@code /error} в счёт не идут, адреса springdoc ({@code /api/openapi.json}) —
      * тоже: их контроллеры не из приложения.
