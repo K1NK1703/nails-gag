@@ -81,8 +81,9 @@ class TelegramApiTest {
                         ]}
                         """, MediaType.APPLICATION_JSON));
 
-        assertThat(api.getUpdates(null, Duration.ofSeconds(50))).isEmpty();
-        var updates = api.getUpdates(18L, Duration.ofSeconds(50));
+        assertThat(api.getUpdates(null, Duration.ofSeconds(50)).updates()).isEmpty();
+        var batch = api.getUpdates(18L, Duration.ofSeconds(50));
+        var updates = batch.updates();
 
         assertThat(updates).extracting(Update::updateId).containsExactly(18L, 19L);
         var message = updates.getFirst().message();
@@ -91,6 +92,7 @@ class TelegramApiTest {
         assertThat(message.chat()).isEqualTo(new TelegramApi.Chat(77, "private"));
         assertThat(message.from()).isEqualTo(new TelegramApi.User(77, false));
         assertThat(updates.get(1).message()).isNull();
+        assertThat(batch.unreadable()).isFalse();
         server.verify();
     }
 
@@ -151,7 +153,7 @@ class TelegramApiTest {
 
     /**
      * Обновление, которое не разбирается, не ломает пачку: остальные разобраны, у него — только id (чтобы
-     * подтвердить); без читаемого id оно пропускается. Содержимое в лог не попадает.
+     * подтвердить); без читаемого id оно пропускается, и пачка помечена. Содержимое в лог не попадает.
      */
     @Test
     void malformedUpdateDoesNotBreakTheBatch(CapturedOutput output) {
@@ -165,9 +167,11 @@ class TelegramApiTest {
                         ]}
                         """, MediaType.APPLICATION_JSON));
 
-        var updates = api.getUpdates(null, Duration.ofSeconds(50));
+        var batch = api.getUpdates(null, Duration.ofSeconds(50));
+        var updates = batch.updates();
 
         assertThat(updates).extracting(Update::updateId).containsExactly(30L, 31L);
+        assertThat(batch.unreadable()).isTrue();
         assertThat(updates.getFirst().message()).isNull();
         assertThat(updates.get(1).message()).isNotNull();
         assertThat(output.getAll())

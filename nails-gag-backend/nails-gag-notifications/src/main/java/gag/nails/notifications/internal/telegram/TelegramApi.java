@@ -153,15 +153,16 @@ final class TelegramApi implements AutoCloseable {
 
     /**
      * Новые сообщения боту — долгий опрос: Telegram держит запрос до {@code timeout}, если сообщений нет. Обновление,
-     * которое не разбирается, приходит без сообщения (только его id — чтобы подтвердить); без читаемого id —
-     * пропускается.
+     * которое не разбирается, приходит без сообщения (только его id — чтобы подтвердить); без читаемого целого id —
+     * пропускается, а пачка помечается ({@link Batch#unreadable()}): подтвердить такое обновление нельзя, и приём
+     * должен сделать паузу, а не запрашивать его снова без остановки.
      *
      * @param offset id первого ещё не обработанного обновления; меньшие Telegram считает обработанными и забывает;
      *     пусто — с самого старого необработанного
      * @throws TelegramApiException Telegram ответил ошибкой (в том числе 409 — опрашивает кто-то ещё), ответ не
      *     разобрать или ответа нет
      */
-    List<Update> getUpdates(@Nullable Long offset, Duration timeout) {
+    Batch getUpdates(@Nullable Long offset, Duration timeout) {
         return updates(require(polling), offset, timeout);
     }
 
@@ -203,7 +204,7 @@ final class TelegramApi implements AutoCloseable {
         throw answer.failure(SEND_MESSAGE);
     }
 
-    private static List<Update> updates(RestClient client, @Nullable Long offset, Duration timeout) {
+    private static Batch updates(RestClient client, @Nullable Long offset, Duration timeout) {
         var answer = exchange(
                 client,
                 GET_UPDATES,
@@ -214,32 +215,36 @@ final class TelegramApi implements AutoCloseable {
             throw answer.failure(GET_UPDATES);
         }
         var updates = new ArrayList<Update>();
+        var unreadable = false;
         for (var node : reply.result()) {
             var update = update(node);
-            if (update != null) {
+            if (update == null) {
+                unreadable = true;
+            } else {
                 updates.add(update);
             }
         }
-        return updates;
+        return new Batch(updates, unreadable);
     }
 
-    /** Обновление из JSON; не разбирается — только его id без сообщения; нет и id — пусто. Содержимое не в логе. */
+    /**
+     * Обновление из JSON; не разбирается — только его id без сообщения; нет целого {@code update_id} — пусто.
+     * Содержимое не в логе.
+     */
     private static @Nullable Update update(JsonNode node) {
+        var id = node.path("update_id");
+        if (!id.isIntegralNumber()) {
+            log.warn("telegram update without a readable id is skipped");
+            return null;
+        }
         try {
             return JSON.treeToValue(node, Update.class);
         } catch (JacksonException e) {
-            var id = node.path("update_id");
-            if (id.isIntegralNumber()) {
-                log.warn(
-                        "telegram update {} is not readable ({}), it is skipped",
-                        id.asLong(),
-                        e.getClass().getName());
-                return new Update(id.asLong(), null);
-            }
             log.warn(
-                    "telegram update without a readable id is skipped ({})",
+                    "telegram update {} is not readable ({}), it is skipped",
+                    id.asLong(),
                     e.getClass().getName());
-            return null;
+            return new Update(id.asLong(), null);
         }
     }
 
@@ -312,6 +317,14 @@ final class TelegramApi implements AutoCloseable {
                     reply == null ? null : reply.description());
         }
     }
+
+    /**
+     * Ответ на {@code getUpdates}.
+     *
+     * @param updates обновления по порядку
+     * @param unreadable в ответе было обновление без читаемого id: его не подтвердить, приёму нужна пауза
+     */
+    record Batch(List<Update> updates, boolean unreadable) {}
 
     /** Обновление: пока бот получает только сообщения, у остальных обновлений {@link #message()} пусто. */
     record Update(

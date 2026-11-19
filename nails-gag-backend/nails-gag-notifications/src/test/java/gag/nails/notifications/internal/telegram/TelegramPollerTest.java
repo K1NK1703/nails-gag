@@ -318,6 +318,26 @@ class TelegramPollerTest {
         assertThat(poller.isRunning()).isTrue();
     }
 
+    /**
+     * Обновление без читаемого id не подтвердить, и Telegram отдаёт его снова сразу же: приём обрабатывает остальные
+     * и делает паузу, как после сбоя, а не крутится без остановки.
+     */
+    @Test
+    void updateWithoutReadableIdPausesInsteadOfSpinning() {
+        var withoutId = Reply.updates("[" + update(80, "привет") + ", {\"message\": {\"text\": \"x\"}}]");
+        var again = Reply.updates("[{\"message\": {\"text\": \"x\"}}]");
+        stub.respond("getUpdates", withoutId, again, again, Reply.hang(LONG));
+
+        poller.start();
+        stub.await("getUpdates", 4);
+
+        assertThat(handled).containsExactly(80L);
+        assertThat(pauses).containsExactly(Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30));
+        assertThat(stub.requests("getUpdates"))
+                .extracting(request -> request.body().path("offset").asLong(-1))
+                .containsExactly(-1L, 81L, 81L, 81L);
+    }
+
     @Test
     void stopInterruptsTheLongPoll() {
         stub.respond("getUpdates", Reply.hang(LONG));

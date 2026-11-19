@@ -32,6 +32,8 @@ import org.springframework.context.SmartLifecycle;
  *       прерывание оборвало бы соединение с базой): поток доделывает сообщение, коротким запросом подтверждает
  *       обработанные с последнего опроса (иначе после рестарта они пришли бы снова) и выходит; остановка ждёт его не
  *       дольше {@link #STOP_WAIT}. Пока прежний поток жив, новый не запускается.
+ *   <li>Обновление без читаемого id (его не подтвердить, Telegram отдаст его снова сразу) — сбой с паузой после
+ *       обработки остальных обновлений пачки.
  *   <li>Неожиданная ошибка ({@link Error}) останавливает приём с ERROR в логе.
  * </ul>
  *
@@ -178,10 +180,10 @@ final class TelegramPoller implements SmartLifecycle {
 
     /** Один опрос и обработка его обновлений. */
     private void poll() {
-        List<Update> updates;
+        TelegramApi.Batch batch;
         try {
             requestedOffset = offset;
-            updates = interruptibly(() -> api.getUpdates(offset, pollTimeout));
+            batch = interruptibly(() -> api.getUpdates(offset, pollTimeout));
         } catch (TelegramApiException e) {
             if (running) {
                 var isConflict = e.status() == CONFLICT;
@@ -190,17 +192,22 @@ final class TelegramPoller implements SmartLifecycle {
             }
             return;
         }
-        if (updates == null) {
+        if (batch == null) {
             return;
         }
         conflict = false;
-        for (var update : updates) {
+        for (var update : batch.updates()) {
             if (!running) {
                 return;
             }
             if (!handle(update)) {
                 return;
             }
+        }
+        if (batch.unreadable()) {
+            // Обновление без id не подтвердить: Telegram отдаст его снова сразу же — без паузы приём крутился бы.
+            failed("telegram getUpdates answer has an update without a readable id", null, false);
+            return;
         }
         recovered();
     }
