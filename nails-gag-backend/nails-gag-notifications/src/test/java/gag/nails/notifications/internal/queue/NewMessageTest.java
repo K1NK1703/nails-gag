@@ -59,6 +59,6 @@ class NewMessageTest {
     }
 
     private NewMessage message(MessageKind kind, Recipient recipient, Instant expiresAt, String dedupKey) {
-        return new NewMessage(kind, recipient, UUID.randomUUID(), DUE, expiresAt, dedupKey);
+        return new NewMessage(kind, recipient, UUID.randomUUID(), DUE, expiresAt, dedupKey, DUE);
     }
 }

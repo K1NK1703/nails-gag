@@ -113,8 +113,6 @@ class NotificationsPropertiesTest {
                 .run(started -> assertRejected(started, "telegram.apiUrl"));
         context.withPropertyValues(PREFIX + "telegram.api-url=http://127.0.0.1:8081")
                 .run(started -> assertThat(started).hasNotFailed());
-        assertThat(new NotificationsProperties.Telegram("", "", Duration.ofSeconds(50)).apiUrl())
-                .isEqualTo("https://api.telegram.org");
     }
 
     @Test

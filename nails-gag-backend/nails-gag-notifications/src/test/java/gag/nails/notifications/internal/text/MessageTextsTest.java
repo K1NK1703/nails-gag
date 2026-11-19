@@ -531,7 +531,7 @@ class MessageTextsTest {
                 "@gagushichewa",
                 "пр. КИМа 6, метро Приморская, 3 этаж, студия 365",
                 new Email(""),
-                new Telegram("", "", Duration.ofSeconds(50)));
+                new Telegram("", "", Duration.ofSeconds(50), NotificationsProperties.DEFAULT_TELEGRAM_API_URL));
     }
 
     /** Правила записи с заданным процентом предоплаты; остальное тексты не читают. */

@@ -39,10 +39,4 @@ public record NewMessage(
             throw new InternalException("message dedup key length is out of range: " + dedupKey.length());
         }
     }
-
-    /** Прежняя форма: момент события неизвестен — им считается срок отправки. */
-    public NewMessage(
-            MessageKind kind, Recipient recipient, UUID bookingId, Instant dueAt, Instant expiresAt, String dedupKey) {
-        this(kind, recipient, bookingId, dueAt, expiresAt, dedupKey, dueAt);
-    }
 }

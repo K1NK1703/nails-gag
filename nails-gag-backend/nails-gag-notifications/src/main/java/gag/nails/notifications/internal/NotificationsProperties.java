@@ -13,7 +13,6 @@ import java.time.LocalTime;
 import org.hibernate.validator.constraints.time.DurationMax;
 import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.validation.annotation.Validated;
@@ -154,15 +153,6 @@ public record NotificationsProperties(
         /** Форма токена бота: {@code <id бота>:<секрет>}. */
         private static final java.util.regex.Pattern BOT_TOKEN =
                 java.util.regex.Pattern.compile("[0-9]+:[A-Za-z0-9_-]+");
-
-        /** Связывание настроек — этим конструктором. */
-        @ConstructorBinding
-        public Telegram {}
-
-        /** Прежняя форма: Bot API — {@value NotificationsProperties#DEFAULT_TELEGRAM_API_URL}. */
-        public Telegram(String botToken, String botUsername, Duration pollTimeout) {
-            this(botToken, botUsername, pollTimeout, DEFAULT_TELEGRAM_API_URL);
-        }
 
         /** Бот настроен: задан токен. */
         public boolean configured() {
